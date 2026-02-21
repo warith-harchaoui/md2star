@@ -1,6 +1,6 @@
 # md2star ✍️⭐️
 
-> **The elegant bridge from Markdown to high-fidelity Office documents and PDFs.**
+> **An efficient bridge from Markdown to docx, Google Doc, pptx, Google Slides and PDFs.**
 
 `md2star` is a streamlined, cross-platform toolset designed for authors who demand the speed of **Markdown** and the professionalism of **Microsoft Office** and **PDF** layouts. By combining the power of **Pandoc** with curated styling logic, it automates the tedious parts of document preparation.
 
