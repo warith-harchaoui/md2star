@@ -12,6 +12,8 @@
 #   ../template.docx
 #
 to: docx
-lua-filter:
-  - strip-header-ids.lua
+filters:
+  - md2star.lua
+metadata-files:
+  - metadata.yaml
 reference-doc: template.docx

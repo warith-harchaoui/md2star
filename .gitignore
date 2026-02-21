@@ -1,3 +1,10 @@
+# Tests
+test_*.*
+temp/
+temp_*
+
+assets/nexton-template.pptx
+
 # macOS
 .DS_Store
 .AppleDouble
@@ -65,3 +72,6 @@ Session.vim
 *.log
 *.tmp
 *.bak
+
+# Bib utility (local only)
+bib/

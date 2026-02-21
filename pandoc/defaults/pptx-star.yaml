@@ -1,0 +1,11 @@
+# md2star PPTX defaults file
+#
+# Usage:
+#   pandoc --defaults pptx-star.yaml input.md -o output.pptx
+
+to: pptx
+reference-doc: template.pptx
+filters:
+  - md2star.lua
+metadata-files:
+  - metadata.yaml

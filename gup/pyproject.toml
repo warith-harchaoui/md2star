@@ -1,0 +1,6 @@
+[project]
+name = "gdrive-docx-to-gdoc"
+version = "0.1.0"
+description = "Upload .docx to Google Drive and convert to Google Doc in a target folder."
+readme = "README.md"
+requires-python = ">=3.9"
