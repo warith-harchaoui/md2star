@@ -8,7 +8,7 @@
 
 ## ✨ Features
 
-- **🚀 Frictionless Conversion for your ideas**: Write in Markdown files, our tool takes care of conversions.
+- **🚀 Frictionless Conversion for your ideas**: Write in Markdown files in your favorite lightweight text editor (emacs, vim, Sublime Text, Atom, Obsidian, etc.), our tool takes care of conversions.
 - **📄 Instant PDF Export**: Every conversion automatically produces a high-fidelity PDF for easy sharing.
 - **🏷️ Intelligent Metadata**: 
   - Automatic **Title Extraction** from your first `# Heading`.
