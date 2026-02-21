@@ -13,7 +13,7 @@
 
 ## ✨ Features
 
-- **🚀 Frictionless Conversion for your ideas**: Write in Markdown files in your favorite lightweight text editor (emacs, vim, Sublime Text, Atom, Obsidian, etc.), our tool takes care of conversions to MS Office formats.
+- **🚀 Frictionless Conversion for your ideas**: Write in Markdown files in your favorite lightweight text editor (`emacs`, `vim`, `Sublime Text`, `Atom`, `Obsidian`, etc.), our tool takes care of conversions to corporate MS Office and PDF formats.
 - ** Instant PDF Export**: Every conversion automatically produces a high-fidelity PDF. 
   > [!TIP]
   > For an "Office" look without LaTeX, set `PANDOC_PDF_ENGINE=typst` or `weasyprint` if installed.
