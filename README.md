@@ -7,7 +7,7 @@
 ![Bash](https://img.shields.io/badge/bash-4+-lightgray.svg)
 ![PowerShell](https://img.shields.io/badge/powershell-7+-blue.svg)
 
-`md2star` is a streamlined, cross-platform toolset designed for authors who demand the speed of **Markdown** and the professionalism of **Microsoft Office** and **PDF** layouts. By combining the power of **Pandoc** with curated styling logic, it automates the tedious parts of document preparation.
+`md2star` is a streamlined, cross-platform toolset designed for authors who demand the speed of **Markdown** and the corporate formats of **Microsoft Office** and **PDF** layouts. By combining the power of **Pandoc** with curated styling logic, it automates the tedious parts of document preparation.
 
 ---
 
@@ -53,7 +53,7 @@ md2docx myfile.md
 ```
 *Generates `myfile.docx` and `myfile.pdf` using default metadata.*
 
-### 2. Research Paper (with Citations)
+### 2. Scientific Paper (with Citations and Math Formulas)
 ```bash
 md2docx work.md --author "Dr. Renegade Researcher" --bib references.bib --lang en-US
 ```
@@ -110,7 +110,7 @@ Modify the master templates in `assets/` to change fonts, margins, or logos glob
 - **[Pandoc](https://pandoc.org/)**: The engine that makes document conversion universal.
 - **[Obsidian](https://obsidian.md/)**: Our recommended environment for writing high-fidelity Markdown.
 - **[Zotero](https://www.zotero.org/)**: The ideal research companion for managing your `.bib` bibliographies.
-- **[deraison.ai/ai-books](https://deraison.ai/ai-books)**: Some good AI favorite books (for the sake of giving an example only)
+- **[deraison.ai/ai-books](https://deraison.ai/ai-books)**: Some nice AI references (for the sake of giving an example only)
 
 ---
 
