@@ -12,9 +12,16 @@
 #   ../template.pptx
 #
 
+# Output format: Microsoft PowerPoint (.pptx)
 to: pptx
+
+# Reference template controlling slide layouts, fonts, and branding
 reference-doc: template.pptx
+
+# Lua filters applied during conversion (title extraction, subtitle, etc.)
 filters:
   - md2star.lua
+
+# External YAML file merged into Pandoc metadata (author, date_format, lang)
 metadata-files:
   - metadata.yaml

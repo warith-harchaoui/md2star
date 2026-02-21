@@ -55,7 +55,7 @@ set -euo pipefail
 #   md2docx input.md [--author "Name"] [--bib "ref.bib"] [--lang "en-US"] [extra pandoc args...]
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: md2docx <input.md> [--author \"Name\"] [--bib \"ref.bib\"] [--lang \"en-US\"] [extra pandoc args...]"
+  echo "Usage: md2docx <input.md> [--author \"Name\"] [--bib \"ref.bib\"] [--bibliography-name \"References\"] [--lang \"en-US\"] [extra pandoc args...]"
   exit 1
 fi
 
@@ -63,6 +63,8 @@ IN="$1"
 shift || true
 
 EXTRA_ARGS=()
+BIB_FILE=""
+BIB_NAME="Bibliography"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --author)
@@ -70,7 +72,12 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --bib)
+      BIB_FILE="$2"
       EXTRA_ARGS+=("--citeproc" "--bibliography" "$2")
+      shift 2
+      ;;
+    --bibliography-name)
+      BIB_NAME="$2"
       shift 2
       ;;
     --lang)
@@ -89,6 +96,10 @@ OUT_DOCX="${IN%.*}.docx"
 # 0. Preprocess Markdown (handles spacing before list items)
 TEMP_MD=$(python3 "${HOME}/.pandoc/preprocessing.py" "$IN")
 trap 'rm -f "$TEMP_MD"' EXIT
+
+if [ -n "$BIB_FILE" ]; then
+    printf "\n# %s\n" "$BIB_NAME" >> "$TEMP_MD"
+fi
 
 # 1. Convert Markdown to DOCX
 pandoc --defaults docx-star.yaml "$TEMP_MD" -o "$OUT_DOCX" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
@@ -109,7 +120,7 @@ set -euo pipefail
 #   md2pptx input.md [--author "Name"] [--bib "ref.bib"] [--lang "en-US"] [extra pandoc args...]
 
 if [[ $# -lt 1 ]]; then
-  echo "Usage: md2pptx <input.md> [--author \"Name\"] [--bib \"ref.bib\"] [--lang \"en-US\"] [extra pandoc args...]"
+  echo "Usage: md2pptx <input.md> [--author \"Name\"] [--bib \"ref.bib\"] [--bibliography-name \"References\"] [--lang \"en-US\"] [extra pandoc args...]"
   exit 1
 fi
 
@@ -117,6 +128,8 @@ IN="$1"
 shift || true
 
 EXTRA_ARGS=()
+BIB_FILE=""
+BIB_NAME="Bibliography"
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --author)
@@ -124,7 +137,12 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --bib)
+      BIB_FILE="$2"
       EXTRA_ARGS+=("--citeproc" "--bibliography" "$2")
+      shift 2
+      ;;
+    --bibliography-name)
+      BIB_NAME="$2"
       shift 2
       ;;
     --lang)
@@ -143,6 +161,10 @@ OUT_PPTX="${IN%.*}.pptx"
 # 0. Preprocess Markdown (handles spacing before list items)
 TEMP_MD=$(python3 "${HOME}/.pandoc/preprocessing.py" "$IN")
 trap 'rm -f "$TEMP_MD"' EXIT
+
+if [ -n "$BIB_FILE" ]; then
+    printf "\n# %s\n" "$BIB_NAME" >> "$TEMP_MD"
+fi
 
 # 1. Convert Markdown to PPTX
 pandoc --defaults pptx-star.yaml "$TEMP_MD" -o "$OUT_PPTX" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}

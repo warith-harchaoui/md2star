@@ -65,9 +65,7 @@ This is the *left* column
 
 ***
 
-# Slides can have background images
-
-![](https://picsum.photos/g/1600/900){.background}
+# Slides can have background images {background-image="https://picsum.photos/g/1600/900"}
 
 ***
 
@@ -78,12 +76,9 @@ This is the *left* column
 ***
 # Slides can have inline images with custom parameters
 
-![](https://picsum.photos/1600/900){pad=30 offset-y=30 offset-x=30}
+![](https://picsum.photos/1600/900){width=80%}
 
-***
-# Slides can have remote images
 
-![](https://www.gstatic.com/images/branding/product/2x/drive_36dp.png){pad=10}
 
 ***
 
@@ -152,9 +147,7 @@ This can be used with the flag `--copy=[presentation id]` to copy and use an exi
 ***
 
 
-# Slides can have background images
-
-![](https://picsum.photos/g/1600/900){.background}
+# Slides can have background images {background-image="https://picsum.photos/g/1600/900"}
 
 Hello, is it me you're looking for?
 
@@ -168,14 +161,14 @@ Hello, is it me you're looking for?
 
 # Slides can have inline images with custom parameters
 
-![](https://picsum.photos/1600/900){pad=30 offset-y=30 offset-x=30}
+![](https://picsum.photos/1600/900){width=80%}
 
 ***
 
 # Slides can have many images
 
-![](https://www.gstatic.com/images/branding/product/2x/drive_36dp.png){pad=10}
-![](https://www.gstatic.com/images/branding/product/2x/docs_36dp.png){pad=10}
-![](https://www.gstatic.com/images/branding/product/2x/sheets_36dp.png){pad=10}
-![](https://www.gstatic.com/images/branding/product/2x/slides_36dp.png){pad=10}
-![](https://www.gstatic.com/images/branding/product/2x/forms_36dp.png){pad=10}
+![](https://www.gstatic.com/images/branding/product/2x/drive_36dp.png){width=15%}
+![](https://www.gstatic.com/images/branding/product/2x/docs_36dp.png){width=15%}
+![](https://www.gstatic.com/images/branding/product/2x/sheets_36dp.png){width=15%}
+![](https://www.gstatic.com/images/branding/product/2x/slides_36dp.png){width=15%}
+![](https://www.gstatic.com/images/branding/product/2x/forms_36dp.png){width=15%}

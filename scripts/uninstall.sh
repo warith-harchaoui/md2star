@@ -13,16 +13,25 @@ set -euo pipefail
 PANDOC_DIR="${HOME}/.pandoc"
 BIN_DIR="${HOME}/.local/bin"
 
+# ── Remove Pandoc user-data components ─────────────────────────────
+# Lua filter used for title extraction, subtitle injection, etc.
 rm -f "${PANDOC_DIR}/filters/md2star.lua"
+# Preprocessor script (Markdown list-spacing fix)
+rm -f "${PANDOC_DIR}/preprocessing.py"
+# Global metadata defaults (author, date_format, lang)
 rm -f "${PANDOC_DIR}/metadata.yaml"
+# Pandoc defaults files that wire up filter + template
 rm -f "${PANDOC_DIR}/defaults/docx-star.yaml"
 rm -f "${PANDOC_DIR}/defaults/pptx-star.yaml"
+# Reference/styling templates
 rm -f "${PANDOC_DIR}/template.docx"
 rm -f "${PANDOC_DIR}/template.pptx"
+
+# ── Remove GUp utility and bundled assets ──────────────────────────
 rm -rf "${PANDOC_DIR}/gup"
 rm -rf "${PANDOC_DIR}/assets"
 
-# Remove CLI wrappers
+# ── Remove CLI wrappers ────────────────────────────────────────────
 rm -f "${BIN_DIR}/md2docx"
 rm -f "${BIN_DIR}/md2pptx"
 rm -f "${BIN_DIR}/gup"

@@ -11,9 +11,16 @@
 #   ../filters/md2star.lua
 #   ../template.docx
 #
+# Output format: Microsoft Word (.docx)
 to: docx
+
+# Lua filters applied during conversion (title extraction, subtitle, etc.)
 filters:
   - md2star.lua
+
+# External YAML file merged into Pandoc metadata (author, date_format, lang)
 metadata-files:
   - metadata.yaml
+
+# Reference template controlling fonts, margins, styles, and logos
 reference-doc: template.docx

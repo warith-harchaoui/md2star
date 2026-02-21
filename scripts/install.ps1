@@ -58,7 +58,7 @@
     setlocal enabledelayedexpansion
 
     if "%~1"=="" (
-      echo Usage: md2docx input.md [--author \"Name\"] [--bib \"ref.bib\"] [--lang \"en-US\"] [extra pandoc args...]
+      echo Usage: md2docx input.md [--author \"Name\"] [--bib \"ref.bib\"] [--bibliography-name \"References\"] [--lang \"en-US\"] [extra pandoc args...]
       exit /b 1
     )
 
@@ -66,6 +66,8 @@
     shift
 
     set "EXTRA_ARGS="
+    set "BIB_FILE="
+    set "BIB_NAME=Bibliography"
     :args_loop
     if "%~1"=="" goto args_done
     if "%~1"=="--author" (
@@ -75,7 +77,14 @@
       goto args_loop
     )
     if "%~1"=="--bib" (
+      set "BIB_FILE=%~2"
       set "EXTRA_ARGS=!EXTRA_ARGS! --citeproc --bibliography=\"%~2\""
+      shift
+      shift
+      goto args_loop
+    )
+    if "%~1"=="--bibliography-name" (
+      set "BIB_NAME=%~2"
       shift
       shift
       goto args_loop
@@ -98,6 +107,11 @@
     :: 0. Preprocess Markdown (handles spacing before list items)
     for /f "delims=" %%I in ('python "%APPDATA%\pandoc\preprocessing.py" "%IN%"') do set "TEMP_MD=%%I"
 
+    if defined BIB_FILE (
+      echo.>>"!TEMP_MD!"
+      echo # !BIB_NAME!>>"!TEMP_MD!"
+    )
+
     :: 1. Convert Markdown to DOCX
     pandoc --defaults docx-star.yaml "!TEMP_MD!" -o "!OUT_DOCX!" !EXTRA_ARGS!
     echo Wrote: !OUT_DOCX!
@@ -113,7 +127,7 @@
     setlocal enabledelayedexpansion
 
     if "%~1"=="" (
-      echo Usage: md2pptx input.md [--author \"Name\"] [--bib \"ref.bib\"] [--lang \"en-US\"] [extra pandoc args...]
+      echo Usage: md2pptx input.md [--author \"Name\"] [--bib \"ref.bib\"] [--bibliography-name \"References\"] [--lang \"en-US\"] [extra pandoc args...]
       exit /b 1
     )
 
@@ -121,6 +135,8 @@
     shift
 
     set "EXTRA_ARGS="
+    set "BIB_FILE="
+    set "BIB_NAME=Bibliography"
     :args_loop_pptx
     if "%~1"=="" goto args_done_pptx
     if "%~1"=="--author" (
@@ -130,7 +146,14 @@
       goto args_loop_pptx
     )
     if "%~1"=="--bib" (
+      set "BIB_FILE=%~2"
       set "EXTRA_ARGS=!EXTRA_ARGS! --citeproc --bibliography=\"%~2\""
+      shift
+      shift
+      goto args_loop_pptx
+    )
+    if "%~1"=="--bibliography-name" (
+      set "BIB_NAME=%~2"
       shift
       shift
       goto args_loop_pptx
@@ -152,6 +175,11 @@
 
     :: 0. Preprocess Markdown (handles spacing before list items)
     for /f "delims=" %%I in ('python "%APPDATA%\pandoc\preprocessing.py" "%IN%"') do set "TEMP_MD=%%I"
+
+    if defined BIB_FILE (
+      echo.>>"!TEMP_MD!"
+      echo # !BIB_NAME!>>"!TEMP_MD!"
+    )
 
     :: 1. Convert Markdown to PPTX
     pandoc --defaults pptx-star.yaml "!TEMP_MD!" -o "!OUT_PPTX!" !EXTRA_ARGS!

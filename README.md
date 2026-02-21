@@ -48,50 +48,89 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```bash
 md2docx myfile.md
 ```
-*Generates `myfile.docx` and `myfile.pdf` using default metadata.*
+*Generates `myfile.docx`*.
 
 ### 2. Scientific Paper (with Citations and Math Formulas)
 ```bash
-md2docx work.md --author "Dr. Renegade Researcher" --bib references.bib --lang en-US
+md2docx work.md --author "Dr. Renegade Researcher" --bib references.bib --bibliography-name "References" --lang en-US
 ```
+*Generates `work.docx`*.
+
 
 ### 3. Presentation Slides
 ```bash
 md2pptx slides.md --author "Speaker Name"
 ```
+*Generates `slides.pptx`*.
 
 ---
 
 ## 💡 Examples
 See `md2star` in action! Below are the actual `.docx` and `.pptx` files generated dynamically during our test suite from sample Markdown files:
 
-**Word Documents**
-- [Basic Title](assets/docx/basic.docx) *(from [basic.md](assets/docx/basic.md))*
+**Word Documents Examples**
+- Basic Title [assets/docx/basic.docx](assets/docx/basic.docx) *(from [basic.md](assets/docx/basic.md))*
   ```bash
   md2docx assets/docx/basic.md
   ```
-- [Author Injected](assets/docx/with_author.docx) *(from [with_author.md](assets/docx/with_author.md))*
+- Author Injected [assets/docx/with_author.docx](assets/docx/with_author.docx) *(from [with_author.md](assets/docx/with_author.md))*
   ```bash
   md2docx assets/docx/with_author.md --author "Tester"
   ```
-- [Bibliography](assets/docx/with_bib.docx) *(from [with_bib.md](assets/docx/with_bib.md))*
+- Bibliography [assets/docx/with_bib.docx](assets/docx/with_bib.docx) *(from [with_bib.md](assets/docx/with_bib.md))*
   ```bash
-  md2docx assets/docx/with_bib.md --bib "assets/deraison.bib"
+  md2docx assets/docx/with_bib.md --bib "assets/deraison.bib" --bibliography-name "References"
   ```
-- [Language & Date (French)](assets/docx/with_lang.docx) *(from [with_lang.md](assets/docx/with_lang.md))* 
+- Language & Date (French) [assets/docx/with_lang.docx](assets/docx/with_lang.docx) *(from [with_lang.md](assets/docx/with_lang.md))* 
   ```bash
-  md2docx assets/docx/with_lang.md --author "User"` *(with custom `pandoc/metadata.yaml` for `fr-FR` locale)*
+  md2docx assets/docx/with_lang.md --author "User"` 
   ```
-- [Math Formulas](assets/docx/math.docx) *(from [math.md](assets/docx/math.md))*
+- Math Formulas [assets/docx/math.docx](assets/docx/math.docx) *(from [math.md](assets/docx/math.md))*
   ```bash
   md2docx assets/docx/math.md
   ```
 
-**PowerPoint Slides**
-- [Extensive Example](assets/pptx/example.pptx) *(from [example.md](assets/pptx/example.md))*
+**PowerPoint Slides Examples**
+- Extensive Example [assets/pptx/example.pptx](assets/pptx/example.pptx) *(from [example.md](assets/pptx/example.md))*
   ```bash
   md2pptx assets/pptx/example.md
   ```
+
+---
+
+## 🗂️ Project Structure
+
+```
+md2star/
+├── assets/                  # Example Markdown files and generated outputs
+│   ├── docx/                #   DOCX test fixtures (basic, author, bib, lang, math)
+│   ├── pptx/                #   PPTX test fixtures
+│   ├── template.docx        #   Reference styling template for DOCX
+│   └── template.pptx        #   Reference styling template for PPTX
+├── bib/                     # JSON → BibTeX converter (deraison.ai resources)
+│   ├── json_to_bib.py
+│   └── README.md
+├── gup/                     # Google Drive upload & convert utility
+│   ├── src/gup.py
+│   └── README.md
+├── pandoc/                  # Pandoc configuration
+│   ├── defaults/            #   YAML defaults (docx-star, pptx-star)
+│   ├── filters/md2star.lua  #   Lua filter (title, subtitle, locale)
+│   ├── metadata.yaml        #   Global metadata defaults
+│   └── README.md
+├── scripts/                 # Install/uninstall/test shell scripts
+│   ├── install.sh
+│   ├── uninstall.sh
+│   ├── preprocessing.py
+│   ├── test.sh
+│   └── README.md
+├── tests/                   # Python unit tests (pytest)
+│   ├── test_preprocessing.py
+│   ├── test_json_to_bib.py
+│   └── test_gup.py
+├── Makefile
+└── README.md
+```
 
 ---
 
@@ -105,9 +144,18 @@ See `md2star` in action! Below are the actual `.docx` and `.pptx` files generate
 - [x] **Bibliography Rendering**: Using the curated [deraison.bib](assets/deraison.bib) snapshot.
 - [x] **Locale Localization**: French date rendering and international headers.
 
-To run the suite yourself:
+### Integration tests (shell)
+
+Requires **Pandoc** installed:
 ```bash
 make test
+```
+
+### Unit tests (Python)
+
+Requires **pytest** (`pip install pytest`):
+```bash
+python -m pytest tests/ -v
 ```
 
 ---
@@ -144,6 +192,16 @@ Modify the master templates in `assets/` to change fonts, margins, or logos glob
 - **[Zotero](https://www.zotero.org/)**: The ideal research companion for managing your `.bib` bibliographies.
 - **[deraison.ai/ai-books](https://deraison.ai/ai-books)**: Some nice AI references (for the sake of giving an example only)
 - **[md2googleslides](https://github.com/googleworkspace/md2googleslides)**: Google Slides abandoned project (written in Javascript/Typescript) for inspiration
+
+---
+
+## 🤝 Contributing
+
+1. Fork & clone the repository.
+2. Run `make install` to set up locally.
+3. Make your changes.
+4. Run `make test` and `python -m pytest tests/ -v` to verify.
+5. Open a pull request.
 
 ---
 
