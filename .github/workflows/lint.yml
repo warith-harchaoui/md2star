@@ -1,0 +1,42 @@
+name: lint
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  lint:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Basic repo sanity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f pandoc/filters/strip-header-ids.lua
+          test -f pandoc/defaults/docx-star.yaml
+          test -f assets/template.docx
+          test -f scripts/install.sh
+          test -f scripts/uninstall.sh
+          test -f scripts/install.ps1
+          test -f scripts/uninstall.ps1
+
+      - name: Bash syntax check
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/install.sh
+          bash -n scripts/uninstall.sh
+
+      - name: PowerShell syntax check
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $null = [System.Management.Automation.Language.Parser]::ParseFile("scripts/install.ps1",[ref]$null,[ref]$null)
+          $null = [System.Management.Automation.Language.Parser]::ParseFile("scripts/uninstall.ps1",[ref]$null,[ref]$null)

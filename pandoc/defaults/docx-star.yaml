@@ -1,0 +1,17 @@
+# md2star Pandoc defaults file
+#
+# Usage:
+#   pandoc --defaults docx-star.yaml input.md -o output.docx
+#
+# This defaults file is installed into your Pandoc user data directory:
+#   macOS/Linux: ~/.pandoc/defaults/docx-star.yaml
+#   Windows:     %APPDATA%\pandoc\defaults\docx-star.yaml
+#
+# It assumes the following files are installed alongside it:
+#   ../filters/strip-header-ids.lua
+#   ../template.docx
+#
+to: docx
+lua-filter:
+  - strip-header-ids.lua
+reference-doc: template.docx
