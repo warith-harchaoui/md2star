@@ -31,7 +31,7 @@ cd gup && conda env create -f environment.yml && conda activate gup && cd ..
 pip install -r gup/requirements.txt
 ```
 
-## 2) Google Cloud setup (one-time)
+### 2. Google Cloud Setup (One-Time)
 
 1. Create/select a Google Cloud project
 2. Enable **Google Drive API**
@@ -39,12 +39,12 @@ pip install -r gup/requirements.txt
 4. Create OAuth client ID (**Desktop app**)
 5. Download the JSON and save it as `credentials.json` at the repo root
 
-### 2. Configuration
+### 3. Configuration
 
 1. Copy `gup/config.example.yaml` to `gup/config.yaml`.
 2. Edit `gup/config.yaml` to provide your authentication paths.
 
-### 3. Usage
+### 4. Usage
 
 To upload a document, you **must** provide the target Google Drive **Folder ID** (or the full URL) via the CLI.
 
@@ -66,7 +66,7 @@ Optional: override the output name:
 python -m src.gup /path/to/file.docx --name "My Google Doc"
 ```
 
-## 5) Notes
+### 5. Notes
 
 - Some complex Office formatting may not convert perfectly.
 - If you need Shared Drives support, use the optional `--supports-all-drives` flag.
