@@ -60,7 +60,40 @@ md2docx work.md --author "Dr. Renegade Researcher" --bib references.bib --lang e
 md2pptx slides.md --author "Speaker Name"
 ```
 
+---
 
+## 💡 Examples
+See `md2star` in action! Below are the actual `.docx` and `.pptx` files generated dynamically during our test suite from sample Markdown files:
+
+**Word Documents**
+- [Basic Title](assets/docx/basic.docx) *(from [basic.md](assets/docx/basic.md))*
+  ```bash
+  md2docx assets/docx/basic.md
+  ```
+- [Author Injected](assets/docx/with_author.docx) *(from [with_author.md](assets/docx/with_author.md))*
+  ```bash
+  md2docx assets/docx/with_author.md --author "Tester"
+  ```
+- [Bibliography](assets/docx/with_bib.docx) *(from [with_bib.md](assets/docx/with_bib.md))*
+  ```bash
+  md2docx assets/docx/with_bib.md --bib "assets/deraison.bib"
+  ```
+- [Language & Date (French)](assets/docx/with_lang.docx) *(from [with_lang.md](assets/docx/with_lang.md))* 
+  ```bash
+  md2docx assets/docx/with_lang.md --author "User"` *(with custom `pandoc/metadata.yaml` for `fr-FR` locale)*
+  ```
+- [Math Formulas](assets/docx/math.docx) *(from [math.md](assets/docx/math.md))*
+  ```bash
+  md2docx assets/docx/math.md
+  ```
+
+**PowerPoint Slides**
+- [Extensive Example](assets/pptx/example.pptx) *(from [example.md](assets/pptx/example.md))*
+  ```bash
+  md2pptx assets/pptx/example.md
+  ```
+
+---
 
 ## 🧪 Quality & Reliability
 

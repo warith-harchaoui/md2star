@@ -20,11 +20,17 @@ jobs:
           set -euo pipefail
           test -f pandoc/filters/md2star.lua
           test -f pandoc/defaults/docx-star.yaml
+          test -f pandoc/defaults/pptx-star.yaml
+          test -f pandoc/metadata.yaml
           test -f assets/template.docx
+          test -f assets/template.pptx
+          test -f scripts/preprocessing.py
           test -f scripts/install.sh
           test -f scripts/uninstall.sh
           test -f scripts/install.ps1
           test -f scripts/uninstall.ps1
+          test -f scripts/test.sh
+          test -f Makefile
 
       - name: Bash syntax check
         if: runner.os != 'Windows'
@@ -33,6 +39,13 @@ jobs:
           set -euo pipefail
           bash -n scripts/install.sh
           bash -n scripts/uninstall.sh
+
+      - name: Python syntax check
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/preprocessing.py
+          python3 -m py_compile gup/src/gup.py
 
       - name: PowerShell syntax check
         if: runner.os == 'Windows'
