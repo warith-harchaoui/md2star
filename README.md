@@ -8,7 +8,7 @@
 
 ## ✨ Features
 
-- **🚀 High-Speed Conversion**: Instant `.docx` and `.pptx` generation from your Markdown source.
+- **🚀 High-Speed Conversion**: Write in Markdown files, our tool takes care of conversions.
 - **📄 Instant PDF Export**: Every conversion automatically produces a high-fidelity PDF for easy sharing.
 - **🏷️ Intelligent Metadata**: 
   - Automatic **Title Extraction** from your first `# Heading`.
