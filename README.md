@@ -96,7 +96,7 @@ Modify the master templates in `assets/` to change fonts, margins, or logos glob
 - **[Pandoc](https://pandoc.org/)**: The engine that makes document conversion universal.
 - **[Obsidian](https://obsidian.md/)**: Our recommended environment for writing high-fidelity Markdown.
 - **[Zotero](https://www.zotero.org/)**: The ideal research companion for managing your `.bib` bibliographies.
-- **[deraison.ai](https://deraison.ai/ai-books)**: The research hub powering our sample AI bibliographies.
+- **[deraison.ai/ai-books](https://deraison.ai/ai-books)**: The research hub powering our sample AI bibliographies (for the sake of giving an example only)
 
 ---
 
