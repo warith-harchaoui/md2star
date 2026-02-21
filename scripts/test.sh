@@ -113,8 +113,8 @@ echo ""
 if [ $error_count -eq 0 ]; then
     echo "✅ ALL TESTS PASSED"
     # Cleanup test outputs
-    rm -f "$DOCX_DIR"/*.docx "$DOCX_DIR"/*.pptx
-    rm -f "$PPTX_DIR"/*.docx "$PPTX_DIR"/*.pptx
+    rm -f "$DOCX_DIR"/basic.docx "$DOCX_DIR"/with_author.docx "$DOCX_DIR"/with_bib.docx "$DOCX_DIR"/with_lang.docx "$DOCX_DIR"/math.docx
+    rm -f "$PPTX_DIR"/basic.pptx "$PPTX_DIR"/with_author.pptx "$PPTX_DIR"/with_bib.pptx "$PPTX_DIR"/with_lang.pptx "$PPTX_DIR"/math.pptx "$PPTX_DIR"/example.pptx
     exit 0
 else
     echo "❌ $error_count TESTS FAILED"

@@ -18,7 +18,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -f pandoc/filters/strip-header-ids.lua
+          test -f pandoc/filters/md2star.lua
           test -f pandoc/defaults/docx-star.yaml
           test -f assets/template.docx
           test -f scripts/install.sh
