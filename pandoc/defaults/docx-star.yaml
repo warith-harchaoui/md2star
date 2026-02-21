@@ -8,7 +8,7 @@
 #   Windows:     %APPDATA%\pandoc\defaults\docx-star.yaml
 #
 # It assumes the following files are installed alongside it:
-#   ../filters/strip-header-ids.lua
+#   ../filters/md2star.lua
 #   ../template.docx
 #
 to: docx

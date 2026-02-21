@@ -2,22 +2,21 @@
     $ErrorActionPreference = "Stop"
 
     <#
-    md2star installer (Windows / PowerShell)
+    md2star Installer (Windows / PowerShell)
 
-    What it installs into your Pandoc user directory:
-      %APPDATA%\pandoc\filters\strip-header-ids.lua
-      %APPDATA%\pandoc\defaults\docx-star.yaml
-      %APPDATA%\pandoc\template.docx
+    This script automates the deployment of the md2star toolset on Windows.
+    It performs the following actions:
+    1. Configures the Pandoc user data directory (%APPDATA%\pandoc).
+    2. Deploys custom Lua filters for smart metadata handling.
+    3. Deploys curated DOCX and PPTX reference templates.
+    4. Injects absolute system paths into Pandoc YAML defaults to ensure 
+       reliability when running from any directory.
+    5. Installs the Windows CMD wrappers (md2docx.cmd, md2pptx.cmd, gup.cmd) 
+       into %APPDATA%\pandoc for immediate CLI access once added to PATH.
 
-    It also creates a helper command:
-      %APPDATA%\pandoc\md2star.cmd
-
-    Requirements:
-      - pandoc must be installed and available in PATH
-
-    Notes:
-      - To run `md2star` from anywhere, add %APPDATA%\pandoc to your PATH.
-      - If you customize assets\template.docx in this repo, re-run this installer.
+    Preamble:
+    md2star bridges the gap between Markdown efficiency and Office professionalism.
+    This installer ensures all structural pieces are correctly linked on Windows systems.
     #>
 
     $pandocDir   = Join-Path $env:APPDATA "pandoc"

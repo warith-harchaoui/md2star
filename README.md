@@ -1,13 +1,13 @@
 # md2star ✍️⭐️
 
-> **An efficient bridge from Markdown to docx, Google Doc, pptx, Google Slides and PDFs.**
+> **md2star** is an efficient bridge from Markdown to docx, Google Doc, pptx, Google Slides and PDFs.
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![Lua](https://img.shields.io/badge/lua-5.3-blue.svg)
 ![Bash](https://img.shields.io/badge/bash-4+-lightgray.svg)
 ![PowerShell](https://img.shields.io/badge/powershell-7+-blue.svg)
 
-`md2star` is a streamlined, cross-platform toolset designed for authors who demand the speed of **Markdown** and the corporate formats of **Microsoft Office** and **PDF** layouts. By combining the power of **Pandoc** with curated styling logic, it automates the tedious parts of document preparation.
+`md2star` is a streamlined, cross-platform toolset designed for authors who demand the speed of **Markdown** and the corporate formats of **Microsoft Office** (`.docx` and `.pptx`) and **PDF** layouts. By combining the power of **Pandoc** with curated styling logic, it automates the tedious parts of document preparation.
 
 ---
 
@@ -92,10 +92,12 @@ date_format: "%A, %e %B %Y"
 lang: "en-US"
 ```
 
-`date_format` uses an `strftime()`-style format string.
+Chosen conventions:
+
+  + `date_format` uses an `strftime()`-style format string.
 See [C/POSIX date-time formatting documentation](https://pubs.opengroup.org/onlinepubs/9699919799/functions/strftime.html) for more information.
 
-`lang` uses a BCP 47 language tag (e.g., `en-US`, `fr-FR`).
+  + `lang` uses a BCP 47 language tag (e.g., `en-US`, `fr-FR`).
 See [RFC 5646 documentation](https://datatracker.ietf.org/doc/html/rfc5646) for more information.
 
 ### Styling Templates
@@ -111,6 +113,7 @@ Modify the master templates in `assets/` to change fonts, margins, or logos glob
 - **[Obsidian](https://obsidian.md/)**: Our recommended environment for writing high-fidelity Markdown.
 - **[Zotero](https://www.zotero.org/)**: The ideal research companion for managing your `.bib` bibliographies.
 - **[deraison.ai/ai-books](https://deraison.ai/ai-books)**: Some nice AI references (for the sake of giving an example only)
+- **[md2googleslides](https://github.com/googleworkspace/md2googleslides)**: Google Slides abandoned project (written in Javascript/Typescript) for inspiration
 
 ---
 

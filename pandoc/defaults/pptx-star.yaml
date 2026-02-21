@@ -1,7 +1,16 @@
-# md2star PPTX defaults file
+# md2star Pandoc defaults file
 #
 # Usage:
 #   pandoc --defaults pptx-star.yaml input.md -o output.pptx
+#
+# This defaults file is installed into your Pandoc user data directory:
+#   macOS/Linux: ~/.pandoc/defaults/pptx-star.yaml
+#   Windows:     %APPDATA%\pandoc\defaults\pptx-star.yaml
+#
+# It assumes the following files are installed alongside it:
+#   ../filters/md2star.lua
+#   ../template.pptx
+#
 
 to: pptx
 reference-doc: template.pptx
