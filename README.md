@@ -14,10 +14,7 @@
 ## ✨ Features
 
 - **🚀 Frictionless Conversion for your ideas**: Write your ideas in Markdown files in your favorite lightweight text editor (`emacs`, `vim`, `Sublime Text`, `Atom`, `Obsidian`, etc.), and let our tool instantly generate `.docx` and `.pptx` documents.
-- **📄 Instant PDF Export**: Every conversion automatically produces a high-fidelity PDF. 
-  > [!TIP]
-  > For an "Office" look without LaTeX, set `PANDOC_PDF_ENGINE=typst` or `weasyprint` if installed.
-- **🔢 LaTeX Math Support**: Robust rendering of complex formulas in both documents and slides.
+- ** LaTeX Math Support**: Robust rendering of complex formulas in both documents and slides.
 - **🏷️ Intelligent Metadata**: 
   - Automatic **Title Extraction** from your first `# Heading`.
   - Smart **Subtitle Injection** for Author, Date, and Category metadata.
@@ -63,7 +60,7 @@ md2docx work.md --author "Dr. Renegade Researcher" --bib references.bib --lang e
 md2pptx slides.md --author "Speaker Name"
 ```
 
----
+
 
 ## 🧪 Quality & Reliability
 
