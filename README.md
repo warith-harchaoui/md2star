@@ -9,7 +9,7 @@
 ## ✨ Features
 
 - **🚀 Frictionless Conversion for your ideas**: Write in Markdown files in your favorite lightweight text editor (emacs, vim, Sublime Text, Atom, Obsidian, etc.), our tool takes care of conversions.
-- **📄 Instant PDF Export**: Every conversion automatically produces a high-fidelity PDF for easy sharing.
+- **📄 Instant PDF Export**: Every conversion automatically produces a MS Office-like PDF for easy sharing.
 - **🏷️ Intelligent Metadata**: 
   - Automatic **Title Extraction** from your first `# Heading`.
   - Smart **Subtitle Injection** for Author, Date, and Category metadata.
