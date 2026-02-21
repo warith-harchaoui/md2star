@@ -6,8 +6,8 @@ set -euo pipefail
 
 MD2DOCX="${HOME}/.local/bin/md2docx"
 MD2PPTX="${HOME}/.local/bin/md2pptx"
-DOCX_DIR="tests/docx"
-PPTX_DIR="tests/pptx"
+DOCX_DIR="assets"
+PPTX_DIR="assets"
 
 echo "--- Installing tool for testing ---"
 bash scripts/install.sh > /dev/null
@@ -113,8 +113,8 @@ echo ""
 if [ $error_count -eq 0 ]; then
     echo "✅ ALL TESTS PASSED"
     # Cleanup test outputs
-    rm -f "$DOCX_DIR"/*.docx "$DOCX_DIR"/*.pptx "$DOCX_DIR"/*.pdf
-    rm -f "$PPTX_DIR"/*.docx "$PPTX_DIR"/*.pptx "$PPTX_DIR"/*.pdf
+    rm -f "$DOCX_DIR"/*.docx "$DOCX_DIR"/*.pptx
+    rm -f "$PPTX_DIR"/*.docx "$PPTX_DIR"/*.pptx
     exit 0
 else
     echo "❌ $error_count TESTS FAILED"

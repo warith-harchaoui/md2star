@@ -25,8 +25,9 @@ BIN_DIR="${HOME}/.local/bin"
 
 mkdir -p "${FILTERS_DIR}" "${DEFAULTS_DIR}" "${BIN_DIR}"
 
-# Copy filter + defaults + templates + metadata
+# Copy filter + defaults + templates + metadata + preprocessor
 cp -f "pandoc/filters/md2star.lua" "${FILTERS_DIR}/md2star.lua"
+cp -f "scripts/preprocessing.py" "${PANDOC_DIR}/preprocessing.py"
 cp -f "pandoc/metadata.yaml" "${PANDOC_DIR}/metadata.yaml"
 cp -f "assets/template.docx" "${PANDOC_DIR}/template.docx"
 cp -f "assets/template.pptx" "${PANDOC_DIR}/template.pptx"
@@ -84,15 +85,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 OUT_DOCX="${IN%.*}.docx"
-OUT_PDF="${IN%.*}.pdf"
+
+# 0. Preprocess Markdown (handles spacing before list items)
+TEMP_MD=$(python3 "${HOME}/.pandoc/preprocessing.py" "$IN")
+trap 'rm -f "$TEMP_MD"' EXIT
 
 # 1. Convert Markdown to DOCX
-pandoc --defaults docx-star.yaml "$IN" -o "$OUT_DOCX" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
+pandoc --defaults docx-star.yaml "$TEMP_MD" -o "$OUT_DOCX" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
 echo "Wrote: $OUT_DOCX"
 
-# 2. Convert DOCX to PDF
-pandoc "$OUT_DOCX" -o "$OUT_PDF"
-echo "Wrote: $OUT_PDF"
+
 SH
 
 chmod +x "${BIN_DIR}/md2docx"
@@ -137,17 +139,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 OUT_PPTX="${IN%.*}.pptx"
-OUT_PDF="${IN%.*}.pdf"
+
+# 0. Preprocess Markdown (handles spacing before list items)
+TEMP_MD=$(python3 "${HOME}/.pandoc/preprocessing.py" "$IN")
+trap 'rm -f "$TEMP_MD"' EXIT
 
 # 1. Convert Markdown to PPTX
-pandoc --defaults pptx-star.yaml "$IN" -o "$OUT_PPTX" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
+pandoc --defaults pptx-star.yaml "$TEMP_MD" -o "$OUT_PPTX" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
 echo "Wrote: $OUT_PPTX"
 
-# 2. Convert to PDF (trying to avoid default LaTeX look)
-# If the user has typst or another engine, they can set PANDOC_PDF_ENGINE
-PDF_ENGINE="${PANDOC_PDF_ENGINE:-pdflatex}"
-pandoc "$IN" -o "$OUT_PDF" --pdf-engine="$PDF_ENGINE" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
-echo "Wrote: $OUT_PDF"
+
 SH
 
 chmod +x "${BIN_DIR}/md2pptx"

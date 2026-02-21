@@ -150,3 +150,30 @@ the slide layout will be chosen from the available master slides by the name.
 This can be used with the flag `--copy=[presentation id]` to copy and use an existing presentation as the source rather than a blank slide.
 
 ***
+
+
+# Slides can have background images
+
+![](https://picsum.photos/g/1600/900){.background}
+
+***
+
+# Slides can have an inline image
+
+![](https://picsum.photos/1600/900)
+
+***
+
+# Slides can have inline images with custom parameters
+
+![](https://picsum.photos/1600/900){pad=30 offset-y=30 offset-x=30}
+
+***
+
+# Slides can have many images
+
+![](https://www.gstatic.com/images/branding/product/2x/drive_36dp.png){pad=10}
+![](https://www.gstatic.com/images/branding/product/2x/docs_36dp.png){pad=10}
+![](https://www.gstatic.com/images/branding/product/2x/sheets_36dp.png){pad=10}
+![](https://www.gstatic.com/images/branding/product/2x/slides_36dp.png){pad=10}
+![](https://www.gstatic.com/images/branding/product/2x/forms_36dp.png){pad=10}

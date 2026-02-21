@@ -27,6 +27,7 @@
     New-Item -ItemType Directory -Force -Path $defaultsDir | Out-Null
 
     Copy-Item -Force "pandoc\filters\md2star.lua" (Join-Path $filtersDir "md2star.lua")
+    Copy-Item -Force "scripts\preprocessing.py"   (Join-Path $pandocDir  "preprocessing.py")
     Copy-Item -Force "pandoc\metadata.yaml"      (Join-Path $pandocDir "metadata.yaml")
     Copy-Item -Force "assets\template.docx"       (Join-Path $pandocDir "template.docx")
     Copy-Item -Force "assets\template.pptx"       (Join-Path $pandocDir "template.pptx")
@@ -92,16 +93,18 @@
 
     for %%F in ("%IN%") do (
       set "OUT_DOCX=%%~dpnF.docx"
-      set "OUT_PDF=%%~dpnF.pdf"
     )
 
+    :: 0. Preprocess Markdown (handles spacing before list items)
+    for /f "delims=" %%I in ('python "%APPDATA%\pandoc\preprocessing.py" "%IN%"') do set "TEMP_MD=%%I"
+
     :: 1. Convert Markdown to DOCX
-    pandoc --defaults docx-star.yaml "%IN%" -o "!OUT_DOCX!" !EXTRA_ARGS!
+    pandoc --defaults docx-star.yaml "!TEMP_MD!" -o "!OUT_DOCX!" !EXTRA_ARGS!
     echo Wrote: !OUT_DOCX!
 
-    :: 2. Convert DOCX to PDF (Using Pandoc)
-    pandoc "!OUT_DOCX!" -o "!OUT_PDF!"
-    echo Wrote: !OUT_PDF!
+
+    
+    del /f /q "!TEMP_MD!"
     "@ | Set-Content -Encoding ASCII $docxCmdPath
 
     # md2pptx helper
@@ -145,18 +148,18 @@
 
     for %%F in ("%IN%") do (
       set "OUT_PPTX=%%~dpnF.pptx"
-      set "OUT_PDF=%%~dpnF.pdf"
     )
 
+    :: 0. Preprocess Markdown (handles spacing before list items)
+    for /f "delims=" %%I in ('python "%APPDATA%\pandoc\preprocessing.py" "%IN%"') do set "TEMP_MD=%%I"
+
     :: 1. Convert Markdown to PPTX
-    pandoc --defaults pptx-star.yaml "%IN%" -o "!OUT_PPTX!" !EXTRA_ARGS!
+    pandoc --defaults pptx-star.yaml "!TEMP_MD!" -o "!OUT_PPTX!" !EXTRA_ARGS!
     echo Wrote: !OUT_PPTX!
 
-    :: 2. Convert to PDF (trying to avoid default LaTeX look)
-    :: If the user has typst or another engine, they can set PANDOC_PDF_ENGINE
-    if defined PANDOC_PDF_ENGINE (set "PDF_ENGINE=%PANDOC_PDF_ENGINE%") else (set "PDF_ENGINE=pdflatex")
-    pandoc "%IN%" -o "!OUT_PDF!" --pdf-engine="!PDF_ENGINE!" !EXTRA_ARGS!
-    echo Wrote: !OUT_PDF!
+
+    
+    del /f /q "!TEMP_MD!"
     "@ | Set-Content -Encoding ASCII $pptxCmdPath
 
     # gup helper
