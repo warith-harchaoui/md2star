@@ -1,7 +1,10 @@
-# Tests
-test_*.*
+# Tests & temp files
 temp/
 temp_*
+~$*
+
+# Debug scripts (should not be committed)
+debug.lua
 
 assets/nexton-template.pptx
 
@@ -69,9 +72,17 @@ Session.vim
 # Project Specific
 *.docx
 !assets/template.docx
+*.pptx
+!assets/template.pptx
 *.log
 *.tmp
 *.bak
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
 
 # Bib utility (local only)
 bib/
