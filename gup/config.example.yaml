@@ -1,11 +1,6 @@
 # Copy this file to config.yaml and fill values.
 # NEVER commit real secrets or tokens.
 
-google_drive:
-  # Destination folder ID where the Google Doc will be created:
-  # E.g. `https://drive.google.com/drive/folders/<FOLDER_ID>`
-  folder_id: "<FOLDER_ID>"
-
 auth:
   # OAuth client secret file downloaded from Google Cloud Console:
   credentials_json_path: "credentials.json"

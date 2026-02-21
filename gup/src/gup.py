@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+"""
+gup (Google Drive Upload & Convert)
+
+A utility to upload local .docx and .pptx files to a specific Google Drive folder
+and automatically convert them to Google Docs and Google Slides.
+
+The script ensures:
+1. No name collisions by appending suffixes.
+2. Mandatory folder identification via CLI for security.
+3. Smart ID extraction from full Drive URLs.
+"""
+
 import argparse
 import os
 from dataclasses import dataclass
 from typing import List, Optional, Tuple
 
 import yaml
+import re
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -20,41 +33,32 @@ GSLIDE_MIME = "application/vnd.google-apps.presentation"
 
 @dataclass
 class AppConfig:
-    folder_id: str
-    credentials_json_path: str
-    token_json_path: str
-    scopes: List[str]
+    """Configuration for GUp authentication and scopes."""
+    credentials_json_path: str = "credentials.json"
+    token_json_path: str = "token.json"
+    scopes: Optional[List[str]] = None
+
+    def __post_init__(self):
+        # Default to least-privilege 'drive.file' scope
+        if self.scopes is None:
+            self.scopes = ["https://www.googleapis.com/auth/drive.file"]
 
 
 def load_config(path: str = "config.yaml") -> AppConfig:
-    if not os.path.exists(path):
-        raise FileNotFoundError(
-            f"Config file not found: {path}\n"
-            f"Create it by copying config.example.yaml -> config.yaml"
-        )
+    """Loads GUp configuration from a YAML file."""
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f) or {}
+    else:
+        raw = {}
 
-    with open(path, "r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f) or {}
-
-    drive = raw.get("google_drive", {}) or {}
     auth = raw.get("auth", {}) or {}
     scopes = raw.get("scopes", None)
 
-    folder_id = drive.get("folder_id", "")
-    if not folder_id or "PASTE_YOUR_FOLDER_ID_HERE" in str(folder_id):
-        raise ValueError("Please set google_drive.folder_id in config.yaml")
-
-    credentials_json_path = auth.get("credentials_json_path", "credentials.json")
-    token_json_path = auth.get("token_json_path", "token.json")
-
-    if not scopes:
-        scopes = ["https://www.googleapis.com/auth/drive.file"]
-
     return AppConfig(
-        folder_id=str(folder_id),
-        credentials_json_path=str(credentials_json_path),
-        token_json_path=str(token_json_path),
-        scopes=[str(s) for s in scopes],
+        credentials_json_path=auth.get("credentials_json_path", "credentials.json"),
+        token_json_path=auth.get("token_json_path", "token.json"),
+        scopes=scopes,
     )
 
 
@@ -62,8 +66,8 @@ def resolve_unique_name(
     service, name: str, folder_id: str, supports_all_drives: bool = False
 ) -> str:
     """
-    Check if a file with 'name' exists in 'folder_id'.
-    If so, append -1, -2, etc. until unique.
+    Checks for name collisions in the target Google Drive folder.
+    Returns a unique name by appending '-1', '-2', etc. if needed.
     """
     # Escape single quotes for the Drive API query
     safe_name = name.replace("'", "\\'")
@@ -97,12 +101,14 @@ def resolve_unique_name(
         n += 1
 
 
-def get_drive_service(cfg: AppConfig):
+def get_drive_service(cfg: Optional[AppConfig] = None):
     """
-    Returns an authenticated Drive API v3 service.
+    Returns an authenticated Google Drive API v3 service instance.
+    Handles OAuth client secrets and token caching automatically.
+    """
+    if cfg is None:
+        cfg = AppConfig()
 
-    First run opens a local browser window for OAuth consent and writes token_json_path.
-    """
     creds: Optional[Credentials] = None
 
     if os.path.exists(cfg.token_json_path):
@@ -134,7 +140,8 @@ def upload_file_to_drive(
     supports_all_drives: bool = False,
 ) -> Tuple[str, Optional[str]]:
     """
-    Upload a local .docx or .pptx to Google Drive and convert it.
+    Uploads a local Office file to Drive and triggers server-side conversion.
+    Returns a tuple of (file_id, web_view_link).
     """
     if not os.path.isfile(local_path):
         raise FileNotFoundError(f"File not found: {local_path}")
@@ -184,6 +191,27 @@ def upload_file_to_drive(
     return created["id"], created.get("webViewLink")
 
 
+def extract_folder_id(input_str: str) -> str:
+    """
+    Extract the folder ID from a Drive URL or return the input if it's already an ID.
+    Supports: https://drive.google.com/drive/folders/<ID>
+    """
+    input_str = input_str.strip()
+    # Simple regex for Drive folder URL
+    match = re.search(r"/folders/([a-zA-Z0-9_-]{25,})", input_str)
+    if match:
+        return match.group(1)
+    
+    # Also handle URLs that might end with ?usp=sharing etc.
+    if "drive.google.com" in input_str and "/folders/" in input_str:
+        # Fallback split
+        parts = input_str.split("/folders/")
+        if len(parts) > 1:
+            return parts[1].split("?")[0].split("/")[0]
+
+    return input_str
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Upload a .docx or .pptx to Google Drive and convert it to Google Docs/Slides."
@@ -195,16 +223,29 @@ def main():
         action="store_true",
         help="Enable if uploading into a Shared Drive folder",
     )
-    parser.add_argument("--config", default="config.yaml", help="Path to config.yaml")
+    parser.add_argument("--config", default=None, help="Path to config.yaml")
+    parser.add_argument("--folder-id", required=True, help="Google Drive folder ID (from https://drive.google.com/drive/folders/<FOLDER_ID>)")
     args = parser.parse_args()
 
-    cfg = load_config(args.config)
-    service = get_drive_service(cfg)
+    folder_id = extract_folder_id(args.folder_id)
+
+    # Try to find config.yaml if not specified
+    if not args.config:
+        if os.path.exists("config.yaml"):
+             args.config = "config.yaml"
+        elif os.path.exists("gup/config.yaml"):
+             args.config = "gup/config.yaml"
+
+    cfg = None
+    if args.config:
+        cfg = load_config(args.config)
+
+    service = get_drive_service(cfg) if cfg else get_drive_service(None)
 
     file_id, link = upload_file_to_drive(
         service,
         local_path=args.file,
-        drive_folder_id=cfg.folder_id,
+        drive_folder_id=folder_id,
         target_name=args.name,
         supports_all_drives=args.supports_all_drives,
     )

@@ -153,8 +153,10 @@
     pandoc --defaults pptx-star.yaml "%IN%" -o "!OUT_PPTX!" !EXTRA_ARGS!
     echo Wrote: !OUT_PPTX!
 
-    :: 2. Convert to PDF (Using Pandoc from Markdown)
-    pandoc "%IN%" -o "!OUT_PDF!" !EXTRA_ARGS!
+    :: 2. Convert to PDF (trying to avoid default LaTeX look)
+    :: If the user has typst or another engine, they can set PANDOC_PDF_ENGINE
+    if defined PANDOC_PDF_ENGINE (set "PDF_ENGINE=%PANDOC_PDF_ENGINE%") else (set "PDF_ENGINE=pdflatex")
+    pandoc "%IN%" -o "!OUT_PDF!" --pdf-engine="!PDF_ENGINE!" !EXTRA_ARGS!
     echo Wrote: !OUT_PDF!
     "@ | Set-Content -Encoding ASCII $pptxCmdPath
 
@@ -169,6 +171,11 @@
     $gupTargetDir = Join-Path $pandocDir "gup"
     if (!(Test-Path $gupTargetDir)) { New-Item -ItemType Directory -Force -Path $gupTargetDir | Out-Null }
     Copy-Item -Force -Recurse "gup\*" $gupTargetDir
+
+    # Ensure assets are copied
+    $assetsTargetDir = Join-Path $pandocDir "assets"
+    if (!(Test-Path $assetsTargetDir)) { New-Item -ItemType Directory -Force -Path $assetsTargetDir | Out-Null }
+    Copy-Item -Force -Recurse "assets\*" $assetsTargetDir
 
     Write-Host ""
     Write-Host "✅ md2docx, md2pptx & gup installed."

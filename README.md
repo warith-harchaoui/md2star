@@ -2,20 +2,28 @@
 
 > **An efficient bridge from Markdown to docx, Google Doc, pptx, Google Slides and PDFs.**
 
+![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
+![Lua](https://img.shields.io/badge/lua-5.3-blue.svg)
+![Bash](https://img.shields.io/badge/bash-4+-lightgray.svg)
+![PowerShell](https://img.shields.io/badge/powershell-7+-blue.svg)
+
 `md2star` is a streamlined, cross-platform toolset designed for authors who demand the speed of **Markdown** and the professionalism of **Microsoft Office** and **PDF** layouts. By combining the power of **Pandoc** with curated styling logic, it automates the tedious parts of document preparation.
 
 ---
 
 ## ✨ Features
 
-- **🚀 Frictionless Conversion for your ideas**: Write in Markdown files in your favorite lightweight text editor (emacs, vim, Sublime Text, Atom, Obsidian, etc.), our tool takes care of conversions.
-- **📄 Instant PDF Export**: Every conversion automatically produces a MS Office-like PDF for easy sharing.
+- **🚀 Frictionless Conversion for your ideas**: Write in Markdown files in your favorite lightweight text editor (emacs, vim, Sublime Text, Atom, Obsidian, etc.), our tool takes care of conversions to MS Office formats.
+- ** Instant PDF Export**: Every conversion automatically produces a high-fidelity PDF. 
+  > [!TIP]
+  > For an "Office" look without LaTeX, set `PANDOC_PDF_ENGINE=typst` or `weasyprint` if installed.
+- **🔢 LaTeX Math Support**: Robust rendering of complex formulas in both documents and slides.
 - **🏷️ Intelligent Metadata**: 
   - Automatic **Title Extraction** from your first `# Heading`.
   - Smart **Subtitle Injection** for Author, Date, and Category metadata.
-- **📚 Scientific-Ready**: Native **BibTeX** integration for professional research citations and Math formula.
+- **📚 Scientific-Ready**: Native **BibTeX** integration for professional research citations (for corporate environment, not academic publications).
 - **🌍 Global Localization**: Multi-language support with automatic date formatting (e.g., `fr-FR`, `en-US`).
-- **☁️ Cloud Integrated**: Optional `gup` utility for direct upload and conversion to **Google Docs** and **Google Slides** thanks to you OAuth credentials (see [gup/README.md](gup/README.md) for more information).
+- **☁️ Cloud Integrated**: Optional `gup` utility for direct upload and conversion to **Google Docs** and **Google Slides**. Requires a target `folder_id` from your Drive URL (see [gup/README.md](gup/README.md) for setup).
 
 ---
 
@@ -47,7 +55,7 @@ md2docx myfile.md
 
 ### 2. Research Paper (with Citations)
 ```bash
-md2docx paper.md --author "Dr. Researcher" --bib references.bib --lang en-US
+md2docx work.md --author "Dr. Renegade Researcher" --bib references.bib --lang en-US
 ```
 
 ### 3. Presentation Slides
@@ -80,9 +88,15 @@ make test
 Adjust your global defaults in `pandoc/metadata.yaml`:
 ```yaml
 author: "Your Default Name"
-date_format: "%d %B %Y"
+date_format: "%A, %e %B %Y"
 lang: "en-US"
 ```
+
+`date_format` uses an `strftime()`-style format string.
+See [C/POSIX date-time formatting documentation](https://pubs.opengroup.org/onlinepubs/9699919799/functions/strftime.html) for more information.
+
+`lang` uses a BCP 47 language tag (e.g., `en-US`, `fr-FR`).
+See [RFC 5646 documentation](https://datatracker.ietf.org/doc/html/rfc5646) for more information.
 
 ### Styling Templates
 Modify the master templates in `assets/` to change fonts, margins, or logos globally:

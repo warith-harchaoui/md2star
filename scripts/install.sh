@@ -1,23 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# md2star installer (macOS + Linux)
+# md2star Installer (macOS & Linux)
 #
-# What it installs into your Pandoc user directory:
-#   ~/.pandoc/filters/strip-header-ids.lua
-#   ~/.pandoc/defaults/docx-star.yaml
-#   ~/.pandoc/template.docx
+# This script automates the deployment of the md2star toolset.
+# It performs the following actions:
+# 1. Configures the Pandoc user data directory (~/.pandoc).
+# 2. Deploys custom Lua filters for smart metadata handling.
+# 3. Deploys curated DOCX and PPTX reference templates.
+# 4. Injects absolute system paths into Pandoc YAML defaults to ensure 
+#    reliability when running from any directory.
+# 5. Installs lightweight Bash wrappers (md2docx, md2pptx, gup) into 
+#    ~/.local/bin for immediate CLI access.
 #
-# And helper commands into:
-#   ~/.local/bin/md2docx
-#   ~/.local/bin/md2pptx
-#
-# Requirements:
-#   - pandoc must be installed and available in PATH
-#
-# Notes:
-#   - The helper commands use defaults files which in turn use templates.
-#   - If you customize templates in assets/, re-run this installer.
+# Preamble:
+# md2star is more than a converter; it's a bridge between Markdown efficiency 
+# and Office professionalism. This installer ensures all architectural pieces 
+# are correctly linked.
 
 PANDOC_DIR="${HOME}/.pandoc"
 FILTERS_DIR="${PANDOC_DIR}/filters"
@@ -32,7 +31,9 @@ cp -f "pandoc/metadata.yaml" "${PANDOC_DIR}/metadata.yaml"
 cp -f "assets/template.docx" "${PANDOC_DIR}/template.docx"
 cp -f "assets/template.pptx" "${PANDOC_DIR}/template.pptx"
 
-# Inject absolute paths into defaults files during installation
+# Step 2: Inject absolute paths into defaults files.
+# Pandoc requires absolute paths in defaults files if the templates are not 
+# in the current working directory. We automate this bridging during install.
 sed -e "s|md2star.lua|${FILTERS_DIR}/md2star.lua|g" \
     -e "s|metadata.yaml|${PANDOC_DIR}/metadata.yaml|g" \
     -e "s|reference-doc: template.docx|reference-doc: ${PANDOC_DIR}/template.docx|g" \
@@ -142,8 +143,10 @@ OUT_PDF="${IN%.*}.pdf"
 pandoc --defaults pptx-star.yaml "$IN" -o "$OUT_PPTX" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
 echo "Wrote: $OUT_PPTX"
 
-# 2. Convert to PDF
-pandoc "$IN" -o "$OUT_PDF" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
+# 2. Convert to PDF (trying to avoid default LaTeX look)
+# If the user has typst or another engine, they can set PANDOC_PDF_ENGINE
+PDF_ENGINE="${PANDOC_PDF_ENGINE:-pdflatex}"
+pandoc "$IN" -o "$OUT_PDF" --pdf-engine="$PDF_ENGINE" ${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}
 echo "Wrote: $OUT_PDF"
 SH
 
@@ -161,6 +164,10 @@ chmod +x "${BIN_DIR}/gup"
 # Deploy gup resources
 mkdir -p "${PANDOC_DIR}/gup"
 cp -rf gup/ "${PANDOC_DIR}/gup/"
+
+# Ensure assets are copied
+mkdir -p "${PANDOC_DIR}/assets"
+cp -rf assets/* "${PANDOC_DIR}/assets/"
 
 echo ""
 echo "✅ md2docx, md2pptx & gup installed."

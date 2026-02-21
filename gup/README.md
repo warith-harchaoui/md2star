@@ -20,12 +20,15 @@ This repository **does not** ship with real credentials.
   - `config.example.yaml` (a safe template)
   - `.gitignore` entries for `credentials.json`, `token.json`, and `config.yaml`
 
-## 1) Install
+### 1. Installation
 
+From the **repository root**:
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+# Optional: Create environment
+cd gup && conda env create -f environment.yml && conda activate gup && cd ..
+
+# Install dependencies
+pip install -r gup/requirements.txt
 ```
 
 ## 2) Google Cloud setup (one-time)
@@ -36,27 +39,26 @@ pip install -r requirements.txt
 4. Create OAuth client ID (**Desktop app**)
 5. Download the JSON and save it as `credentials.json` at the repo root
 
-## 3) Configure
+### 2. Configuration
 
-Copy the example config:
+1. Copy `gup/config.example.yaml` to `gup/config.yaml`.
+2. Edit `gup/config.yaml` to provide your authentication paths.
 
-```bash
-cp config.example.yaml config.yaml
-```
+### 3. Usage
 
-Edit `config.yaml` and set your destination Drive folder id.
-
-### How to get a folder ID
-Open the folder in Drive and copy the ID from the URL:
-`https://drive.google.com/drive/folders/<FOLDER_ID>`
-
-## 4) Run
+To upload a document, you **must** provide the target Google Drive **Folder ID** (or the full URL) via the CLI.
 
 ```bash
-python -m src.gup /path/to/file.docx
-# or
-python -m src.gup /path/to/slides.pptx
+# Using a raw Folder ID
+gup your_file.docx --folder-id "1ABC-xyz..."
+
+# Or using the full Drive URL (convenient!)
+gup your_file.docx --folder-id "https://drive.google.com/drive/folders/1ABC-xyz..."
 ```
+
+#### How to find your Folder ID
+Open the destination folder in your browser and copy the ID (or the whole URL) from the address bar.
+`https://drive.google.com/drive/folders/`**`1ABC-xyz...`**
 
 Optional: override the output name:
 

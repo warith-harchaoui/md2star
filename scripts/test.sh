@@ -92,6 +92,13 @@ assert_contains_docx "$SAMPLES_DIR/with_lang.docx" "février" "Date rendered in 
 $MD2PPTX "$SAMPLES_DIR/with_lang.md" --author "User" > /dev/null
 assert_contains_pptx "$SAMPLES_DIR/with_lang.pptx" "février" "Date rendered in French (PPTX)"
 
+echo ""
+echo "--- Running Math Test ---"
+$MD2DOCX "$SAMPLES_DIR/math.md" > /dev/null
+assert_contains_docx "$SAMPLES_DIR/math.docx" "math" "Math rendered in DOCX"
+$MD2PPTX "$SAMPLES_DIR/math.md" > /dev/null
+assert_contains_pptx "$SAMPLES_DIR/math.pptx" "math" "Math rendered in PPTX"
+
 # Reset metadata
 printf "author: EMANON\ndate_format: '%%m/%%d/%%y'\nlang: en-US\n" > pandoc/metadata.yaml
 bash scripts/install.sh > /dev/null

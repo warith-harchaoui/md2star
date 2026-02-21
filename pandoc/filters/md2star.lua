@@ -1,14 +1,18 @@
 -- md2star: Automate title extraction, author and date injection with Subtitle style, and heading ID stripping.
 --
--- Logic:
--- 1. Captures the first Level 1 heading (# Title) and sets it as document title metadata.
--- 2. Checks for 'author' metadata. If it's "EMANON", it clears it.
--- 3. Handles 'date_format' and 'lang' metadata.
---    - If lang is provided (e.g., "fr-FR"), sanitizes it for Lua locale (fr_FR.UTF-8) and sets it.
---    - If format is invalid (doesn't start with %), issues a warning and skips date.
--- 4. If an author and/or date is available, injects them as a Subtitle style paragraph.
--- 5. Removes the Title heading from the body.
--- 6. Strips all other heading identifiers.
+-- This filter bridges the gap between Markdown semantics and Office layout requirements.
+--
+-- Core Logic:
+-- 1. Metadata Inheritance: Captures the first Level 1 heading (# Title) and promotes it to 
+--    the document's 'title' metadata if not already defined.
+-- 2. Metadata Sanitization: Prevents default placeholders (like "EMANON") from appearing in 
+--    the final document.
+-- 3. Localization: Automatically maps BCP 47 language tags (en-US) to system locales 
+--    for localized date formatting using Lua's os.date().
+-- 4. Subtitle Injection: Dynamically constructs an "Author - Date" subtitle line and 
+--    wraps it in a Div with 'custom-style: Subtitle' for precise DOCX/PPTX styling.
+-- 5. Body Cleanup: Removes the redundant Title heading from the document body and 
+--    strips all automatic heading IDs to prevent clutter in Office exports.
 
 local title_found = false
 
