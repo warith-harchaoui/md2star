@@ -13,7 +13,7 @@
 - **🏷️ Intelligent Metadata**: 
   - Automatic **Title Extraction** from your first `# Heading`.
   - Smart **Subtitle Injection** for Author, Date, and Category metadata.
-- **📚 Academic-Ready**: Native **BibTeX** integration for professional research citations.
+- **📚 Scientific-Ready**: Native **BibTeX** integration for professional research citations and Math formula.
 - **🌍 Global Localization**: Multi-language support with automatic date formatting (e.g., `fr-FR`, `en-US`).
 - **☁️ Cloud Integrated**: Optional `gup` utility for direct upload and conversion to **Google Docs** and **Google Slides** thanks to you OAuth credentials (see [gup/README.md](gup/README.md) for more information).
 
