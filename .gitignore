@@ -86,3 +86,6 @@ __pycache__/
 
 # Bib utility (local only)
 bib/
+
+# Credentials
+gdrive-credentials.json
