@@ -188,6 +188,12 @@ chmod +x "${BIN_DIR}/gup"
 mkdir -p "${PANDOC_DIR}/gup"
 cp -rf gup/ "${PANDOC_DIR}/gup/"
 
+# Install gup Python dependencies so the command works immediately
+echo "--- Installing gup Python dependencies ---"
+pip install -q -r gup/requirements.txt 2>/dev/null \
+  || pip3 install -q -r gup/requirements.txt 2>/dev/null \
+  || echo "⚠️  Could not install gup dependencies automatically. Run: pip install -r gup/requirements.txt"
+
 # Ensure assets are copied
 mkdir -p "${PANDOC_DIR}/assets"
 cp -rf assets/* "${PANDOC_DIR}/assets/"
