@@ -2,7 +2,17 @@
 test_preprocessing.py — Unit tests for scripts/preprocessing.py.
 
 Tests for the ``preprocess_markdown`` function, which ensures that
-every Markdown list item is preceded by a blank line.
+every Markdown list item is preceded by a blank line. This preprocessing
+step fixes common Markdown authoring issues where lists are "glued" to
+preceding paragraphs, which Pandoc sometimes renders incorrectly.
+
+Test Coverage:
+- Edge cases: empty strings, whitespace-only, no lists
+- Unordered lists: dash (-), asterisk (*), plus (+) markers
+- Ordered lists: numbered items (1., 2., …)
+- Nested lists: indented sub-items
+- Code block preservation: list-like syntax inside fenced code blocks
+- Mixed content: headings, paragraphs, lists, code blocks together
 """
 
 from __future__ import annotations
@@ -30,15 +40,18 @@ class TestPreprocessMarkdownBasic:
 
     def test_empty_string(self) -> None:
         """Empty input should return an empty string."""
+        # Edge case: function must handle empty input gracefully
         assert preprocess_markdown("") == ""
 
     def test_no_lists(self) -> None:
         """Content without any list items should pass through unchanged."""
+        # No list markers present → no transformations should occur
         text = "Hello\nworld\n\nParagraph two."
         assert preprocess_markdown(text) == text
 
     def test_blank_lines_only(self) -> None:
         """A string of blank lines should pass through unchanged."""
+        # Edge case: only whitespace, no actual content
         text = "\n\n\n"
         assert preprocess_markdown(text) == text
 
@@ -53,26 +66,31 @@ class TestUnorderedLists:
 
     def test_blank_line_inserted_before_dash_item(self) -> None:
         """A blank line should be inserted when text precedes a dash list."""
+        # Common case: paragraph followed by list needs spacing for Pandoc
         result = preprocess_markdown("Hello\n- item")
         assert result == "Hello\n\n- item"
 
     def test_blank_line_inserted_before_star_item(self) -> None:
         """Works with asterisk markers too."""
+        # Markdown supports multiple unordered list markers
         result = preprocess_markdown("Hello\n* item")
         assert result == "Hello\n\n* item"
 
     def test_blank_line_inserted_before_plus_item(self) -> None:
         """Works with plus markers too."""
+        # Plus (+) is another valid unordered list marker
         result = preprocess_markdown("Hello\n+ item")
         assert result == "Hello\n\n+ item"
 
     def test_no_double_blank_line(self) -> None:
         """If a blank line already precedes a list item, no extra is added."""
+        # Idempotency: don't add blank lines if one already exists
         text = "Hello\n\n- item"
         assert preprocess_markdown(text) == text
 
     def test_consecutive_items_get_blank_lines(self) -> None:
         """Each consecutive list item should be separated by a blank line."""
+        # Converts "tight" lists to "loose" lists for better DOCX/PPTX spacing
         result = preprocess_markdown("- a\n- b\n- c")
         assert result == "- a\n\n- b\n\n- c"
 
@@ -87,11 +105,13 @@ class TestOrderedLists:
 
     def test_ordered_list_item(self) -> None:
         """Numbered list items should also get blank lines inserted."""
+        # Ordered lists use the same spacing logic as unordered lists
         result = preprocess_markdown("Intro\n1. First\n2. Second")
         assert result == "Intro\n\n1. First\n\n2. Second"
 
     def test_multi_digit_numbers(self) -> None:
         """Multi-digit numbers (10., 100., …) should still be matched."""
+        # Regex must handle numbers > 9 correctly
         result = preprocess_markdown("Intro\n10. Tenth")
         assert result == "Intro\n\n10. Tenth"
 
@@ -106,6 +126,7 @@ class TestNestedLists:
 
     def test_nested_list_items(self) -> None:
         """Indented sub-items should also be separated by blank lines."""
+        # Nested lists preserve indentation while adding spacing
         result = preprocess_markdown("- parent\n  - child")
         assert result == "- parent\n\n  - child"
 
@@ -120,16 +141,18 @@ class TestCodeBlocks:
 
     def test_code_block_preserved(self) -> None:
         """Lines inside ``` … ``` should not trigger blank-line injection."""
+        # Critical: code examples often contain list-like syntax that must not be altered
         text = "```\n- not a list\n```"
         assert preprocess_markdown(text) == text
 
     def test_code_block_with_surrounding_text(self) -> None:
         """Code block between paragraphs: only real lists get spacing."""
+        # Mixed content: code block contains list-like syntax, followed by a real list
         text = "Before\n```\n- code\n```\nAfter\n- real list"
         result = preprocess_markdown(text)
-        # The "- code" inside the fence should be untouched
+        # The "- code" inside the fence should be untouched (code preservation)
         assert "```\n- code\n```" in result
-        # The real list item after the fence should get a blank line
+        # The real list item after the fence should get a blank line (list formatting)
         assert "After\n\n- real list" in result
 
 
@@ -143,11 +166,13 @@ class TestMixedContent:
 
     def test_heading_then_list(self) -> None:
         """A heading followed by a list should get a blank line."""
+        # Headings are treated like paragraphs: need spacing before lists
         result = preprocess_markdown("## Heading\n- item")
         assert result == "## Heading\n\n- item"
 
     def test_paragraph_list_paragraph(self) -> None:
         """Paragraph → list → paragraph round-trip."""
+        # Complex scenario: multiple list items between paragraphs
         text = "Intro\n- a\n- b\nOutro"
         result = preprocess_markdown(text)
         assert "Intro\n\n- a\n\n- b\nOutro" == result

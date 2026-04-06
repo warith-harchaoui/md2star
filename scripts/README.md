@@ -2,6 +2,8 @@
 
 Shell scripts and Python helpers that power the md2star toolset.
 
+**Run from the repository root.** All paths are relative to the project directory.
+
 ## Contents
 
 | File               | Description                                                        |

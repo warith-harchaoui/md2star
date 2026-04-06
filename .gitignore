@@ -72,8 +72,10 @@ Session.vim
 # Project Specific
 *.docx
 !assets/template.docx
+!assets/docx/*.docx
 *.pptx
 !assets/template.pptx
+!assets/pptx/*.pptx
 *.log
 *.tmp
 *.bak
@@ -87,5 +89,8 @@ __pycache__/
 # Bib utility (local only)
 bib/
 
-# Credentials
+# Credentials & secrets
 gdrive-credentials.json
+gup/config.yaml
+credentials.json
+token.json

@@ -1,14 +1,34 @@
-# Copy this file to config.yaml and fill values.
-# NEVER commit real secrets or tokens.
+# GUp configuration example
+# =========================
+#
+# 1. Copy to config.yaml:
+#      cp config.example.yaml config.yaml
+#
+# 2. Create OAuth credentials in Google Cloud Console:
+#    - Enable Google Drive API
+#    - Create OAuth 2.0 Client ID (Desktop app)
+#    - Download JSON → save as credentials.json
+#
+# 3. Paths are relative to the directory where you run `gup`.
+#    Use absolute paths if you run gup from different locations.
+#
+# SECURITY: Never commit config.yaml, credentials.json, or token.json.
+
+# -----------------------------------------------------------------------------
+# Authentication
+# -----------------------------------------------------------------------------
 
 auth:
-  # OAuth client secret file downloaded from Google Cloud Console:
+  # OAuth client secret (from Google Cloud Console → Credentials)
   credentials_json_path: "credentials.json"
-  # OAuth token cache (auto-created on first run):
+
+  # Cached token (auto-created on first login, reused until expiry)
   token_json_path: "token.json"
 
-# Scope choices:
-# - https://www.googleapis.com/auth/drive.file  (recommended: least privilege for created files)
-# - https://www.googleapis.com/auth/drive       (full drive)
+# -----------------------------------------------------------------------------
+# OAuth scopes (least privilege recommended)
+# -----------------------------------------------------------------------------
+# drive.file  → only files created by this app
+# drive       → full Drive access (needed for Shared Drives)
 scopes:
   - "https://www.googleapis.com/auth/drive.file"

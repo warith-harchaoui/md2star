@@ -14,7 +14,7 @@
 ## ✨ Features
 
 - **🚀 Frictionless Conversion for your ideas**: Write your ideas in Markdown files in your favorite lightweight text editor (`emacs`, `vim`, `Sublime Text`, `Atom`, `Obsidian`, etc.), and let our tool instantly generate `.docx` and `.pptx` documents.
-- ** LaTeX Math Support**: Robust rendering of complex formulas in both documents and slides.
+- **📐 LaTeX Math Support**: Robust rendering of complex formulas in both documents and slides.
 - **🏷️ Intelligent Metadata**: 
   - Automatic **Title Extraction** from your first `# Heading`.
   - Smart **Subtitle Injection** for Author, Date, and Category metadata.
@@ -83,7 +83,7 @@ See `md2star` in action! Below are the actual `.docx` and `.pptx` files generate
   ```
 - Language & Date (French) [assets/docx/with_lang.docx](assets/docx/with_lang.docx) *(from [with_lang.md](assets/docx/with_lang.md))* 
   ```bash
-  md2docx assets/docx/with_lang.md --author "User"` 
+  md2docx assets/docx/with_lang.md --author "User"
   ```
 - Math Formulas [assets/docx/math.docx](assets/docx/math.docx) *(from [math.md](assets/docx/math.md))*
   ```bash
@@ -102,7 +102,7 @@ See `md2star` in action! Below are the actual `.docx` and `.pptx` files generate
 
 ```
 md2star/
-├── assets/                  # Example Markdown files and generated outputs
+├── assets/                  # Example Markdown, templates, and generated outputs (see assets/README.md)
 │   ├── docx/                #   DOCX test fixtures (basic, author, bib, lang, math)
 │   ├── pptx/                #   PPTX test fixtures
 │   ├── template.docx        #   Reference styling template for DOCX
@@ -124,7 +124,7 @@ md2star/
 │   ├── preprocessing.py
 │   ├── test.sh
 │   └── README.md
-├── tests/                   # Python unit tests (pytest)
+├── tests/                   # Python unit tests (pytest; see tests/README.md)
 │   ├── test_preprocessing.py
 │   ├── test_json_to_bib.py
 │   └── test_gup.py
@@ -158,6 +158,8 @@ Requires **pytest** (`pip install pytest`):
 python -m pytest tests/ -v
 ```
 
+For more details, see [tests/README.md](tests/README.md).
+
 ---
 
 ## ⚙️ Customization
@@ -183,6 +185,8 @@ Modify the master templates in `assets/` to change fonts, margins, or logos glob
 - [template.docx](assets/template.docx)
 - [template.pptx](assets/template.pptx)
 
+During installation, these are copied to `~/.pandoc/` (or `%APPDATA%\pandoc` on Windows). See [assets/README.md](assets/README.md) for details.
+
 ---
 
 ## 📦 Related Projects
@@ -192,6 +196,17 @@ Modify the master templates in `assets/` to change fonts, margins, or logos glob
 - **[Zotero](https://www.zotero.org/)**: The ideal research companion for managing your `.bib` bibliographies.
 - **[deraison.ai/ai-books](https://deraison.ai/ai-books)**: Some nice AI references (for the sake of giving an example only)
 - **[md2googleslides](https://github.com/googleworkspace/md2googleslides)**: Google Slides abandoned project (written in Javascript/Typescript) for inspiration
+
+---
+
+## 🔧 Troubleshooting
+
+| Issue | Solution |
+|------|----------|
+| `md2docx: command not found` | Add `~/.local/bin` to your PATH (see install output) |
+| `pandoc: command not found` | Install [Pandoc](https://pandoc.org/installing.html) |
+| French dates show in English | Ensure `fr_FR.UTF-8` locale is installed (`locale -a`) |
+| PPTX template layout warnings | Normal if template lacks standard slide layouts; output still valid |
 
 ---
 

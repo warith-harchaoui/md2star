@@ -18,6 +18,12 @@ MD2PPTX="${HOME}/.local/bin/md2pptx"
 DOCX_DIR="assets/docx"
 PPTX_DIR="assets/pptx"
 
+# Ensure we're in the repo root
+if [[ ! -f "$DOCX_DIR/basic.md" ]]; then
+    echo "Error: Run test.sh from the md2star repository root." >&2
+    exit 1
+fi
+
 # Re-install the tool so we always test the latest code
 echo "--- Installing tool for testing ---"
 bash scripts/install.sh > /dev/null
@@ -25,8 +31,9 @@ bash scripts/install.sh > /dev/null
 error_count=0
 
 # ── Assertion helper for DOCX ──────────────────────────────────────
-# Converts the .docx back to plain text via Pandoc and checks that
-# the expected pattern appears (case-insensitive).
+# DOCX is an OOXML ZIP. We extract all XML and grep for the pattern
+# (case-insensitive). More reliable than pandoc -t plain, which may
+# omit metadata/subtitle content from the output.
 assert_contains_docx() {
     local file="$1"
     local pattern="$2"
@@ -36,8 +43,7 @@ assert_contains_docx() {
         error_count=$((error_count + 1))
         return
     fi
-    # --standalone includes metadata (title, author) in plain text output
-    if pandoc --standalone "$file" -t plain | grep -qi "$pattern"; then
+    if unzip -p "$file" | grep -ai "$pattern" > /dev/null; then
         echo "  [PASS] $msg"
     else
         echo "  [FAIL] $msg (Pattern '$pattern' not found in $file)"

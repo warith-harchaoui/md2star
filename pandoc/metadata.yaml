@@ -1,20 +1,7 @@
-# md2star — Global metadata defaults
-#
-# These values are injected into every document and presentation
-# produced by the md2docx / md2pptx wrappers.  They can be
-# overridden per-document via CLI flags (--author, --lang).
-#
-# ┌─────────────┬───────────────────────────────────────────────────┐
-# │ Field       │ Description                                       │
-# ├─────────────┼───────────────────────────────────────────────────┤
-# │ author      │ Default author.  "EMANON" is a magic placeholder │
-# │             │ that the Lua filter hides (no author displayed).  │
-# │ date_format │ strftime()-compatible format string.               │
-# │             │ See https://pubs.opengroup.org/strftime            │
-# │ lang        │ BCP 47 language tag (e.g. en-US, fr-FR).          │
-# │             │ Controls date localisation in the Lua filter.     │
-# └─────────────┴───────────────────────────────────────────────────┘
-
+# md2star default metadata (merged into every conversion)
+# - author: Placeholder "EMANON" is hidden by the Lua filter; override with --author
+# - date_format: strftime pattern (e.g. %A, %e %B %Y for "Sunday, 22 February 2026")
+# - lang: BCP 47 tag for date localisation (e.g. en-US, fr-FR)
 author: EMANON
 date_format: '%m/%d/%y'
 lang: en-US

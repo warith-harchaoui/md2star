@@ -2,6 +2,7 @@
 set -euo pipefail
 
 # md2star Installer (macOS & Linux)
+# Run from the repository root: bash scripts/install.sh
 #
 # This script automates the deployment of the md2star toolset.
 # It performs the following actions:
@@ -22,6 +23,12 @@ PANDOC_DIR="${HOME}/.pandoc"
 FILTERS_DIR="${PANDOC_DIR}/filters"
 DEFAULTS_DIR="${PANDOC_DIR}/defaults"
 BIN_DIR="${HOME}/.local/bin"
+
+# Ensure we're in the repo root (contains pandoc/, assets/, gup/)
+if [[ ! -f pandoc/filters/md2star.lua || ! -f assets/template.docx ]]; then
+    echo "Error: Run install.sh from the md2star repository root." >&2
+    exit 1
+fi
 
 mkdir -p "${FILTERS_DIR}" "${DEFAULTS_DIR}" "${BIN_DIR}"
 
@@ -179,7 +186,8 @@ chmod +x "${BIN_DIR}/md2pptx"
 cat > "${BIN_DIR}/gup" <<SH
 #!/usr/bin/env bash
 # gup: Upload .docx/.pptx to Google Drive and convert to GDoc/GSlide
-# Requires python3 and google-api-python-client, google-auth-oauthlib, pyyaml (pip install -r ${PANDOC_DIR}/gup/requirements.txt)
+# Usage: gup file.docx --folder-id <FOLDER_ID>
+# Requires: python3, google-api-python-client, google-auth-oauthlib, pyyaml
 python3 "${PANDOC_DIR}/gup/src/gup.py" "\$@"
 SH
 chmod +x "${BIN_DIR}/gup"

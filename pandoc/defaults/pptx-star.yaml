@@ -11,7 +11,6 @@
 #   ../filters/md2star.lua
 #   ../template.pptx
 #
-
 # Output format: Microsoft PowerPoint (.pptx)
 to: pptx
 
