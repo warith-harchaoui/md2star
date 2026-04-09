@@ -64,10 +64,13 @@ md2pptx slides.md --author "Speaker Name"
 ---
 
 ## 💡 Examples
-See `md2star` in action! Below are the actual `.docx` and `.pptx` files generated dynamically during our test suite from sample Markdown files:
+
+Good examples can be found [here](EXAMPLES.md).
+
+Below are basic `.docx` and `.pptx` files generated dynamically during our test suite from sample Markdown files:
 
 **Word Documents Examples**
-- Basic Title [assets/docx/basic.docx](assets/docx/basic.docx) *(from [basic.md](assets/docx/basic.md))*
+- Basic Title [assets/docx/basic.docx](assets/docx/basic.docx) *(from [basic.md](assets/docx/basic.md))* 
   ```bash
   md2docx assets/docx/basic.md
   ```
@@ -94,34 +97,6 @@ See `md2star` in action! Below are the actual `.docx` and `.pptx` files generate
   md2pptx assets/pptx/example.md
   ```
 
----
-
-## 🗂️ Project Structure
-
-```
-md2star/
-├── assets/                  # Example Markdown, templates, and generated outputs (see assets/README.md)
-│   ├── docx/                #   DOCX test fixtures (basic, author, bib, lang, math)
-│   ├── pptx/                #   PPTX test fixtures
-│   ├── template.docx        #   Reference styling template for DOCX
-│   └── template.pptx        #   Reference styling template for PPTX
-
-├── pandoc/                  # Pandoc configuration
-│   ├── defaults/            #   YAML defaults (docx-star, pptx-star)
-│   ├── filters/md2star.lua  #   Lua filter (title, subtitle, locale)
-│   ├── metadata.yaml        #   Global metadata defaults
-│   └── README.md
-├── scripts/                 # Install/uninstall/test shell scripts
-│   ├── install.sh
-│   ├── uninstall.sh
-│   ├── preprocessing.py
-│   ├── test.sh
-│   └── README.md
-├── tests/                   # Python unit tests (pytest; see tests/README.md)
-│   └── test_preprocessing.py
-├── Makefile
-└── README.md
-```
 
 ---
 
