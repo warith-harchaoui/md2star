@@ -33,7 +33,7 @@ graph LR;
 Equations written in $\LaTeX$ are flawlessly mapped onto Microsoft Office's native equation engine:
 
 $$
-\exp(i \times \pi)+1 = 0
+e^{i \times \pi}+1 = 0
 $$
 
 and

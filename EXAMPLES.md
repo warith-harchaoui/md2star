@@ -81,7 +81,7 @@ We evaluate the standard structural equation:
 
 
 $$
-\exp(i \times \pi)+1 = 0
+e^{i \times \pi}+1 = 0
 $$
 ```
 

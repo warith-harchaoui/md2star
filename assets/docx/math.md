@@ -7,6 +7,6 @@ $$ \frac{-b \pm \sqrt{b^2 - 4ac}}{2a} $$
 And this one:
 
 $$
-\exp(i \times \pi)+1 = 0
+e^{i \times \pi}+1 = 0
 $$
 
