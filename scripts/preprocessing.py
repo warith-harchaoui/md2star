@@ -10,6 +10,8 @@ Currently, this ensures that every list item is preceded by a blank line, which:
    proper list).
 2. Converts *tight* lists into *loose* lists, resulting in better visual
    spacing in DOCX / PPTX output.
+3. Automatically renders Mermaid code blocks as PNGs using Kroki to inject
+   them successfully during layout.
 
 The script writes the processed content to a temporary file (in the same
 directory as the input so that relative image/link paths keep working) and
@@ -36,50 +38,77 @@ Warith Harchaoui
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import os
 import re
 import sys
 import tempfile
+import urllib.request
+import zlib
 
 
-def preprocess_markdown(content: str) -> str:
+def fetch_kroki_mermaid(content: str, out_dir: str) -> str:
+    """
+    Sends mermaid code to Kroki and downloads PNG. Returns the absolute filepath.
+    Images are cached based on the hash of their content.
+    """
+    content_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
+    filename = f".mermaid_{content_hash}.png"
+    filepath = os.path.join(os.path.abspath(out_dir), filename)
+
+    if os.path.exists(filepath):
+        return filepath
+
+    compressed = zlib.compress(content.encode('utf-8'))
+    b64 = base64.urlsafe_b64encode(compressed).decode('utf-8')
+    url = f"https://kroki.io/mermaid/png/{b64}"
+
+    req = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 (compatible; md2star/1.0)"}
+    )
+    with urllib.request.urlopen(req) as response, open(filepath, "wb") as f:
+        f.write(response.read())
+
+    return filepath
+
+
+def preprocess_markdown(content: str, base_dir: str = ".") -> str:
     """
     Ensure every list item in *content* is preceded by a blank line.
+    Also render Mermaid diagrams using an external API.
 
     Parameters
     ----------
     content : str
         Raw Markdown text (may contain fenced code blocks, headings,
         paragraphs, and list items).
+    base_dir : str
+        Directory to store the generated mermaid diagrams.
 
     Returns
     -------
     str
         Transformed Markdown text with blank lines inserted before each
-        list item that was not already preceded by one.
+        list item that was not already preceded by one, and Mermaid blocks
+        converted to image links.
 
     Notes
     -----
     * Fenced code blocks (delimited by triple backticks) are left untouched
-      so that code examples containing list-like syntax are not altered.
+      (except for Mermaid blocks) so that code examples containing list-like 
+      syntax are not altered.
     * Both unordered (``-``, ``*``, ``+``) and ordered (``1.``, ``2.``, …)
       list items are detected.
-
-    Examples
-    --------
-    >>> preprocess_markdown("Hello\\n- item1\\n- item2")
-    'Hello\\n\\n- item1\\n\\n- item2'
-
-    Code blocks are preserved as-is:
-
-    >>> preprocess_markdown("```\\n- not a list\\n```")
-    '```\\n- not a list\\n```'
     """
     lines: list[str] = content.split("\n")
     out_lines: list[str] = []
 
     # Track whether we are inside a fenced code block (``` … ```)
     in_code_block: bool = False
+    in_mermaid_block: bool = False
+    mermaid_lines: list[str] = []
 
     # Regex matching a list item:
     #   optional leading whitespace  →  (\s*)
@@ -90,15 +119,46 @@ def preprocess_markdown(content: str) -> str:
     )
 
     for line in lines:
-        # ── Toggle code-block state on fence delimiters ──
-        if line.strip().startswith("```"):
-            in_code_block = not in_code_block
-            out_lines.append(line)
+        stripped_line = line.strip()
+
+        # ── Entering code-block ──
+        if stripped_line.startswith("```") and not in_code_block:
+            in_code_block = True
+            # Mermaid blocks are parsed and skipped from final output initially.
+            if stripped_line.lower().startswith("```mermaid"):
+                in_mermaid_block = True
+            else:
+                out_lines.append(line)
             continue
 
-        # ── Skip processing inside code blocks ──
+        # ── Exiting code-block ──
+        if stripped_line.startswith("```") and in_code_block:
+            in_code_block = False
+            if in_mermaid_block:
+                in_mermaid_block = False
+                mermaid_content = "\n".join(mermaid_lines)
+                try:
+                    img_name = fetch_kroki_mermaid(mermaid_content, base_dir)
+                    if out_lines and out_lines[-1].strip() != "":
+                        out_lines.append("")
+                    out_lines.append(f"![]({img_name})\n")
+                except Exception as e:
+                    print(f"md2star warning: Kroki API rendering failed: {e}", file=sys.stderr)
+                    # Fallback on failure
+                    out_lines.append("```mermaid")
+                    out_lines.extend(mermaid_lines)
+                    out_lines.append("```")
+                mermaid_lines = []
+            else:
+                out_lines.append(line)
+            continue
+
+        # ── Inside code-block ──
         if in_code_block:
-            out_lines.append(line)
+            if in_mermaid_block:
+                mermaid_lines.append(line)
+            else:
+                out_lines.append(line)
             continue
 
         # ── Inject a blank line before a list item if one is missing ──
@@ -127,11 +187,11 @@ if __name__ == "__main__":
     with open(in_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    processed: str = preprocess_markdown(content)
+    dir_name: str = os.path.dirname(os.path.abspath(in_path))
+    processed: str = preprocess_markdown(content, base_dir=dir_name)
 
     # Write to a temp file **in the same directory** as the input so that
     # relative paths (images, includes, …) keep resolving correctly.
-    dir_name: str = os.path.dirname(os.path.abspath(in_path))
     fd, temp_path = tempfile.mkstemp(
         dir=dir_name, suffix=".md", prefix=".preprocessed_"
     )

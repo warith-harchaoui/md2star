@@ -2,6 +2,6 @@
 # - author: Placeholder "EMANON" is hidden by the Lua filter; override with --author
 # - date_format: strftime pattern (e.g. %A, %e %B %Y for "Sunday, 22 February 2026")
 # - lang: BCP 47 tag for date localisation (e.g. en-US, fr-FR)
-author: EMANON
-date_format: '%m/%d/%y'
-lang: en-US
+author: Warith HARCHAOUI
+date_format: '%A %e %B %Y'
+lang: fr-FR

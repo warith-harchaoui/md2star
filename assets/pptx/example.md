@@ -1,5 +1,12 @@
 # This is a title slide
 
+```mermaid
+graph TD;
+    A-->B;
+    B-->C;
+```
+
+
 ## Your name here
 
 <!--
