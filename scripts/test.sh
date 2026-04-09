@@ -91,10 +91,14 @@ assert_contains_docx "$DOCX_DIR/with_author.docx" "Tester" "Author injected to D
 # ── TEST 3: Bibliography rendering ────────────────────────────────
 # Verify that --bib triggers citeproc and the cited author appears.
 echo ""
-echo "--- Running Bibliography Test (DOCX) ---"
+echo "--- Running Bibliography Test (DOCX & PPTX) ---"
 $MD2DOCX "$DOCX_DIR/with_bib.md" --bib "assets/references.bib" --bibliography-name "References" > /dev/null
 assert_contains_docx "$DOCX_DIR/with_bib.docx" "Pearl" "Bibliography rendered in DOCX"
 assert_contains_docx "$DOCX_DIR/with_bib.docx" "References" "Custom bibliography heading injected in DOCX"
+
+$MD2PPTX "$DOCX_DIR/with_bib.md" --bib "assets/references.bib" --bibliography-name "References" > /dev/null
+assert_contains_pptx "$DOCX_DIR/with_bib.pptx" "Pearl" "Bibliography rendered in PPTX"
+assert_contains_pptx "$DOCX_DIR/with_bib.pptx" "References" "Custom bibliography heading injected in PPTX"
 
 # ── TEST 4: Language & date localisation ──────────────────────────
 # Temporarily switch metadata to French; verify the format appears

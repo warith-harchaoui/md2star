@@ -205,3 +205,24 @@ class TestMermaidBlocks:
         result = preprocess_markdown(text)
         assert "```mermaid\ngraph TD;\n    A-->B\n```" in result
         assert "![](" not in result
+
+
+# ──────────────────────────────────────────────────────────────────
+# Bibliography & Citation tests
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestBibliographyCitations:
+    """Tests ensuring that Pandoc-style bibliography citations are preserved."""
+
+    def test_citations_in_lists(self) -> None:
+        """Citations inside lists should remain completely intact."""
+        text = "Related works:\n- [@pearl2000]\n- See @smith2019 for details"
+        result = preprocess_markdown(text)
+        assert "Related works:\n\n- [@pearl2000]\n\n- See @smith2019 for details" == result
+
+    def test_inline_citations(self) -> None:
+        """Inline citations in regular text should not be touched."""
+        text = "As proven by @einstein1905, this works.\n\nMore info [@turing1936]."
+        result = preprocess_markdown(text)
+        assert text == result
