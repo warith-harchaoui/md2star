@@ -226,3 +226,92 @@ class TestBibliographyCitations:
         text = "As proven by @einstein1905, this works.\n\nMore info [@turing1936]."
         result = preprocess_markdown(text)
         assert text == result
+
+
+# ──────────────────────────────────────────────────────────────────
+# HTML table conversion tests
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestHtmlTables:
+    """Tests that HTML <table> blocks are converted to Markdown pipe-tables."""
+
+    def test_simple_table(self) -> None:
+        """A basic two-column HTML table should become a Markdown pipe-table."""
+        html = (
+            "<table><tr><th>Name</th><th>Value</th></tr>"
+            "<tr><td>Alice</td><td>42</td></tr></table>"
+        )
+        result = preprocess_markdown(html)
+        assert "| Name" in result
+        assert "| Alice" in result
+        assert "<table>" not in result
+
+    def test_inline_html_in_cells(self) -> None:
+        """<code>, <strong> and <em> inside cells must become Markdown markers."""
+        html = (
+            "<table>"
+            "<tr><th>Start</th><th>Role</th><th>Text</th></tr>"
+            "<tr><td><code>3 sec</code></td><td><strong>Operator</strong></td><td>Hello</td></tr>"
+            "</table>"
+        )
+        result = preprocess_markdown(html)
+        assert "`3 sec`" in result
+        assert "**Operator**" in result
+        assert "<code>" not in result
+        assert "<strong>" not in result
+
+
+    def test_multirow_table(self) -> None:
+        """Multiple data rows should all appear in the output."""
+        html = (
+            "<table>"
+            "<tr><th>A</th><th>B</th></tr>"
+            "<tr><td>1</td><td>2</td></tr>"
+            "<tr><td>3</td><td>4</td></tr>"
+            "</table>"
+        )
+        result = preprocess_markdown(html)
+        assert "| 1" in result
+        assert "| 3" in result
+
+    def test_table_separator_row(self) -> None:
+        """Output must contain a separator line (---)."""
+        html = "<table><tr><th>Col</th></tr><tr><td>data</td></tr></table>"
+        result = preprocess_markdown(html)
+        assert "|---" in result or "|--" in result
+
+    def test_non_table_html_untouched(self) -> None:
+        """Non-table HTML (e.g. <div>) should pass through unmodified."""
+        text = "<div>Hello</div>"
+        result = preprocess_markdown(text)
+        assert "<div>Hello</div>" in result
+
+
+# ──────────────────────────────────────────────────────────────────
+# Image width auto-injection tests
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestImageWidths:
+    """Tests that bare image links get {width=100%} appended."""
+
+    def test_bare_image_gets_width(self) -> None:
+        """An image with no attributes should receive {width=100%}."""
+        text = "![alt](path/to/image.png)"
+        result = preprocess_markdown(text)
+        assert "![alt](path/to/image.png){width=100%}" in result
+
+    def test_image_with_existing_width_unchanged(self) -> None:
+        """An image that already specifies a width must not be double-decorated."""
+        text = "![alt](path/to/image.png){width=50%}"
+        result = preprocess_markdown(text)
+        assert "{width=100%}" not in result
+        assert "{width=50%}" in result
+
+    def test_empty_alt_image(self) -> None:
+        """Images with empty alt text also need width injection."""
+        text = "![](https://example.com/img.jpg)"
+        result = preprocess_markdown(text)
+        assert "{width=100%}" in result
+
