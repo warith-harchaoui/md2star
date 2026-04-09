@@ -11,7 +11,7 @@ set -euo pipefail
 # 3. Deploys curated DOCX and PPTX reference templates.
 # 4. Injects absolute system paths into Pandoc YAML defaults to ensure 
 #    reliability when running from any directory.
-# 5. Installs lightweight Bash wrappers (md2docx, md2pptx, gup) into 
+# 5. Installs lightweight Bash wrappers (md2docx, md2pptx) into 
 #    ~/.local/bin for immediate CLI access.
 #
 # Preamble:
@@ -24,7 +24,7 @@ FILTERS_DIR="${PANDOC_DIR}/filters"
 DEFAULTS_DIR="${PANDOC_DIR}/defaults"
 BIN_DIR="${HOME}/.local/bin"
 
-# Ensure we're in the repo root (contains pandoc/, assets/, gup/)
+# Ensure we're in the repo root (contains pandoc/, assets/)
 if [[ ! -f pandoc/filters/md2star.lua || ! -f assets/template.docx ]]; then
     echo "Error: Run install.sh from the md2star repository root." >&2
     exit 1
@@ -182,36 +182,18 @@ SH
 
 chmod +x "${BIN_DIR}/md2pptx"
 
-# Wrapper command for GUP
-cat > "${BIN_DIR}/gup" <<SH
-#!/usr/bin/env bash
-# gup: Upload .docx/.pptx to Google Drive and convert to GDoc/GSlide
-# Usage: gup file.docx --folder-id <FOLDER_ID>
-# Requires: python3, google-api-python-client, google-auth-oauthlib, pyyaml
-python3 "${PANDOC_DIR}/gup/src/gup.py" "\$@"
-SH
-chmod +x "${BIN_DIR}/gup"
 
-# Deploy gup resources
-mkdir -p "${PANDOC_DIR}/gup"
-cp -rf gup/ "${PANDOC_DIR}/gup/"
-
-# Install gup Python dependencies so the command works immediately
-echo "--- Installing gup Python dependencies ---"
-pip install -q -r gup/requirements.txt 2>/dev/null \
-  || pip3 install -q -r gup/requirements.txt 2>/dev/null \
-  || echo "⚠️  Could not install gup dependencies automatically. Run: pip install -r gup/requirements.txt"
 
 # Ensure assets are copied
 mkdir -p "${PANDOC_DIR}/assets"
 cp -rf assets/* "${PANDOC_DIR}/assets/"
 
 echo ""
-echo "✅ md2docx, md2pptx & gup installed."
+echo "✅ md2docx & md2pptx installed."
 echo "  Filter:   ${FILTERS_DIR}/md2star.lua"
 echo "  Defaults: ${DEFAULTS_DIR}/docx-star.yaml, pptx-star.yaml"
 echo "  Templates: ${PANDOC_DIR}/template.docx, template.pptx"
-echo "  Commands:  ${BIN_DIR}/md2docx, md2pptx, gup"
+echo "  Commands:  ${BIN_DIR}/md2docx, md2pptx"
 echo ""
 echo "Next step: ensure ${BIN_DIR} is on your PATH."
 echo "For zsh (macOS default):"
@@ -219,4 +201,3 @@ echo '  echo '''export PATH="$HOME/.local/bin:$PATH"''' >> ~/.zshrc && source ~/
 echo ""
 echo "Try:"
 echo "  md2docx notes.md"
-echo "  gup --help"

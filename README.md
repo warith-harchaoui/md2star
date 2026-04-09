@@ -1,26 +1,24 @@
 # md2star ✍️⭐️
 
-> **md2star** is an efficient bridge from Markdown to docx, Google Doc, pptx, Google Slides and PDFs.
+> **md2star** is an efficient bridge from Markdown to docx and pptx.
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![Lua](https://img.shields.io/badge/lua-5.3-blue.svg)
 ![Bash](https://img.shields.io/badge/bash-4+-lightgray.svg)
 ![PowerShell](https://img.shields.io/badge/powershell-7+-blue.svg)
 
-`md2star` is a streamlined, cross-platform toolset designed for authors who demand the speed of **Markdown** and the corporate formats of **Microsoft Office** (`.docx` and `.pptx`) and **PDF** layouts. By combining the power of **Pandoc** with curated styling logic, it automates the tedious parts of document preparation.
+`md2star` is a streamlined, cross-platform toolset designed for authors who demand the speed of **Markdown** and the corporate formats of **Microsoft Office** (`.docx` and `.pptx`). By combining the power of **Pandoc** with curated styling logic, it automates the tedious parts of document preparation.
 
 ---
 
 ## ✨ Features
 
-- **🚀 Frictionless Conversion for your ideas**: Write your ideas in Markdown files in your favorite lightweight text editor (`emacs`, `vim`, `Sublime Text`, `Atom`, `Obsidian`, etc.), and let our tool instantly generate `.docx` and `.pptx` documents.
+- **🚀 Frictionless Conversion for your ideas**: Write your ideas in Markdown files in your favorite lightweight text editor (`emacs`, `vim`, `Sublime Text`, `Atom`, `Obsidian`, etc.), and let our tool instantly generate `.docx` and `.pptx` documents following the corporate and favorite style files of your choice.
 - **📐 LaTeX Math Support**: Robust rendering of complex formulas in both documents and slides.
 - **🏷️ Intelligent Metadata**: 
   - Automatic **Title Extraction** from your first `# Heading`.
   - Smart **Subtitle Injection** for Author, Date, and Category metadata.
-- **📚 Scientific-Ready**: Native **BibTeX** integration for professional research citations (for corporate environment, not academic publications).
-- **🌍 Global Localization**: Multi-language support with automatic date formatting (e.g., `fr-FR`, `en-US`).
-- **☁️ Cloud Integrated**: Optional `gup` utility for direct upload and conversion to **Google Docs** and **Google Slides**. Requires a target `folder_id` from your Drive URL (see [gup/README.md](gup/README.md) for setup).
+- **📚 Scientific-Ready**: Native **BibTeX** integration for professional research citations (for corporate environment, not academic publications) which is the only way to manage great quantities of references to the best of my knowledge in a reliable fashion.
 
 ---
 
@@ -79,7 +77,7 @@ See `md2star` in action! Below are the actual `.docx` and `.pptx` files generate
   ```
 - Bibliography [assets/docx/with_bib.docx](assets/docx/with_bib.docx) *(from [with_bib.md](assets/docx/with_bib.md))*
   ```bash
-  md2docx assets/docx/with_bib.md --bib "assets/deraison.bib" --bibliography-name "References"
+  md2docx assets/docx/with_bib.md --bib "assets/references.bib" --bibliography-name "References"
   ```
 - Language & Date (French) [assets/docx/with_lang.docx](assets/docx/with_lang.docx) *(from [with_lang.md](assets/docx/with_lang.md))* 
   ```bash
@@ -107,12 +105,7 @@ md2star/
 │   ├── pptx/                #   PPTX test fixtures
 │   ├── template.docx        #   Reference styling template for DOCX
 │   └── template.pptx        #   Reference styling template for PPTX
-├── bib/                     # JSON → BibTeX converter (deraison.ai resources)
-│   ├── json_to_bib.py
-│   └── README.md
-├── gup/                     # Google Drive upload & convert utility
-│   ├── src/gup.py
-│   └── README.md
+
 ├── pandoc/                  # Pandoc configuration
 │   ├── defaults/            #   YAML defaults (docx-star, pptx-star)
 │   ├── filters/md2star.lua  #   Lua filter (title, subtitle, locale)
@@ -125,9 +118,7 @@ md2star/
 │   ├── test.sh
 │   └── README.md
 ├── tests/                   # Python unit tests (pytest; see tests/README.md)
-│   ├── test_preprocessing.py
-│   ├── test_json_to_bib.py
-│   └── test_gup.py
+│   └── test_preprocessing.py
 ├── Makefile
 └── README.md
 ```
@@ -141,7 +132,7 @@ md2star/
 `md2star` is built for reliability. Our automated test suite covers:
 - [x] **Metadata Accuracy**: Title, Author, and Subtitle verification.
 - [x] **Cross-Format Integrity**: Parity between DOCX and PPTX outputs.
-- [x] **Bibliography Rendering**: Using the curated [deraison.bib](assets/deraison.bib) snapshot.
+- [x] **Bibliography Rendering**: Using the curated [references.bib](assets/references.bib) snapshot.
 - [x] **Locale Localization**: French date rendering and international headers.
 
 ### Integration tests (shell)
@@ -189,13 +180,18 @@ During installation, these are copied to `~/.pandoc/` (or `%APPDATA%\pandoc` on 
 
 ---
 
+## 📚 Developer Documentation
+
+For contributors and advanced users interested in the inner workings of our Python logic and AST parsing hooks, check our internal API guides:
+- [Developer Guide](docs/developer_guide.md)
+
+---
+
 ## 📦 Related Projects
 
 - **[Pandoc](https://pandoc.org/)**: The engine that makes document conversion universal.
 - **[Obsidian](https://obsidian.md/)**: Our recommended environment for writing high-fidelity Markdown.
 - **[Zotero](https://www.zotero.org/)**: The ideal research companion for managing your `.bib` bibliographies.
-- **[deraison.ai/ai-books](https://deraison.ai/ai-books)**: Some nice AI references (for the sake of giving an example only)
-- **[md2googleslides](https://github.com/googleworkspace/md2googleslides)**: Google Slides abandoned project (written in Javascript/Typescript) for inspiration
 
 ---
 
@@ -222,4 +218,4 @@ During installation, these are copied to `~/.pandoc/` (or `%APPDATA%\pandoc` on 
 
 ## 📄 License
 
-Distributed under the **MIT License**. Crafted with precision for the modern author.
+Distributed under the **BSD 3-Clause License**. Crafted with precision for the modern author.

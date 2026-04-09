@@ -2,14 +2,6 @@
 
 This directory contains the automated test suite for md2star.
 
-## Overview
-
-| File | Purpose |
-|------|---------|
-| `test_preprocessing.py` | Unit tests for the Markdown preprocessor (list spacing) |
-| `test_json_to_bib.py` | Unit tests for the JSON→BibTeX converter |
-| `test_gup.py` | Unit tests for the Google Drive upload utility |
-
 ## Running Tests
 
 ### Unit tests (Python)

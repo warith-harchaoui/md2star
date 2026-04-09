@@ -11,7 +11,7 @@
     3. Deploys curated DOCX and PPTX reference templates.
     4. Injects absolute system paths into Pandoc YAML defaults to ensure 
        reliability when running from any directory.
-    5. Installs the Windows CMD wrappers (md2docx.cmd, md2pptx.cmd, gup.cmd) 
+    5. Installs the Windows CMD wrappers (md2docx.cmd, md2pptx.cmd) 
        into %APPDATA%\pandoc for immediate CLI access once added to PATH.
 
     Preamble:
@@ -190,17 +190,7 @@
     del /f /q "!TEMP_MD!"
     "@ | Set-Content -Encoding ASCII $pptxCmdPath
 
-    # gup helper
-    $gupCmdPath = Join-Path $pandocDir "gup.cmd"
-    @"
-    @echo off
-    python "${pandocDir}\gup\src\gup.py" %*
-    "@ | Set-Content -Encoding ASCII $gupCmdPath
 
-    # Deploy gup resources
-    $gupTargetDir = Join-Path $pandocDir "gup"
-    if (!(Test-Path $gupTargetDir)) { New-Item -ItemType Directory -Force -Path $gupTargetDir | Out-Null }
-    Copy-Item -Force -Recurse "gup\*" $gupTargetDir
 
     # Ensure assets are copied
     $assetsTargetDir = Join-Path $pandocDir "assets"
@@ -208,15 +198,14 @@
     Copy-Item -Force -Recurse "assets\*" $assetsTargetDir
 
     Write-Host ""
-    Write-Host "✅ md2docx, md2pptx & gup installed."
+    Write-Host "✅ md2docx & md2pptx installed."
     Write-Host "  Filter:   $filtersDir\md2star.lua"
     Write-Host "  Defaults: $defaultsDir\docx-star.yaml, pptx-star.yaml"
     Write-Host "  Templates: $pandocDir\template.docx, template.pptx"
-    Write-Host "  Commands:  $docxCmdPath, $pptxCmdPath, $gupCmdPath"
+    Write-Host "  Commands:  $docxCmdPath, $pptxCmdPath"
     Write-Host ""
     Write-Host "Recommended: add this folder to PATH to use the commands anywhere:"
     Write-Host "  $pandocDir"
     Write-Host ""
     Write-Host "Try:"
     Write-Host "  md2docx notes.md"
-    Write-Host "  gup --help"

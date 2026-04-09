@@ -14,7 +14,7 @@ assets/
 │   └── math.md
 ├── pptx/           # PPTX test fixtures
 │   └── example.md
-├── deraison.bib    # Sample bibliography (used in with_bib tests)
+├── references.bib  # Sample bibliography (used in with_bib tests)
 ├── template.docx   # Reference styling template for DOCX
 └── template.pptx   # Reference styling template for PPTX
 ```

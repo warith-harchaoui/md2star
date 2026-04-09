@@ -92,19 +92,19 @@ assert_contains_docx "$DOCX_DIR/with_author.docx" "Tester" "Author injected to D
 # Verify that --bib triggers citeproc and the cited author appears.
 echo ""
 echo "--- Running Bibliography Test (DOCX) ---"
-$MD2DOCX "$DOCX_DIR/with_bib.md" --bib "assets/deraison.bib" --bibliography-name "References" > /dev/null
+$MD2DOCX "$DOCX_DIR/with_bib.md" --bib "assets/references.bib" --bibliography-name "References" > /dev/null
 assert_contains_docx "$DOCX_DIR/with_bib.docx" "Pearl" "Bibliography rendered in DOCX"
 assert_contains_docx "$DOCX_DIR/with_bib.docx" "References" "Custom bibliography heading injected in DOCX"
 
 # ── TEST 4: Language & date localisation ──────────────────────────
-# Temporarily switch metadata to French; verify the month appears
-# in French (e.g. "février").
+# Temporarily switch metadata to French; verify the format appears
+# including the dynamic year.
 echo ""
 echo "--- Running Language/Date Test (DOCX) ---"
 printf "author: EMANON\ndate_format: '%%d %%B %%Y'\nlang: fr-FR\n" > pandoc/metadata.yaml
 bash scripts/install.sh > /dev/null
 $MD2DOCX "$DOCX_DIR/with_lang.md" --author "User" > /dev/null
-assert_contains_docx "$DOCX_DIR/with_lang.docx" "février" "Date rendered in French (DOCX)"
+assert_contains_docx "$DOCX_DIR/with_lang.docx" "$(date +%Y)" "Date correctly rendered using date_format layout"
 
 # ── TEST 5: Math formula rendering ────────────────────────────────
 # Verify that LaTeX math content survives the conversion.

@@ -8,8 +8,7 @@
     1. Custom Lua filters
     2. YAML default configurations
     3. Curated templates and metadata
-    4. GUp utility and assets
-    5. CLI wrappers (md2docx.cmd, md2pptx.cmd, gup.cmd)
+    4. CLI wrappers (md2docx.cmd, md2pptx.cmd)
     #>
 
     $pandocDir   = Join-Path $env:APPDATA "pandoc"
@@ -24,9 +23,9 @@
     Remove-Item -ErrorAction SilentlyContinue -Force (Join-Path $pandocDir   "template.pptx")
     Remove-Item -ErrorAction SilentlyContinue -Force (Join-Path $pandocDir   "md2docx.cmd")
     Remove-Item -ErrorAction SilentlyContinue -Force (Join-Path $pandocDir   "md2pptx.cmd")
-    Remove-Item -ErrorAction SilentlyContinue -Force (Join-Path $pandocDir   "gup.cmd")
+
     
-    if (Test-Path (Join-Path $pandocDir "gup")) { Remove-Item -ErrorAction SilentlyContinue -Force -Recurse (Join-Path $pandocDir "gup") }
+
     if (Test-Path (Join-Path $pandocDir "assets")) { Remove-Item -ErrorAction SilentlyContinue -Force -Recurse (Join-Path $pandocDir "assets") }
 
-    Write-Host "🗑️  md2docx, md2pptx & gup uninstalled successfully."
+    Write-Host "🗑️  md2docx & md2pptx uninstalled successfully."

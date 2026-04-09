@@ -20,6 +20,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+from unittest.mock import patch
+
 import pytest
 
 # ── Make the scripts/ directory importable ────────────────────────
@@ -176,3 +178,30 @@ class TestMixedContent:
         text = "Intro\n- a\n- b\nOutro"
         result = preprocess_markdown(text)
         assert "Intro\n\n- a\n\n- b\nOutro" == result
+
+
+# ──────────────────────────────────────────────────────────────────
+# Mermaid Block tests
+# ──────────────────────────────────────────────────────────────────
+
+
+class TestMermaidBlocks:
+    """Tests evaluating Mermaid to Kroki pipeline substitution."""
+
+    @patch("preprocessing.fetch_kroki_mermaid")
+    def test_mermaid_renders_success(self, mock_fetch) -> None:
+        """A valid mermaid block is substituted with the fetched PNG absolute path."""
+        mock_fetch.return_value = "/absolute/dummy.png"
+        text = "Intro\n```mermaid\ngraph TD;\n    A-->B\n```\nOutro"
+        result = preprocess_markdown(text)
+        assert "![](/absolute/dummy.png)" in result
+        assert "```mermaid" not in result
+
+    @patch("preprocessing.fetch_kroki_mermaid")
+    def test_mermaid_renders_fallback(self, mock_fetch) -> None:
+        """A failed mermaid API request falls back gracefully without modifying source."""
+        mock_fetch.side_effect = Exception("Test Kroki Error")
+        text = "Intro\n```mermaid\ngraph TD;\n    A-->B\n```\nOutro"
+        result = preprocess_markdown(text)
+        assert "```mermaid\ngraph TD;\n    A-->B\n```" in result
+        assert "![](" not in result

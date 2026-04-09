@@ -50,8 +50,22 @@ import zlib
 
 def fetch_kroki_mermaid(content: str, out_dir: str) -> str:
     """
-    Sends mermaid code to Kroki and downloads PNG. Returns the absolute filepath.
-    Images are cached based on the hash of their content.
+    Send mermaid code to Kroki and download it as PNG.
+
+    Images are cached natively based on the hash of their content 
+    to avoid re-downloading identical graphs.
+
+    Parameters
+    ----------
+    content : str
+        Mermaid markup string representing a valid graph.
+    out_dir : str
+        Directory to save the produced image into.
+
+    Returns
+    -------
+    str
+        Absolute filepath to the resulting PNG.
     """
     content_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
     filename = f".mermaid_{content_hash}.png"
