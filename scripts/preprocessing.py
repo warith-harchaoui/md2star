@@ -342,13 +342,19 @@ _IMAGE_NO_ATTR_RE = re.compile(
     r"(!\[[^\]]*\]\([^)]+\))(?!\s*\{)"
 )
 
+# Matches a pipe-table row: a line that starts with optional whitespace then "|"
+_PIPE_TABLE_ROW_RE = re.compile(r"^\s*\|")
+
 
 def fix_image_widths(content: str) -> str:
     """Append ``{width=100%}`` to every image that has no explicit attributes.
 
-    This prevents images from overflowing the page or being cropped when Pandoc
-    generates DOCX / PPTX output.  Images that already carry an attribute block
-    (e.g. ``{width=80%}``) are left untouched.
+    Images that already carry an attribute block (e.g. ``{width=80%}``) are
+    left untouched.  Images that appear inside a pipe-table row (i.e. lines
+    beginning with ``|``) are also skipped — those are handled by
+    :func:`resize_images_in_markdown_tables` via physical resizing, so adding
+    a ``{width=100%}`` there would make Pandoc scale the image to the *full
+    page width*, causing it to overflow the cell.
 
     Parameters
     ----------
@@ -358,9 +364,62 @@ def fix_image_widths(content: str) -> str:
     Returns
     -------
     str
-        Source with ``{width=100%}`` appended to every undecorated image.
+        Source with ``{width=100%}`` appended to every undecorated standalone
+        image (i.e. images that are **not** inside a pipe-table cell).
     """
-    return _IMAGE_NO_ATTR_RE.sub(r"\1{width=100%}", content)
+    result_lines: list[str] = []
+    for line in content.split("\n"):
+        if _PIPE_TABLE_ROW_RE.match(line):
+            # Leave pipe-table rows untouched — images there are already resized
+            result_lines.append(line)
+        else:
+            result_lines.append(_IMAGE_NO_ATTR_RE.sub(r"\1{width=100%}", line))
+    return "\n".join(result_lines)
+
+
+def resize_images_in_markdown_tables(content: str, base_dir: str = ".") -> str:
+    """Physically resize images that appear inside Markdown pipe-table cells.
+
+    When an image is placed in a pipe-table cell, Pandoc's ``{width=100%}``
+    attribute refers to the *full page width*, not the cell width, which causes
+    the image to be cropped.  The only safe fix is to resize the source image
+    file to a small maximum dimension so it fits naturally inside the cell
+    without any attribute override.
+
+    The function scans every line that looks like a pipe-table row (starts with
+    ``|``) and replaces each ``![alt](src)`` token with a reference to a
+    down-scaled copy produced by :func:`resize_image_for_cell`.  URL-based
+    images and images that cannot be found on disk are left as-is.
+
+    Parameters
+    ----------
+    content : str
+        Full Markdown source, potentially containing pipe-table rows with
+        embedded images.
+    base_dir : str
+        Directory of the originating Markdown file, used to resolve relative
+        image paths.  Defaults to the current directory.
+
+    Returns
+    -------
+    str
+        Source with pipe-table image references replaced by paths to the
+        physically-resized copies.
+    """
+    result_lines: list[str] = []
+    for line in content.split("\n"):
+        if _PIPE_TABLE_ROW_RE.match(line):
+            def _resize_match(m: re.Match) -> str:  # noqa: E306
+                alt = m.group(1)
+                src = m.group(2)
+                resized = resize_image_for_cell(src, base_dir)
+                # Do NOT append any {width=...} attribute — let the image
+                # natural size determine how it fits in the cell.
+                return f"![{alt}]({resized})"
+
+            line = _CELL_IMG_RE.sub(_resize_match, line)
+        result_lines.append(line)
+    return "\n".join(result_lines)
 
 
 def fetch_kroki_mermaid(content: str, out_dir: str) -> str:
@@ -510,9 +569,17 @@ def preprocess_markdown(content: str, base_dir: str = ".") -> str:
 
     result = "\n".join(out_lines)
 
-    # ── Phase 2: Image auto-width ────────────────────────────────────────────
-    # Append {width=100%} to images that have no explicit attributes so they
-    # always fit within the document/slide page area.
+    # ── Phase 2: Resize images inside Markdown pipe-table cells ────────────
+    # Images in pipe-table cells must be physically resized rather than given
+    # a {width=100%} attribute, because Pandoc interprets that attribute as
+    # "full page width" (not "cell width"), which causes cropping in DOCX.
+    result = resize_images_in_markdown_tables(result, base_dir)
+
+    # ── Phase 3: Image auto-width ────────────────────────────────────────────
+    # Append {width=100%} to standalone images (those NOT in pipe-table cells)
+    # that have no explicit attributes so they always fit the page area.
+    # Pipe-table rows are skipped here to avoid the cropping issue described
+    # above.
     result = fix_image_widths(result)
 
     return result
