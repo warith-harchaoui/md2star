@@ -257,4 +257,4 @@ For contributors and advanced users interested in the inner workings of our Pyth
 
 ## 📄 License
 
-Distributed under **The Unlicense** (Public Domain). Crafted with precision for the modern author.
+Distributed under [**The Unlicense**](LICENSE) (Public Domain). Crafted with precision for the modern author.
