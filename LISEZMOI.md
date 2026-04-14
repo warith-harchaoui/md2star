@@ -82,6 +82,20 @@ powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 > [!NOTE]
 > Assurez-vous d'exécuter `conda activate md2star` avant d'utiliser les outils d'exportation !
 
+### 4. Mise à jour
+
+Pour importer de manière transparente les dernières modifications du dépôt et réinstaller vos composants :
+
+**🍏 macOS & 🐧 Linux**
+```bash
+make update
+```
+
+**🪟 Windows**
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\update.ps1
+```
+
 ---
 
 ## 📖 Guide d'Utilisation
