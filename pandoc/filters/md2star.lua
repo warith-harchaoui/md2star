@@ -41,22 +41,8 @@ function Pandoc(doc)
     local date_str = nil
 
     -- ── 1. Language / locale setup ──────────────────────────────────
-    -- Convert BCP 47 tag (e.g. "fr-FR") to a C locale string and set
-    -- it for the "time" category so that os.date() returns localised
-    -- month/day names.
-    if meta.lang then
-        local lang_str = pandoc.utils.stringify(meta.lang)
-        if lang_str ~= "" then
-            -- BCP 47 uses hyphens; C locales use underscores
-            local sanitized_lang = lang_str:gsub("-", "_")
-
-            -- Try the plain locale first, then with ".UTF-8" suffix
-            local success = os.setlocale(sanitized_lang, "time")
-            if not success then
-                os.setlocale(sanitized_lang .. ".UTF-8", "time")
-            end
-        end
-    end
+    -- (Removed OS locale dependence, we handle this manually in step 3 to
+    -- guarantee localization without requiring host OS package installations).
 
     -- ── 2. Author handling ──────────────────────────────────────────
     -- Hide the placeholder "EMANON"; keep any real author name for
@@ -71,12 +57,56 @@ function Pandoc(doc)
     end
 
     -- ── 3. Date formatting ──────────────────────────────────────────
-    -- Apply the strftime-style date_format to produce a localised
-    -- date string (e.g. "22 février 2026" for fr-FR).
+    -- Apply the strftime-style date_format to produce a localised date string.
+    -- We map specific languages to manually replace %A and %B so we don't rely 
+    -- on unpredictable OS 'setlocale' implementations.
     if meta.date_format then
         local fmt = pandoc.utils.stringify(meta.date_format)
         if fmt ~= "" then
             if fmt:find("%%") then
+                local lang_prefix = "en"
+                if meta.lang then
+                    lang_prefix = pandoc.utils.stringify(meta.lang):sub(1,2):lower()
+                end
+
+                local locale_dicts = {
+                    ["fr"] = {
+                        days = {"dimanche", "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi"},
+                        months = {"janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"}
+                    },
+                    ["es"] = {
+                        days = {"domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"},
+                        months = {"enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"}
+                    },
+                    ["de"] = {
+                        days = {"Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"},
+                        months = {"Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"}
+                    },
+                    ["it"] = {
+                        days = {"domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"},
+                        months = {"gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"}
+                    },
+                    ["pt"] = {
+                        days = {"domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"},
+                        months = {"janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"}
+                    },
+                    ["nl"] = {
+                        days = {"zondag", "maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag"},
+                        months = {"januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"}
+                    },
+                    ["ru"] = {
+                        days = {"воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"},
+                        months = {"января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"}
+                    }
+                }
+                
+                local dict = locale_dicts[lang_prefix]
+                if dict then
+                    local t = os.date("*t")
+                    fmt = fmt:gsub("%%A", dict.days[t.wday])
+                    fmt = fmt:gsub("%%B", dict.months[t.month])
+                end
+
                 date_str = os.date(fmt)
             else
                 io.stderr:write(

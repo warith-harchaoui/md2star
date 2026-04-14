@@ -7,7 +7,7 @@
 #   - install: bash, python3, pip
 #   - test:     Pandoc (must be on PATH)
 
-.PHONY: install uninstall reinstall test help
+.PHONY: install uninstall reinstall update test help
 
 # -----------------------------------------------------------------------------
 # help (default): Print available targets and usage
@@ -48,6 +48,13 @@ uninstall:
 # Use after pulling updates to refresh deployed files with the latest changes.
 # -----------------------------------------------------------------------------
 reinstall: uninstall install
+
+# -----------------------------------------------------------------------------
+# update: Pull latest changes from remote Git repository and reinstall
+# -----------------------------------------------------------------------------
+update:
+	git pull origin main
+	$(MAKE) reinstall
 
 # -----------------------------------------------------------------------------
 # test: Run integration test suite
