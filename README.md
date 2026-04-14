@@ -18,25 +18,70 @@
 - **🏷️ Intelligent Metadata**: 
   - Automatic **Title Extraction** from your first `# Heading`.
   - Smart **Subtitle Injection** for Author, Date, and Category metadata.
+  - Automatic **Language Detection** using `langdetect` supporting over 50+ languages natively adjusting date layouts.
 - **📚 Scientific-Ready**: Native **BibTeX** integration for professional research citations (for corporate environment, not academic publications) which is the only way to manage great quantities of references to the best of my knowledge in a reliable fashion.
 
 ---
 
 ## 🛠️ Installation
 
-### 🍎 macOS & 🐧 Linux
+To ensure maximum reliability and isolation, `md2star` uses [Conda](https://docs.conda.io/en/latest/miniconda.html) for its Python environment and relies on `pandoc` as the core engine.
+
+### 1. Install Low-Level Dependencies (Pandoc)
+
+You must install Pandoc natively on your machine using your OS-specific package manager:
+
+- **🍏 macOS**:
+  Please install *Homebrew* if it is not already installed:
+
+    ```bash
+  /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  ```
+
+    and then
+
+  ```bash
+  brew install pandoc
+  ```
+
+- **🐧 Linux (Debian/Ubuntu)**:
+  ```bash
+  sudo apt-get update && sudo apt-get install pandoc
+  ```
+- **🪟 Windows**:
+  ```powershell
+  winget install --id JohnMacFarlane.Pandoc
+  ```
+
+### 2. Install Conda
+
+If you do not have Conda installed, please download and install **Miniconda** (a minimal installer for conda).
+🔗 **[Download Miniconda Here](https://www.anaconda.com/docs/getting-started/miniconda/install/overview)**
+
+### 3. Clone & Setup Environment
+
+Open your terminal or Anaconda Prompt and run the following commands to clone the repository, build the isolated Python 3.10 environment, and install the application wrappers:
+
+**🍏 macOS & 🐧 Linux**
 ```bash
 git clone https://github.com/warith-harchaoui/md2star.git
 cd md2star
+conda env create -f environment.yaml
+conda activate md2star
 make install
 ```
 
-### 🪟 Windows
+**🪟 Windows**
 ```powershell
 git clone https://github.com/warith-harchaoui/md2star.git
 cd md2star
+conda env create -f environment.yaml
+conda activate md2star
 powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 ```
+
+> [!NOTE]
+> Ensure you run `conda activate md2star` prior to using the exporting tools!
 
 ---
 
@@ -66,6 +111,12 @@ md2pptx slides.md --author "Speaker Name"
 ## 💡 Examples
 
 Good examples can be found [here](EXAMPLES.md).
+
+You can also find more complex examples inside the [`examples/`](examples) directory. To natively batch compile all documents inside the folder, execute the bash runner:
+```bash
+cd examples
+./run.sh
+```
 
 Below are basic `.docx` and `.pptx` files generated dynamically during our test suite from sample Markdown files:
 
@@ -119,7 +170,7 @@ make test
 
 ### Unit tests (Python)
 
-Requires **pytest** (`pip install pytest`):
+Requires **pytest** and the `md2star` Conda environment:
 ```bash
 python -m pytest tests/ -v
 ```
@@ -176,8 +227,7 @@ For contributors and advanced users interested in the inner workings of our Pyth
 |------|----------|
 | `md2docx: command not found` | Add `~/.local/bin` to your PATH (see install output) |
 | `pandoc: command not found` | Install [Pandoc](https://pandoc.org/installing.html) |
-| French dates show in English | Ensure `fr_FR.UTF-8` locale is installed (`locale -a`) |
-| PPTX template layout warnings | Normal if template lacks standard slide layouts; output still valid |
+| `pptx` template layout warnings | Normal if template lacks standard slide layouts; output still valid |
 
 ---
 
@@ -193,4 +243,4 @@ For contributors and advanced users interested in the inner workings of our Pyth
 
 ## 📄 License
 
-Distributed under the **BSD 3-Clause License**. Crafted with precision for the modern author.
+Distributed under **The Unlicense** (Public Domain). Crafted with precision for the modern author.

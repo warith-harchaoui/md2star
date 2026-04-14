@@ -100,6 +100,12 @@ function Pandoc(doc)
             -- Separator between author and date
             table.insert(subtitle_inlines, pandoc.Str(","))
             table.insert(subtitle_inlines, pandoc.Space())
+        else
+            -- The date is the very first word on the line, so we 
+            -- capitalize its first ASCII character (e.g. "lundi" -> "Lundi").
+            local first_char = date_str:sub(1, 1)
+            local rest = date_str:sub(2)
+            date_str = string.upper(first_char) .. rest
         end
         table.insert(subtitle_inlines, pandoc.Str(date_str))
     end

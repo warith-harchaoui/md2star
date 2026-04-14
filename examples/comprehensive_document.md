@@ -30,7 +30,7 @@ graph LR;
 ```
 
 ## 3. Mathematical Typesetting
-Equations written in $\LaTeX$ are flawlessly mapped onto Microsoft Office's native equation engine:
+Equations written in LaTeX are flawlessly interpreted by Pandoc and rendered as native Microsoft Office equations:
 
 $$
 e^{i \times \pi}+1 = 0

@@ -443,7 +443,7 @@ def fetch_kroki_mermaid(content: str, out_dir: str) -> str:
     """
     content_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
     filename = f".mermaid_{content_hash}.png"
-    filepath = os.path.join(os.path.abspath(out_dir), filename)
+    filepath = os.path.join(tempfile.gettempdir(), filename)
 
     if os.path.exists(filepath):
         return filepath
@@ -460,9 +460,47 @@ def fetch_kroki_mermaid(content: str, out_dir: str) -> str:
         f.write(response.read())
 
     return filepath
+# ───────────────────────────────────────────────────────────────────────────
+# Language Detection (Zero-Dependency)
+# ───────────────────────────────────────────────────────────────────────────
+
+def get_language_metadata(content: str) -> Optional[dict]:
+    """Guess the language using langdetect.
+    Returns a dictionary with pandoc-compatible 'lang' and 'date_format',
+    or None if unsure.
+    """
+    try:
+        import langdetect
+    except ImportError:
+        # Graceful degradation if langdetect is not installed
+        return None
+
+    # Remove code blocks, HTML tags, and markdown links to get raw prose
+    text = re.sub(r"```.*?```", "", content, flags=re.DOTALL)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = re.sub(r"\[([^\]]+)\]\([^\)]+\)", r"\1", text)
+    
+    try:
+        lang_code = langdetect.detect(text)
+        mapping = {
+            "en": {"lang": "en-US", "date_format": "%A, %B %e, %Y"},
+            "fr": {"lang": "fr-FR", "date_format": "%A %e %B %Y"},
+            "es": {"lang": "es-ES", "date_format": "%A, %e de %B de %Y"},
+            "de": {"lang": "de-DE", "date_format": "%A, %e. %B %Y"},
+            "it": {"lang": "it-IT", "date_format": "%A %e %B %Y"},
+            "pt": {"lang": "pt-BR", "date_format": "%A, %e de %B de %Y"},
+            "nl": {"lang": "nl-NL", "date_format": "%A %e %B %Y"},
+            "ru": {"lang": "ru-RU", "date_format": "%A, %e %B %Y"},
+            "zh-cn": {"lang": "zh-CN", "date_format": "%Y年%m月%d日"},
+            "ja": {"lang": "ja-JP", "date_format": "%Y年%m月%d日"}
+        }
+        # If the code isn't explicitly mapped, fallback to simple code and default date format.
+        return mapping.get(lang_code, {"lang": lang_code, "date_format": "%A, %e %B %Y"})
+    except Exception:
+        return None
 
 
-def preprocess_markdown(content: str, base_dir: str = ".") -> str:
+def preprocess_markdown(content: str, base_dir: str = ".", inject_metadata: bool = True) -> str:
     """
     Ensure every list item in *content* is preceded by a blank line.
     Also render Mermaid diagrams using an external API, convert HTML tables
@@ -475,6 +513,9 @@ def preprocess_markdown(content: str, base_dir: str = ".") -> str:
         paragraphs, list items, HTML tables, and image links).
     base_dir : str
         Directory to store the generated mermaid diagrams.
+    inject_metadata : bool
+        Whether to analyze the context and inject language and date formatting 
+        defaults. Defaults to True.
 
     Returns
     -------
@@ -499,6 +540,25 @@ def preprocess_markdown(content: str, base_dir: str = ".") -> str:
     # Must run before line-splitting so the full multi-line <table> blocks are
     # visible to the regex.
     content = convert_html_tables(content, base_dir)
+
+    # ── Phase 0.5: Language & Date Format Detection ─────────────────────────
+    if inject_metadata:
+        meta_injection = get_language_metadata(content)
+        if meta_injection:
+            injections = []
+            if not re.search(r"^lang\s*:", content, flags=re.MULTILINE | re.IGNORECASE):
+                injections.append(f"lang: {meta_injection['lang']}")
+            if not re.search(r"^date_format\s*:", content, flags=re.MULTILINE | re.IGNORECASE):
+                injections.append(f"date_format: \"{meta_injection['date_format']}\"")
+            
+            if injections:
+                injection_str = "\n".join(injections) + "\n"
+                yaml_match = re.match(r"^(---[\r\n]+)(.*?)([\r\n]+(?:---|...)(?:[\r\n]+|$))", content, flags=re.DOTALL)
+                if yaml_match:
+                    new_yaml = f"{yaml_match.group(1)}{injection_str}{yaml_match.group(2)}{yaml_match.group(3)}"
+                    content = new_yaml + content[yaml_match.end():]
+                else:
+                    content = f"---\n{injection_str}---\n\n{content}"
 
     lines: list[str] = content.split("\n")
 

@@ -86,11 +86,4 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 
-# Bib utility (local only)
-bib/
 
-# Credentials & secrets
-gdrive-credentials.json
-gup/config.yaml
-credentials.json
-token.json
