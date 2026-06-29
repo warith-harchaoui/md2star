@@ -1,0 +1,37 @@
+# PyPI / TestPyPI credentials — example template (.pypirc form).
+#
+# Copy this file to `.secrets/.pypirc` and replace the placeholder
+# tokens with real ones. The real file is gitignored (the
+# .secrets/* rule in .gitignore), so it cannot be committed by
+# accident; this `.example` template stays committed as the shape
+# reference. Style guide rule 8: real config is gitignored, the
+# *.example template ships.
+#
+# `make publish` and `make publish-testpypi` both prefer
+# `.secrets/.pypirc` when it exists (passed to twine via
+# `--config-file`); they fall back to `.secrets/pypi.env`'s
+# TWINE_USERNAME / TWINE_PASSWORD env vars otherwise. Pick one
+# of the two paths — there is no reason to keep both.
+#
+# Get tokens here:
+#   - real PyPI   → https://pypi.org/manage/account/token/
+#   - TestPyPI    → https://test.pypi.org/manage/account/token/
+#
+# Tokens look like `pypi-AgEIcHlwaS5vcmcCJDc4Z...`. PyPI shows them
+# once on creation — copy to a password manager. The username is
+# ALWAYS the literal `__token__` when authenticating with an API
+# token (not your PyPI display name).
+
+[distutils]
+  index-servers =
+    pypi
+    testpypi
+
+[pypi]
+  username = __token__
+  password = pypi-REPLACE_ME_WITH_YOUR_REAL_PYPI_TOKEN
+
+[testpypi]
+  repository = https://test.pypi.org/legacy/
+  username = __token__
+  password = pypi-REPLACE_ME_WITH_YOUR_TESTPYPI_TOKEN

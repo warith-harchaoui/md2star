@@ -54,33 +54,53 @@ build:
 	rm -rf dist build
 	hatch build
 
-# Upload to PyPI. Reads credentials from `.secrets/pypi.env` (a
-# gitignored file; copy `.secrets/pypi.env.example` and fill in the
-# tokens). The `set -a` + `.` (source) trick exports every assignment
-# in the env file so `twine` picks them up as env vars. Twine wants
-# TWINE_USERNAME=__token__ + TWINE_PASSWORD=<the-pypi-token>.
+# Upload to PyPI. Credentials come from one of two gitignored files
+# under .secrets/, with .pypirc preferred when present:
+#
+#   .secrets/.pypirc       — canonical twine config (passed via
+#                            --config-file). Easiest if you already
+#                            have a ~/.pypirc-style mental model.
+#                            Copy .secrets/.pypirc.example to bootstrap.
+#   .secrets/pypi.env      — TWINE_USERNAME + TWINE_PASSWORD env
+#                            vars sourced into the shell. Useful for
+#                            CI or one-shot overrides. Copy
+#                            .secrets/pypi.env.example to bootstrap.
+#
+# Either gets you the upload; pick one. Twine wants
+# TWINE_USERNAME=__token__ + TWINE_PASSWORD=<the-pypi-token>
+# (the literal string `__token__` is correct — that's PyPI's
+# convention for API-token auth, not a placeholder).
 publish: build
-	@test -f .secrets/pypi.env || { \
-		echo "Missing .secrets/pypi.env — copy .secrets/pypi.env.example and fill in your PyPI token."; \
+	@if [ -f .secrets/.pypirc ]; then \
+		twine check dist/* && twine upload --config-file .secrets/.pypirc dist/*; \
+	elif [ -f .secrets/pypi.env ]; then \
+		set -a; . ./.secrets/pypi.env; set +a; \
+			twine check dist/* && twine upload dist/*; \
+	else \
+		echo "Missing credentials. Either:"; \
+		echo "  - copy .secrets/.pypirc.example to .secrets/.pypirc"; \
+		echo "  - or copy .secrets/pypi.env.example to .secrets/pypi.env"; \
+		echo "and fill in your PyPI API token."; \
 		exit 1; \
-	}
-	@set -a; . ./.secrets/pypi.env; set +a; \
-		twine check dist/* && twine upload dist/*
+	fi
 
-# Same machinery, but flips the credential to the TestPyPI token and
-# points twine at the TestPyPI repository. Use this to rehearse the
-# release without burning a real PyPI version number.
+# Same machinery against TestPyPI. With .pypirc, twine reads the
+# [testpypi] section directly; with pypi.env it flips
+# TWINE_PASSWORD to the TestPyPI token before invoking twine.
 publish-testpypi: build
-	@test -f .secrets/pypi.env || { \
-		echo "Missing .secrets/pypi.env — copy .secrets/pypi.env.example and fill in your TestPyPI token."; \
+	@if [ -f .secrets/.pypirc ]; then \
+		twine check dist/* && twine upload --config-file .secrets/.pypirc --repository testpypi dist/*; \
+	elif [ -f .secrets/pypi.env ]; then \
+		set -a; . ./.secrets/pypi.env; set +a; \
+			if [ -z "$$TWINE_PASSWORD_TESTPYPI" ] || \
+			   [ "$$TWINE_PASSWORD_TESTPYPI" = "pypi-REPLACE_ME_WITH_YOUR_TESTPYPI_TOKEN" ]; then \
+				echo "TWINE_PASSWORD_TESTPYPI is unset / still the placeholder in .secrets/pypi.env."; \
+				echo "Add the line, or switch to .secrets/.pypirc which has a [testpypi] section."; \
+				exit 1; \
+			fi; \
+			export TWINE_PASSWORD="$$TWINE_PASSWORD_TESTPYPI"; \
+			twine check dist/* && twine upload --repository testpypi dist/*; \
+	else \
+		echo "Missing credentials. Copy .secrets/.pypirc.example or .secrets/pypi.env.example."; \
 		exit 1; \
-	}
-	@set -a; . ./.secrets/pypi.env; set +a; \
-		if [ -z "$$TWINE_PASSWORD_TESTPYPI" ] || \
-		   [ "$$TWINE_PASSWORD_TESTPYPI" = "pypi-REPLACE_ME_WITH_YOUR_TESTPYPI_TOKEN" ]; then \
-			echo "TWINE_PASSWORD_TESTPYPI is unset / still the placeholder in .secrets/pypi.env."; \
-			echo "Add the line, or skip publish-testpypi and use `make publish` directly."; \
-			exit 1; \
-		fi; \
-		export TWINE_PASSWORD="$$TWINE_PASSWORD_TESTPYPI"; \
-		twine check dist/* && twine upload --repository testpypi dist/*
+	fi
