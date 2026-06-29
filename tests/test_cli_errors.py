@@ -12,8 +12,6 @@ documented shape AND the exit codes match the documented mapping.
 
 from __future__ import annotations
 
-import pytest
-
 from md2star import errors
 from md2star.cli import (
     _render_error,
@@ -21,7 +19,6 @@ from md2star.cli import (
     md2pdf_main,
     md2pptx_main,
 )
-
 
 # ──────────────────────────────────────────────────────────────────
 # Renderer — headline + indented hint

@@ -43,7 +43,6 @@ from pathlib import Path
 
 from .cache import cache_dir
 
-
 # ─────────────────────────────────────────────────────────────────────
 # Candidate enumeration — mirrors `_resolve_reference_doc` priority
 # ─────────────────────────────────────────────────────────────────────

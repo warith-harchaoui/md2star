@@ -54,7 +54,6 @@ from pathlib import Path
 from . import __version__
 from .cache import cache_dir, clear_cache
 from .errors import (
-    ConversionError,
     InvalidInputError,
     Md2starError,
     MissingDependencyError,

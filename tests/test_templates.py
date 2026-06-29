@@ -8,14 +8,10 @@ debugging it's meant to short-circuit just becomes more confusing.
 
 from __future__ import annotations
 
-import json
 import re
 from pathlib import Path
 
-import pytest
-
 from md2star import templates as tpl
-
 
 # ──────────────────────────────────────────────────────────────────
 # Candidate enumeration

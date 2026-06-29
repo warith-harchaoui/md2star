@@ -131,6 +131,14 @@ build/
 
 .ruff_cache/
 
+# coverage.py artifacts produced by `pytest --cov` (CI gate in
+# .github/workflows/ci.yml). The SQLite file is per-run state, never
+# meant to be tracked.
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
 .deepeval/
 
 .claude/
