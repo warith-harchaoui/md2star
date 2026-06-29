@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "md2star"
-version = "2.0.1"
+version = "2.1.0"
 description = "Markdown → DOCX/PPTX/PDF bridge built on Pandoc, with curated styling, Mermaid rendering, and bibliography support."
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -36,6 +36,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=9.0.3,<10",
+    "pytest-cov>=5.0,<7",   # coverage gate; see [tool.coverage.report] below
     "ruff>=0.6.0,<1",
     "pypdf>=4.0,<6",   # PDF-text extraction in integration tests
 ]
@@ -98,6 +99,29 @@ exclude = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+
+# Coverage configuration — wired into the CI's `coverage` job (see
+# .github/workflows/ci.yml). The threshold is intentionally moderate;
+# the goal is to catch regressions where a big chunk of code goes
+# untested, NOT to force test-every-branch maximalism.
+[tool.coverage.run]
+source = ["md2star"]
+branch = true
+omit = [
+    # __main__.py is a one-line forward to cli.main; covering it would
+    # need a subprocess, which we already test via the cli-smoke job.
+    "md2star/__main__.py",
+]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
 
 [tool.ruff]
 target-version = "py310"

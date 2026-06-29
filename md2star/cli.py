@@ -53,6 +53,12 @@ from pathlib import Path
 
 from . import __version__
 from .cache import cache_dir, clear_cache
+from .errors import (
+    ConversionError,
+    InvalidInputError,
+    Md2starError,
+    MissingDependencyError,
+)
 from .postprocess import inject_table_styles, strip_table_normal_for_pdf
 from .preprocessing import preprocess_markdown
 
@@ -234,13 +240,16 @@ def _require_pandoc() -> str:
     """Return the path to ``pandoc``, or exit with a clear message."""
     path = shutil.which("pandoc")
     if path is None:
-        print(
-            "md2star: pandoc not found on PATH. Install it from "
-            "https://pandoc.org/installing.html (macOS: `brew install pandoc`, "
-            "Ubuntu: `sudo apt install pandoc`).",
-            file=sys.stderr,
+        raise MissingDependencyError(
+            "pandoc not found on PATH",
+            hint=(
+                "Install it from https://pandoc.org/installing.html "
+                "(macOS: `brew install pandoc`, Ubuntu: "
+                "`sudo apt install pandoc`, Windows: "
+                "`winget install --id JohnMacFarlane.Pandoc`). "
+                "Then re-run; `md2star doctor` confirms the install."
+            ),
         )
-        sys.exit(127)
     return path
 
 
@@ -393,8 +402,10 @@ def _convert(fmt: str, argv: list[str]) -> int:
 
     in_path = Path(args.input).expanduser().resolve()
     if not in_path.exists():
-        print(f"md2{fmt}: input file not found: {in_path}", file=sys.stderr)
-        return 2
+        raise InvalidInputError(
+            f"md2{fmt}: input file not found: {in_path}",
+            hint="md2star accepts a single .md / .markdown file as the first argument.",
+        )
 
     out_path = (
         Path(args.output).expanduser().resolve()
@@ -543,15 +554,16 @@ def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> int:
     """Render *docx_path* to *pdf_path* via headless LibreOffice. Returns rc."""
     soffice = _find_soffice()
     if soffice is None:
-        print(
-            "md2pdf: LibreOffice (`soffice`) not found. Install it to enable "
-            "PDF output:\n"
-            "  macOS:   brew install --cask libreoffice\n"
-            "  Ubuntu:  sudo apt install libreoffice\n"
-            "  other:   https://www.libreoffice.org/download/",
-            file=sys.stderr,
+        raise MissingDependencyError(
+            "md2pdf: LibreOffice (`soffice`) not found",
+            hint=(
+                "Install it to enable PDF output:\n"
+                "  macOS:   brew install --cask libreoffice\n"
+                "  Ubuntu:  sudo apt install libreoffice\n"
+                "  Windows: winget install --id TheDocumentFoundation.LibreOffice\n"
+                "  other:   https://www.libreoffice.org/download/"
+            ),
         )
-        return 127
 
     # soffice writes a sibling file next to the input — we cannot control
     # the exact output name, only its directory. We render into a tempdir
@@ -593,19 +605,59 @@ def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> int:
     return 0
 
 
+def _render_error(exc: Md2starError) -> None:
+    """Pretty-print a typed exception to stderr — headline + indented hint.
+
+    Replaces the raw Python traceback with a two-block message:
+
+        md2star: <headline error>
+          <hint, indented and word-wrapped at the natural newlines>
+
+    Called by the top-level handler in each ``md2{docx,pptx,pdf}_main``
+    so users see actionable text instead of a traceback when the
+    failure mode is something we already anticipated (see
+    :mod:`md2star.errors`).
+    """
+    print(f"md2star: {exc}", file=sys.stderr)
+    if exc.hint:
+        for line in exc.hint.splitlines():
+            print(f"  {line}", file=sys.stderr)
+
+
+def _run_format(fmt: str, argv: list[str] | None) -> int:
+    """Top-level wrapper around :func:`_convert` for the four console entries.
+
+    Catches every :class:`Md2starError` subclass and renders it via
+    :func:`_render_error`, returning a non-zero exit code. Anything
+    that doesn't subclass :class:`Md2starError` is left to bubble up
+    as a Python traceback — that's a real bug we want users to file.
+    """
+    try:
+        return _convert(fmt, list(sys.argv[1:] if argv is None else argv))
+    except Md2starError as exc:
+        _render_error(exc)
+        # Exit code conventions: 127 for missing system deps (mirrors
+        # the shell convention), 2 for invalid CLI input, 1 otherwise.
+        if isinstance(exc, MissingDependencyError):
+            return 127
+        if isinstance(exc, InvalidInputError):
+            return 2
+        return 1
+
+
 def md2docx_main(argv: list[str] | None = None) -> int:
     """Console entry point: ``md2docx``."""
-    return _convert("docx", list(sys.argv[1:] if argv is None else argv))
+    return _run_format("docx", argv)
 
 
 def md2pptx_main(argv: list[str] | None = None) -> int:
     """Console entry point: ``md2pptx``."""
-    return _convert("pptx", list(sys.argv[1:] if argv is None else argv))
+    return _run_format("pptx", argv)
 
 
 def md2pdf_main(argv: list[str] | None = None) -> int:
     """Console entry point: ``md2pdf``."""
-    return _convert("pdf", list(sys.argv[1:] if argv is None else argv))
+    return _run_format("pdf", argv)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -644,6 +696,9 @@ def main(argv: list[str] | None = None) -> int:
     if sub == "doctor":
         from .doctor import main as doctor_main
         return doctor_main(rest)
+    if sub == "templates":
+        from .templates import main as templates_main
+        return templates_main(rest)
     if sub == "cache-dir":
         print(cache_dir())
         return 0
@@ -665,6 +720,7 @@ def _print_top_level_help(file=sys.stdout) -> None:
         "  md2star pptx <input.md> [options...]\n"
         "  md2star pdf  <input.md> [options...]\n"
         "  md2star doctor [--json]\n"
+        "  md2star templates {list,path} [...]\n"
         "  md2star cache-dir\n"
         "  md2star clear-cache\n\n"
         "Shorthand aliases:\n"

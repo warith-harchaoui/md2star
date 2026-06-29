@@ -6,6 +6,64 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-06-29
+
+This release ships the quick-win + medium-lift batch from
+`.private/ASSESSMENT.md`. No breaking changes; everything additive
+or internal.
+
+### Added
+- **`md2star templates {list,path}` subcommand.** Reports the
+  resolution order md2star would use for `template.docx` /
+  `template.pptx` and prints the absolute path of the winner. Short-
+  circuits the "why isn't my branding applied?" debug loop. Mirrors
+  the priority documented in
+  `cli._resolve_reference_doc` (per-project → legacy → cached →
+  bundled). Test coverage in `tests/test_templates.py` (9 cases).
+- **Typed exceptions wired into the CLI top level.** `md2docx` /
+  `md2pptx` / `md2pdf` now catch `md2star.errors.Md2starError`
+  subclasses and render a friendly two-block message
+  (`md2star: <headline>` + indented `<hint>`) instead of a Python
+  traceback. Three failure modes converted so far:
+  `pandoc not found` → `MissingDependencyError` (exit 127);
+  `LibreOffice not found` → `MissingDependencyError` (exit 127);
+  `input file not found` → `InvalidInputError` (exit 2).
+  Test coverage in `tests/test_cli_errors.py` (7 cases).
+- **`python -m md2star`** as an alternative to the `md2star`
+  console script via a new `md2star/__main__.py` shim. Standard
+  Python convention.
+- **CI: wheel-install smoke job.** After the existing `build` job,
+  CI downloads the artifact, installs it into a fresh venv, and
+  exercises every console-script entry point + `python -m md2star`
+  + `doctor --json` shape. Catches `[project.scripts]` typos and
+  missing package-data regressions before they ship to PyPI.
+- **CI: `pip-audit` job.** Runs `pip-audit --strict` against the
+  installed runtime + dev deps. Surfaces CVEs in `langdetect` /
+  `Pillow` automatically; fails the gate so we notice promptly.
+- **CI: coverage gate.** `pytest --cov` with a 70 % threshold
+  configured in `pyproject.toml`. Current coverage: 78 %.
+
+### Changed
+- **CONTRIBUTING.md** gains a "Rebuilding the bundled templates"
+  section documenting the
+  `pandoc --print-default-data-file reference.{docx,pptx}` →
+  brand → commit workflow so future maintainers don't have to
+  reverse-engineer it.
+- **`Makefile`** `publish` / `publish-testpypi` targets now prefer
+  `.secrets/.pypirc` (the canonical twine config) when present and
+  fall back to `.secrets/pypi.env`. Either path bootstrapped from
+  the committed `.example` templates.
+- **`README.md` + `LISEZMOI.md`** carry the live PyPI version badge
+  alongside the existing CI / Python / license / status badges.
+- **`docs/audit.md` + `ROADMAP.md`** drop residual references to
+  private files so every pointer in the public docs resolves on a
+  fresh clone.
+
+### Fixed
+- Stale "complex tables in PDF" caveat in the README's "Beta"
+  paragraph — the v2.0.0 template rebuild resolved that bug at the
+  source; the paragraph now points at the v2.0.0 fix.
+
 ## [2.0.1] — 2026-06-29
 
 ### Fixed
