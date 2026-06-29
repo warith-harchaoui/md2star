@@ -9,7 +9,7 @@
 **Convert Markdown into professional DOCX, PPTX and PDF documents
 using Pandoc, branded templates, and practical automation.**
 
-![logo](assets/logo.png)
+![logo](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/logo.png)
 
 `md2star` is a cross-platform command-line tool that wraps **Pandoc**
 with a curated styling layer. It handles the parts Pandoc alone gets

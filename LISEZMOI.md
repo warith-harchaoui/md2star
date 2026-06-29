@@ -10,7 +10,7 @@
 > brandés, de bout en bout, en s'appuyant sur Pandoc, des templates
 > soignés et une automatisation pragmatique.
 
-![logo](assets/logo.png)
+![logo](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/logo.png)
 
 `md2star` est un outil en ligne de commande multiplateforme qui
 enveloppe **Pandoc** d'une couche de style soignée. Il prend en charge

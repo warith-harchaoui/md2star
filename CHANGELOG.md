@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.0.1] — 2026-06-29
+
+### Fixed
+- **Logo broken on the PyPI project page.** The 2.0.0 README
+  referenced the project logo with a relative path
+  (`![logo](assets/logo.png)`) — fine on GitHub, but PyPI does not
+  resolve relative URLs against the repo, so the image rendered as
+  a broken icon. Switched to the absolute
+  `raw.githubusercontent.com` URL so the same Markdown renders
+  correctly on both PyPI and GitHub. Pure docs / metadata fix; no
+  code change.
+
 ## [2.0.0] — 2026-06-29
 
 This is the PyPI debut. Two breaking changes drive the major bump.
