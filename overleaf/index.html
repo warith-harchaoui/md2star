@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en" data-color-scheme="auto">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>md2star · split-pane editor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { color-scheme: light dark; }
+    html, body {
+      font-family: ui-sans-serif, system-ui, sans-serif;
+      background: #ffffff;
+      color: #111111;
+      height: 100%;
+      margin: 0;
+    }
+    html.dark, html[data-color-scheme="dark"], html[data-color-scheme="dark"] body {
+      background: #0a0a0a;
+      color: #f5f5f5;
+    }
+    *:focus { outline: none; }
+    *:focus-visible {
+      outline: 2px solid #007AFF;
+      outline-offset: 2px;
+    }
+    /* Reduced-motion guard — kill the transitions for vestibular safety. */
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-white text-black dark:bg-black dark:text-white">
+
+  <!-- ───── Top bar ────────────────────────────────────────────── -->
+  <header class="sticky top-0 z-10 border-b border-neutral-200 bg-white/80 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-black/80">
+    <div class="mx-auto flex max-w-6xl items-center gap-3">
+      <h1 class="font-mono text-[15px] font-semibold">md2star · editor</h1>
+      <span id="status" role="status" aria-live="polite"
+            class="ml-auto inline-flex min-h-11 items-center rounded-full px-3 text-[13px]
+                   bg-neutral-100 text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
+        idle
+      </span>
+      <button id="render-btn" type="button"
+              class="inline-flex min-h-11 items-center justify-center rounded-full
+                     bg-[#007AFF] px-4 py-2 text-[14px] font-semibold text-white
+                     hover:opacity-90 active:scale-[0.97]
+                     focus-visible:ring-2 focus-visible:ring-[#007AFF] focus-visible:ring-offset-2
+                     motion-reduce:active:scale-100">
+        Render now
+      </button>
+    </div>
+  </header>
+
+  <!-- ───── Split pane ─────────────────────────────────────────── -->
+  <main class="mx-auto flex h-[calc(100vh-65px)] max-w-[1600px] gap-0">
+
+    <!-- Left: source ─────────────────────────────────────────── -->
+    <section aria-labelledby="src-heading"
+             class="flex w-1/2 flex-col border-r border-neutral-200 dark:border-neutral-800">
+      <div class="flex items-center gap-2 border-b border-neutral-200 px-4 py-2
+                  text-[12px] uppercase tracking-wider text-neutral-500
+                  dark:border-neutral-800 dark:text-neutral-400">
+        <span id="src-heading">Markdown source</span>
+        <span class="ml-auto font-mono">
+          <span id="char-count">0</span> chars
+        </span>
+      </div>
+      <label for="editor" class="sr-only">Markdown source editor</label>
+      <textarea id="editor"
+                spellcheck="false"
+                autocomplete="off"
+                autocorrect="off"
+                autocapitalize="off"
+                class="flex-1 min-h-11 resize-none border-0 bg-neutral-50 p-4 font-mono
+                       text-[14px] leading-relaxed text-neutral-900
+                       focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#007AFF]
+                       dark:bg-neutral-950 dark:text-neutral-100"
+                aria-describedby="status">
+# Hello md2star
+
+Type Markdown on the left.
+PDF appears on the right.
+
+## Features
+
+- **Live preview** — debounced 500 ms after the last keystroke.
+- **md2docx pipeline** — same conversion path as `md2docx <file>.md`.
+- **PDF via headless LibreOffice** — `soffice --convert-to pdf`.
+
+> Tip: press **⌘/Ctrl + Enter** to force an immediate re-render.
+
+```python
+def hello(name: str) -> str:
+    return f"hello {name}"
+```
+</textarea>
+    </section>
+
+    <!-- Right: preview ──────────────────────────────────────── -->
+    <section aria-labelledby="prev-heading" class="flex w-1/2 flex-col">
+      <div class="flex items-center gap-2 border-b border-neutral-200 px-4 py-2
+                  text-[12px] uppercase tracking-wider text-neutral-500
+                  dark:border-neutral-800 dark:text-neutral-400">
+        <span id="prev-heading">PDF preview</span>
+        <span id="prev-meta" class="ml-auto font-mono"></span>
+      </div>
+      <div class="relative flex-1 bg-neutral-100 dark:bg-neutral-900">
+        <iframe id="preview" title="PDF preview"
+                class="absolute inset-0 h-full w-full border-0"
+                src="about:blank"></iframe>
+        <!-- Empty-state overlay; hidden once the first render completes. -->
+        <div id="empty"
+             class="absolute inset-0 grid place-items-center p-8 text-center text-neutral-500
+                    dark:text-neutral-400">
+          <div class="max-w-md space-y-2">
+            <p class="text-[15px] font-medium">No PDF yet.</p>
+            <p class="text-[13px]">
+              Start typing or press <kbd class="rounded border border-neutral-300 px-1 py-0.5 font-mono text-[11px] dark:border-neutral-700">Render now</kbd>.
+              First render takes ~3 s (LibreOffice cold-start);
+              subsequent renders ~600 ms.
+            </p>
+          </div>
+        </div>
+        <!-- Error panel, hidden by default. The icon + the literal
+             word "failed" carry the state signal in non-color
+             channels (icon + text), so red is reinforcement, not the
+             only cue. -->
+        <div id="error" role="alert" aria-live="assertive"
+             class="absolute inset-x-0 bottom-0 hidden m-4 max-h-1/2 overflow-auto
+                    rounded-2xl border border-red-300 bg-red-50 p-4 text-[13px] text-red-900
+                    shadow-lg dark:border-red-700 dark:bg-red-950 dark:text-red-100">
+          <h2 class="flex items-center gap-2 font-semibold">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                 stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="8" x2="12" y2="12"/>
+              <line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            Render failed
+          </h2>
+          <pre id="error-body" class="mt-2 whitespace-pre-wrap font-mono"></pre>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script type="module">
+    // ── DOM handles ─────────────────────────────────────────────
+    const editor      = document.getElementById('editor');
+    const status      = document.getElementById('status');
+    const charCount   = document.getElementById('char-count');
+    const preview     = document.getElementById('preview');
+    const previewMeta = document.getElementById('prev-meta');
+    const empty       = document.getElementById('empty');
+    const errorEl     = document.getElementById('error');
+    const errorBody   = document.getElementById('error-body');
+    const renderBtn   = document.getElementById('render-btn');
+
+    // We keep the last blob URL around so we can revoke it on the next
+    // render — browsers leak otherwise. ``null`` means no PDF yet.
+    let lastBlobUrl = null;
+    let lastRenderedSource = null;
+    let inFlight = false;
+    let debounceTimer = null;
+
+    const DEBOUNCE_MS = 500;
+
+    // ── Render orchestration ────────────────────────────────────
+    async function render({ force = false } = {}) {
+      const md = editor.value;
+      if (!md.trim()) return;
+      // Skip identical re-renders to avoid spamming soffice.
+      if (!force && md === lastRenderedSource) return;
+      if (inFlight) return;
+
+      inFlight = true;
+      setStatus('rendering…', 'rendering');
+      errorEl.classList.add('hidden');
+
+      const started = performance.now();
+      try {
+        const res = await fetch('/render', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ markdown: md }),
+        });
+        if (!res.ok) {
+          // Try to surface the server's JSON error body.
+          const ct = res.headers.get('Content-Type') || '';
+          let msg = `${res.status} ${res.statusText}`;
+          if (ct.includes('application/json')) {
+            try {
+              const j = await res.json();
+              if (j.error) msg = j.error;
+            } catch {}
+          }
+          throw new Error(msg);
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+        lastBlobUrl = url;
+        preview.src = url;
+        empty.classList.add('hidden');
+        const ms = Math.round(performance.now() - started);
+        previewMeta.textContent = `${(blob.size / 1024).toFixed(1)} KB · ${ms} ms`;
+        lastRenderedSource = md;
+        setStatus('ready', 'idle');
+      } catch (err) {
+        errorBody.textContent = String(err.message || err);
+        errorEl.classList.remove('hidden');
+        setStatus('error', 'error');
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    function setStatus(text, kind) {
+      status.textContent = text;
+      status.className = status.className
+        .replace(/bg-\S+|text-\S+/g, '')
+        .trim();
+      const palette = {
+        idle:      'bg-neutral-100 text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300',
+        rendering: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200',
+        error:     'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
+      }[kind] || '';
+      status.className = [
+        'ml-auto inline-flex min-h-11 items-center rounded-full px-3 text-[13px]',
+        palette,
+      ].join(' ');
+    }
+
+    // ── Inputs ─────────────────────────────────────────────────
+    editor.addEventListener('input', () => {
+      charCount.textContent = editor.value.length;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => render(), DEBOUNCE_MS);
+    });
+    renderBtn.addEventListener('click', () => render({ force: true }));
+    document.addEventListener('keydown', (ev) => {
+      // Cmd/Ctrl + Enter → force render.
+      if ((ev.metaKey || ev.ctrlKey) && ev.key === 'Enter') {
+        ev.preventDefault();
+        render({ force: true });
+      }
+    });
+
+    // First render on load.
+    charCount.textContent = editor.value.length;
+    render();
+  </script>
+</body>
+</html>
