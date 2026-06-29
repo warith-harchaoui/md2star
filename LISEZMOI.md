@@ -1,5 +1,6 @@
 # md2star
 
+[![PyPI](https://img.shields.io/pypi/v/md2star.svg)](https://pypi.org/project/md2star/)
 [![CI](https://github.com/warith-harchaoui/md2star/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/md2star/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![Licence : BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)
@@ -54,9 +55,10 @@ de dépendances par fonctionnalité et le guide de dépannage.
 
 « Beta » signifie : le format fonctionne pour les cas courants,
 dispose d'une couverture de tests automatisée, et a déjà servi à
-produire de vrais documents. Les cas limites (tableaux complexes
-côté PDF, interactions de styles avec soffice) sont documentés en
-problèmes connus dans `CHANGELOG.md`.
+produire de vrais documents. Le bug de rendu des tableaux qui
+hantait la v1.x côté PDF (cellules empilées en colonne au lieu de
+former une grille) est corrigé en v2.0.0 — le template embarqué
+a été reconstruit sur une base Pandoc-propre.
 
 ## Exemples (les plus parlants)
 

@@ -1,5 +1,6 @@
 # md2star
 
+[![PyPI](https://img.shields.io/pypi/v/md2star.svg)](https://pypi.org/project/md2star/)
 [![CI](https://github.com/warith-harchaoui/md2star/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/md2star/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)
@@ -50,9 +51,10 @@ troubleshooting guide.
 | PDF    | Beta   | Pandoc + LibreOffice (`soffice`)    | `md2pdf  file.md`            |
 
 "Beta" means: the format works for the common cases, has automated
-test coverage, and has been used to ship real documents. Edge cases
-(complex tables in the PDF path, custom-style interactions with
-soffice) are documented as known issues in `CHANGELOG.md`.
+test coverage, and has been used to ship real documents. The
+table-render bug that haunted v1.x's PDF pipeline (cells leaking out
+of the table as a vertical paragraph dump) is fixed in v2.0.0 — the
+bundled template was rebuilt from a Pandoc-clean baseline.
 
 ## Examples (the punchy ones)
 
