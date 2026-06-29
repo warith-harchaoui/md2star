@@ -97,11 +97,12 @@ pytest test that skips when soffice is missing closes this gap.
 
 ### TR-3 — No structured logging
 
-The codebase routes through `osh.info` / `osh.warning` / `osh.error`
-/ `osh.debug` from `os-helper` in v2.0.0, but a handful of legacy
-`print(..., file=sys.stderr)` calls remain in `cli.py`. Audit
-post-release and migrate. A `--verbose` / `--quiet` toggle wired
-through `osh.verbosity()` would close this.
+The codebase still uses bare `print(..., file=sys.stderr)` for every
+warning / informational message (template fallback notices, lint
+hints, postprocess warnings). A stdlib `logging`-based migration
+(one `logger = logging.getLogger("md2star")` + a single
+`StreamHandler` in `cli.main` + `--verbose` / `--quiet` flags) is
+queued as a v2.1 P1 item. Stdlib-only so no new runtime dep.
 
 ---
 
@@ -183,10 +184,14 @@ short "EXAMPLES" section at the bottom of the help text.
 1. **BSD 3-Clause license**, replacing the Unlicense.
 2. **GUI removed** for a lean wheel; restoration planned via
    `md2star[gui]` extra in v2.1.
-3. **`os-helper`-based logging** across the package.
-4. **CHANGELOG / README / LISEZMOI / SECURITY / CONTRIBUTING /
+3. **NumPy-style docstrings + module Author block** on every
+   `md2star/*.py`.
+4. **Templates rebuilt** from a Pandoc-clean baseline — fixes the
+   v1.1.1 known issue where soffice rendered tables as a vertical
+   dump.
+5. **CHANGELOG / README / LISEZMOI / SECURITY / CONTRIBUTING /
    docs refresh** for the PyPI cut.
-5. **`make build` + `make publish` Makefile targets** so the
+6. **`make build` + `make publish` Makefile targets** so the
    release path is two commands away.
 
 ### P1 — next sprint (v2.1)
@@ -201,8 +206,9 @@ short "EXAMPLES" section at the bottom of the help text.
    CLI > config > defaults. `md2star config {path,show,init}`.
 5. **Typed exceptions across the CLI** — pretty-print at the top of
    `cli.main`, never raw stacktraces for known failure modes.
-6. **Replace remaining `print(..., file=sys.stderr)` with `osh.*`**
-   and wire `--verbose` / `--quiet` through `osh.verbosity()`.
+6. **Migrate remaining `print(..., file=sys.stderr)` to stdlib
+   `logging`** behind a single named logger, and wire `--verbose`
+   / `--quiet` flags through it.
 7. **Optional `--watch` flag** on `md2docx` / `md2pptx` / `md2pdf`
    that rebuilds on file save (stdlib polling).
 

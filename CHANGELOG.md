@@ -29,12 +29,8 @@ This is the PyPI debut. Two breaking changes drive the major bump.
   clone required for end users. `make install` from a clone still
   works for the development path.
 - **Style guide formalised in CONTRIBUTING.md.** NumPy docstrings,
-  module headers with an Author link, full type annotations, and
-  the `os-helper` (https://github.com/warith-harchaoui/os-helper)
-  logging convention (`osh.info` / `osh.warning` / `osh.error` /
-  `osh.debug`) are now enforced for new and modified code.
-  Wholesale migration of legacy `print(..., file=sys.stderr)`
-  calls is a v2.1 P1 item, gated on os-helper publishing to PyPI.
+  module headers with an Author link, and full type annotations
+  are now enforced for new and modified code.
 
 ### Changed
 - **Package description** mentions PDF alongside DOCX/PPTX.

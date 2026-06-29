@@ -27,9 +27,7 @@ detailed audit these priorities came from.
 - [x] **`docs/installation.md` + README + LISEZMOI + SECURITY +
       CONTRIBUTING refresh** for the PyPI cut.
 - [x] **Coding-style enforcement** — NumPy docstrings, module
-      headers with author link, full type annotations,
-      `os-helper`-based logging (`osh.info` / `osh.warning` /
-      `osh.error` / `osh.debug`) instead of bare `print()`.
+      headers with author link, full type annotations.
 
 ## P1 — next release (v2.1)
 
@@ -56,11 +54,11 @@ detailed audit these priorities came from.
 - [ ] **Typed exceptions wired into `cli.main`** — pretty-print at
       the top with a `hint` line and an exit-code map. No raw
       tracebacks for known failures.
-- [ ] **Structured `logging` via os-helper.** Replace remaining
-      direct `print(..., file=sys.stderr)` calls in the CLI core
-      with `osh.info` / `osh.warning` / `osh.error` / `osh.debug`,
-      with `--verbose` / `--quiet` toggles wired through
-      `osh.verbosity()`.
+- [ ] **Structured stdlib `logging` in the CLI core.** Replace
+      direct `print(..., file=sys.stderr)` calls with a single
+      named logger + `StreamHandler`, wire `--verbose` / `--quiet`
+      / `--log-level` through it. Stdlib only — no new runtime
+      deps.
 - [ ] **Optional `--watch` flag** on `md2docx` / `md2pptx` /
       `md2pdf` that rebuilds on file save (stdlib polling).
       Terminal alternative to the editor-loop iteration mode the
@@ -79,11 +77,12 @@ detailed audit these priorities came from.
       and get rendered artifacts attached to the workflow run.
 - [ ] **Zotero integration** — bib-in-repo workflow with a `--zotero
       {repo,local,bbt-api}` flag; cross-device by construction
-      (no extra sync infra). Detailed design in `.private/todo.md`.
+      (no extra sync infra).
 - [ ] **Git awareness inside the `[gui]` extra** — read-only sidebar
       with branch + uncommitted-changes count, then opt-in
-      commit-on-save, then opt-in push-on-save. Three-phase
-      rollout designed in `.private/GIT.md`.
+      commit-on-save, then opt-in push-on-save. Designed as a
+      three-phase rollout (read-only → commit-on-save → push-on-save)
+      so the failure modes can be isolated per phase.
 
 ## P3 — exploratory
 
@@ -95,8 +94,7 @@ detailed audit these priorities came from.
       parallel rendering and a progress bar.
 - [ ] **Community vs Premium edition split** — managed render
       endpoint at `render.md2star.app`, billing via Stripe, team
-      governance features. Detailed business-model study in
-      `.private/GIT.md`. **Not committed**; only if there's
+      governance features. **Not committed**; only if there's
       measurable demand AND the author wants to operate a SaaS.
 
 ## Non-goals

@@ -75,10 +75,8 @@ Before opening a PR:
 - [ ] All `.py` files you add or modify keep a module header docstring
       with an Author block linking to
       [Warith HARCHAOUI](https://linkedin.com/in/warith-harchaoui/),
-      NumPy-style docstrings on every public function/class, full type
-      annotations, and use `osh.info` / `osh.warning` / `osh.error`
-      / `osh.debug` from [os-helper](https://github.com/warith-harchaoui/os-helper)
-      instead of bare `print()` (docs are exempt).
+      NumPy-style docstrings on every public function/class, and full
+      type annotations.
 
 ## Conventions
 
@@ -90,6 +88,51 @@ Before opening a PR:
 - **Don't add features beyond the PR's stated scope.** A bug fix doesn't
   need surrounding cleanup; a refactor doesn't need to also touch the
   CHANGELOG format. Smaller diffs review faster.
+
+## Rebuilding the bundled templates
+
+`md2star/data/template.docx` and `md2star/data/template.pptx` ship the
+branded reference docs that every conversion picks up by default. They
+were rebuilt in v2.0.0 from a Pandoc-clean baseline so soffice renders
+tables as proper grids (vs the v1.x vertical-dump bug).
+
+To regenerate either from scratch:
+
+1. Dump Pandoc's built-in reference (has every named style /
+   layout):
+
+       pandoc --print-default-data-file reference.docx > /tmp/ref.docx
+       pandoc --print-default-data-file reference.pptx > /tmp/ref.pptx
+
+2. Write a comprehensive markdown source that exercises every
+   element you want to style. The two we used for v2.0 live in
+   `.private/template-source.md` (DOCX) and
+   `.private/template-pptx-source.md` (PPTX) — copy them as a
+   starting point.
+
+3. Render with the default ref:
+
+       pandoc src.md -o branded.docx --reference-doc=/tmp/ref.docx
+       pandoc src.md -o branded.pptx --reference-doc=/tmp/ref.pptx
+
+4. Open in Word / PowerPoint / Keynote / LibreOffice and brand:
+   fonts, colours, margins, logo in headers / slide masters,
+   etc. Don't rename existing styles — pandoc looks them up by
+   name (`Heading1`, `Title`, `Hyperlink`, ...). For PPTX, the
+   layout names must match the pandoc set: `Title Slide`,
+   `Section Header`, `Title and Content`, `Two Content`,
+   `Comparison`, `Content with Caption`, `Blank`, `Title Only`,
+   `Picture with Caption`.
+
+5. Save back to `md2star/data/template.docx` /
+   `md2star/data/template.pptx` and verify:
+
+       md2docx assets/docx/basic.md && md2pdf assets/docx/basic.md
+       md2pptx assets/pptx/example.md
+
+   The tables in the PDF should render as a proper grid (not a
+   column-major vertical dump); pandoc should not warn about
+   missing layout names on the PPTX.
 
 ## Reporting bugs
 
