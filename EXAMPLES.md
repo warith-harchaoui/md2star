@@ -148,3 +148,49 @@ lang: fr-FR
 date_format: "%A %e %B %Y"
 ---
 ```
+
+---
+
+## 9. Page Breaks (DOCX only)
+
+A horizontal rule (`---` on its own line) is rewritten into a hard
+page break in the DOCX output. The Lua filter only fires this
+mapping for the DOCX writer — PPTX keeps the default horizontal-rule
+rendering, because slide structure in PPTX already comes from `## `
+headings and overloading `---` there would conflict with intent.
+
+```markdown
+# Page 1
+
+The opening paragraph stays on page 1.
+
+---
+
+# Page 2
+
+After the `---`, Word starts a brand-new page automatically.
+
+---
+
+## Even a subsection works
+
+The page break fires for any standalone `---`, not only between
+`# Heading 1` blocks.
+```
+
+**Compilation:**
+```bash
+md2docx pagebreaks.md
+```
+
+> [!TIP]
+> The `---` must be on its **own line**, with blank lines above
+> and below — that's the standard Pandoc horizontal-rule syntax.
+> A `---` inside a YAML metadata block (the document's front
+> matter) is not affected: Pandoc consumes it as metadata
+> delimiter before the Lua filter ever sees it.
+
+> [!NOTE]
+> No equivalent in PPTX. To force a slide break, start a new
+> `## Heading` — that's how Pandoc maps Markdown to PowerPoint
+> slides.

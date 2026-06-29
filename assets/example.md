@@ -10,6 +10,8 @@ Elon Musk told Tim Dodd in July 2021 at Starbase about his five steps to design,
 
 The order is not trivial.
 
+---
+
 Musk himself recounts having done the sequence in reverse for the Model 3 battery packs: he automated a $2 million robotic cell to lay fiberglass mats, sped up the pace, simplified the subassembly—and then ended up asking what the mats were for. The answer, after an investigation: no one knew. The cell was scrapped; two million down the drain.
 
 This isn’t a story against automation. It’s a story against **reversing the sequence**.
