@@ -131,8 +131,6 @@ build/
 
 .ruff_cache/
 
-.github/
-
 .deepeval/
 
 .claude/
