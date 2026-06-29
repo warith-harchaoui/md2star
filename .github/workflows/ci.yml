@@ -167,7 +167,7 @@ jobs:
           /tmp/smoke-venv/bin/md2docx --help > /dev/null
           /tmp/smoke-venv/bin/md2pptx --help > /dev/null
           /tmp/smoke-venv/bin/md2pdf --help > /dev/null
-      - name: `python -m md2star` works
+      - name: "`python -m md2star` works"
         run: /tmp/smoke-venv/bin/python -m md2star --version
       - name: doctor JSON is well-shaped
         run: |
