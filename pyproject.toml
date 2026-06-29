@@ -30,7 +30,13 @@ classifiers = [
 ]
 dependencies = [
     "langdetect>=1.0.9,<2",
-    "Pillow>=9.0.0,<12",
+    # Pillow 12.x ships fixes for ~37 CVEs flagged on 11.3 by
+    # pip-audit (PYSEC-2026-165, CVE-2026-25990, CVE-2026-40192,
+    # CVE-2026-42309, CVE-2026-42310, ...). The upper bound is
+    # permissive (`<14`) so pip can pick the latest compatible
+    # release for the user's Python: 3.10 may land on the last
+    # 12.x that still supports it, 3.11+ on the newest line.
+    "Pillow>=10.0.0,<14",
 ]
 
 [project.optional-dependencies]
@@ -38,7 +44,9 @@ dev = [
     "pytest>=9.0.3,<10",
     "pytest-cov>=5.0,<7",   # coverage gate; see [tool.coverage.report] below
     "ruff>=0.6.0,<1",
-    "pypdf>=4.0,<6",   # PDF-text extraction in integration tests
+    # pypdf 6.13+ ships fixes for CVE-2026-48735 / 49460 / 49461 /
+    # 54530 / 54531 / GHSA-jm82-fx9c-mx94 flagged on the 5.x line.
+    "pypdf>=6.13,<7",   # PDF-text extraction in integration tests
 ]
 
 [project.scripts]
