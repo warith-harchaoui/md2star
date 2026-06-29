@@ -218,14 +218,18 @@ jobs:
           python -m pip install --upgrade pip pip-audit
           python -m pip install -e ".[dev]"
       # `--skip-editable` excludes md2star itself (installed editable
-      # above) from the audit so CI doesn't fail with
-      # "Dependency not found on PyPI" on every untagged commit —
-      # md2star is the package we're shipping, not a dep to audit.
-      # The runtime + dev dependencies (langdetect, Pillow, pytest,
-      # ruff, pypdf, pytest-cov) are still audited normally; `--strict`
-      # fails the gate on real CVEs in them.
+      # above) from the audit — md2star is the package we're
+      # shipping, not a dep to audit, and looking it up on PyPI
+      # would fail on every untagged commit. We deliberately omit
+      # `--strict` because it conflicts: with `--strict`, the
+      # "distribution marked as editable" notice that `--skip-editable`
+      # emits becomes a fatal error. The runtime + dev deps
+      # (langdetect, Pillow, pytest, ruff, pypdf, pytest-cov) are
+      # still audited normally; a real CVE in any of them surfaces
+      # in the job output and bumps the exit code via pip-audit's
+      # own non-strict behavior.
       - name: pip-audit
-        run: pip-audit --strict --skip-editable
+        run: pip-audit --skip-editable
 
   # ──────────────────────────────────────────────────────────────────
   # End-to-end conversion suite on the three target OSes. Installs
