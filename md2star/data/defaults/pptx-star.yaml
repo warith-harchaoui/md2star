@@ -1,0 +1,26 @@
+# md2star Pandoc defaults file
+#
+# Usage:
+#   pandoc --defaults pptx-star.yaml input.md -o output.pptx
+#
+# This defaults file is installed into your Pandoc user data directory:
+#   macOS/Linux: ~/.pandoc/defaults/pptx-star.yaml
+#   Windows:     %APPDATA%\pandoc\defaults\pptx-star.yaml
+#
+# It assumes the following files are installed alongside it:
+#   ../filters/md2star.lua
+#   ../template.pptx
+#
+# Output format: Microsoft PowerPoint (.pptx)
+to: pptx
+
+# Reference template controlling slide layouts, fonts, and branding
+reference-doc: template.pptx
+
+# Lua filters applied during conversion (title extraction, subtitle, etc.)
+filters:
+  - md2star.lua
+
+# External YAML file merged into Pandoc metadata (author, date_format, lang)
+metadata-files:
+  - metadata.yaml

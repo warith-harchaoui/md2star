@@ -1,0 +1,438 @@
+# md2star
+
+[![CI](https://github.com/warith-harchaoui/md2star/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/md2star/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)
+![Status: beta](https://img.shields.io/badge/status-beta-orange.svg)
+
+**Convert Markdown into professional DOCX, PPTX and PDF documents
+using Pandoc, branded templates, and practical automation.**
+
+![logo](assets/logo.png)
+
+`md2star` is a cross-platform command-line tool that wraps **Pandoc**
+with a curated styling layer. It handles the parts Pandoc alone gets
+wrong — list spacing, bibliography injection, LaTeX math, Mermaid
+diagrams, image embedding, table widths, PPTX slide isolation — so
+you stay in Markdown and never open Word to fix layout.
+
+## Why md2star?
+
+Pandoc by itself is powerful but unopinionated: it gives you a
+plain-vanilla DOCX with no template, no localized dates, no
+sensible table widths, no Mermaid rendering. The result needs hand-
+editing in Word before it's shareable.
+
+`md2star` sits between you and Pandoc. You write Markdown; you get a
+DOCX / PPTX / PDF that looks like a deliberate document.
+
+## Quick start
+
+```bash
+pipx install md2star          # one line, gets you the four CLIs
+md2star doctor                # confirm the environment is healthy
+md2docx report.md             # markdown → DOCX
+md2pptx slides.md             # markdown → PPTX
+md2pdf  paper.md              # markdown → PDF (needs LibreOffice)
+```
+
+See **[docs/installation.md](docs/installation.md)** for the full
+per-OS matrix (macOS / Ubuntu / Fedora / Arch / Windows), feature-
+by-feature dependency table, verification recipe, and the
+troubleshooting guide.
+
+## Supported outputs
+
+| Format | Status | Requires                            | CLI                          |
+|--------|--------|-------------------------------------|------------------------------|
+| DOCX   | Beta   | Pandoc                              | `md2docx file.md`            |
+| PPTX   | Beta   | Pandoc                              | `md2pptx file.md`            |
+| PDF    | Beta   | Pandoc + LibreOffice (`soffice`)    | `md2pdf  file.md`            |
+
+"Beta" means: the format works for the common cases, has automated
+test coverage, and has been used to ship real documents. Edge cases
+(complex tables in the PDF path, custom-style interactions with
+soffice) are documented as known issues in `CHANGELOG.md`.
+
+## Examples (the punchy ones)
+
+**1. Plain markdown → branded DOCX**
+
+```bash
+md2docx report.md --author "Ada Lovelace"
+```
+
+Gives you `report.docx` with the bundled template's fonts /
+margins / heading styles, the first `# Heading` lifted to the
+document title, today's date localized to the document language,
+and the author rendered in the subtitle.
+
+**2. Scientific paper with bibliography**
+
+```bash
+md2docx paper.md --author "Dr. Renegade Researcher" \
+                 --bib references.bib \
+                 --bibliography-name "References"
+```
+
+Pandoc's `citeproc` resolves `[@einstein1905]` references against the
+BibTeX file and appends a "References" section at the end.
+
+**3. PDF that matches the DOCX 1:1**
+
+```bash
+md2pdf paper.md --author "Dr. Renegade Researcher" --bib references.bib
+```
+
+Renders the DOCX through headless LibreOffice so the PDF inherits
+every md2star polish — branded template, Mermaid PNGs, table
+styles, localized dates.
+
+A self-contained cookbook with more recipes lives at
+**[EXAMPLES.md](EXAMPLES.md)**.
+
+---
+
+## Features
+
+- **Frictionless Conversion**: Write in Markdown with your favorite editor (`emacs`, `vim`, `Sublime Text`, `Obsidian`, …) and produce styled `.docx`, `.pptx`, and `.pdf` files.
+- **LaTeX Math Support**: Robust rendering of complex formulas in both documents and slides.
+- **Mermaid Diagrams**: ` ```mermaid ` blocks are rendered locally to PNG via the official Mermaid CLI and embedded automatically (requires Node.js ≥16).
+- **Intelligent Metadata**:
+  - Automatic **Title Extraction** from your first `# Heading`.
+  - Smart **Subtitle Injection** combining Author and localized Date.
+  - **Language Detection** via `langdetect`: date formats ship for 10 languages (English, French, Spanish, German, Italian, Portuguese, Dutch, Russian, Japanese, Chinese), with translated weekday/month names in 7 (fr, es, de, it, pt, nl, ru).
+- **Scientific-Ready**: Native **BibTeX** integration via Pandoc's `citeproc`, for documents with managed reference libraries.
+- **Automatic Cleanups** (quiet quality-of-life): remote `http(s)://` images downloaded for embedding (opt-in), HTML `<table>` blocks converted to Pandoc pipe-tables, and standalone images split off PPTX slides that contain a table (Pandoc otherwise drops them).
+- **Graceful Image Path Resolution**: URLs, absolute paths, and relative paths all "just work". Relative `![](images/foo.png)` references resolve against the input file's directory — so `md2docx subdir/file.md` from any cwd still finds the image. No need to `cd` into the source folder first.
+- **Zero-Config Branding**: drop a `template.docx` / `template.pptx` next to your Markdown and md2star will pick it up automatically as `--reference-doc`. If neither exists, the bundled default is used (offline-safe). Pass `--allow-remote-templates` to opt into the one-time `deraison.ai` fetch.
+- **Discoverable CLI**: every wrapper supports `--help` / `-h` and prints the md2star-specific flags followed by `pandoc --help`, so the full conversion surface is one command away. Try `md2docx --help`, `md2pptx --help`, or `md2star --help`.
+- **Opt-in LLM Linter**: a local Ollama pass fixes syntax-level mistakes (broken image links, unclosed fences, malformed pipes) **before** Pandoc parses the file. **Off by default** so conversions stay deterministic; pass `--lint` to opt in. The wrapper then spawns `ollama serve` and `ollama pull`s the default model on demand — `gemma4:e2b-mlx` on macOS (Apple-Silicon-optimized MLX build) or `gemma4:e2b` on Linux/Windows.
+- **AI-Drafted Alt-Text**: with `--lint`, every empty `![](src)` reference gets a vision-model-drafted alt text (same `gemma4:e2b` model, cached per image). Override the model with `MD2STAR_ALT_TEXT_MODEL`.
+- **Companion: AI Template Adapter**: when you need to brand a corporate
+  PPTX template that doesn't follow Pandoc's standard layout names, use the
+  sibling [md2star-adapt](https://github.com/warith-harchaoui/md2star-adapt)
+  tool to build a compatible reference doc from the template + its PDF
+  export.
+
+---
+
+## Installation
+
+`md2star` is a Python package distributed on PyPI. Installation via
+[pipx](https://pipx.pypa.io/) is recommended — it isolates the
+package in its own venv and puts the four CLIs (`md2star`,
+`md2docx`, `md2pptx`, `md2pdf`) on your PATH. Pandoc is the only
+hard system dependency; LibreOffice is needed for `md2pdf`; Node.js
+is needed for Mermaid; Ollama is needed for `--lint`.
+
+- macOS 🍎 : `brew install pandoc pipx`
+  (install `brew` thanks to [brew.sh](https://brew.sh/))
+
+  ```bash
+  pipx ensurepath          # one-time: add ~/.local/bin to PATH
+  pipx install md2star
+
+  # Optional: PDF output needs LibreOffice
+  brew install --cask libreoffice
+  # Optional: Mermaid diagrams need Node.js
+  brew install node
+  # Optional: --lint and AI alt-text need Ollama
+  brew install ollama
+  ```
+
+- Ubuntu 🐧 : `sudo apt-get install pandoc pipx`
+
+  ```bash
+  pipx ensurepath
+  pipx install md2star
+
+  # Optional dependencies
+  sudo apt-get install libreoffice nodejs
+  curl -fsSL https://ollama.com/install.sh | sh   # ollama
+  ```
+
+- Windows 🪟 : `winget install --id JohnMacFarlane.Pandoc`
+
+  ```powershell
+  python -m pip install --user pipx
+  python -m pipx ensurepath
+  pipx install md2star
+
+  # Optional dependencies
+  winget install --id TheDocumentFoundation.LibreOffice
+  winget install --id OpenJS.NodeJS
+  winget install --id Ollama.Ollama
+  ```
+
+### Install from source (development path)
+
+```bash
+git clone https://github.com/warith-harchaoui/md2star.git
+cd md2star
+make install            # checks deps, runs `pipx install .`
+```
+
+### Updating
+
+| Platform | Command |
+|----------|---------|
+| Any (PyPI install) | `pipx upgrade md2star` |
+| macOS / Linux from source | `make update` (git pull + `pipx install --force .`) |
+| Windows from source | `powershell -ExecutionPolicy Bypass -File scripts\update.ps1` |
+
+### For development
+
+```bash
+make dev                # creates .venv/ with `pip install -e .[dev]`
+source .venv/bin/activate
+python -m pytest tests/ -v
+```
+
+---
+
+## Usage Guide
+
+### 1. Simple Export
+```bash
+md2docx myfile.md
+```
+*Generates `myfile.docx`*.
+
+### 2. Scientific Paper (with Citations and Math Formulas)
+```bash
+md2docx work.md --author "Dr. Renegade Researcher" --bib references.bib --bibliography-name "References" --lang en-US
+```
+*Generates `work.docx`*.
+
+
+### 3. Presentation Slides
+```bash
+md2pptx slides.md --author "Speaker Name"
+```
+*Generates `slides.pptx`*.
+
+### 4. Branded Slides with Custom Template
+```bash
+md2pptx slides.md --reference-doc my_branded_template.pptx
+```
+
+### 5. PDF Output
+```bash
+md2pdf paper.md --author "Dr. Renegade Researcher" --bib references.bib
+```
+*Generates `paper.pdf`* (via headless LibreOffice; requires `soffice` on PATH).
+
+### 6. Opt-in LLM Syntax Lint
+
+```bash
+# default: lint is OFF, conversions are deterministic
+md2docx draft.md
+
+# opt in (spawns `ollama serve` and pulls the default model on demand)
+md2docx draft.md --lint
+
+# explicit no-op (same as the default; kept for unambiguous scripting)
+md2docx draft.md --no-lint
+```
+
+When you pass `--lint`, a local Ollama pass (text-only `gemma4:e2b-mlx` on macOS, `gemma4:e2b` on Linux/Windows) fixes broken image links, unclosed code fences, and malformed table pipes before Pandoc sees the file. The same `--lint` flag also fills empty `![](src)` alt text via a local vision model (override the model with `MD2STAR_ALT_TEXT_MODEL`). The wrapper starts the daemon on demand (`ollama serve`) and pulls the default model on first use (`ollama pull gemma4:e2b…`) — a one-time download, narrated on stderr. If `--lint` is passed but Ollama isn't installed, md2star prints a one-line warning on stderr and falls back to the original Markdown so the conversion still succeeds.
+
+---
+
+## Template Adapter (separate repo)
+
+For branded PPTX templates whose layout names don't follow Pandoc's
+defaults, use the companion tool
+[md2star-adapt](https://github.com/warith-harchaoui/md2star-adapt). It runs
+a three-phase pipeline — extract theme/logo/shapes from the PPTX, classify
+each layout with a local VLM (Ollama) against the matching PDF, then
+assemble a Pandoc-compatible reference doc — and produces a
+`branded_ref.pptx` you feed back to md2star via `--reference-doc`.
+
+It lives in its own repo because its dependencies (PyMuPDF, lxml,
+python-pptx, requests + a running Ollama VLM) are much heavier than the
+core conversion pipeline needs, and the correctness profile (VLM-driven)
+is different in kind from md2star's deterministic core.
+
+---
+
+## Examples
+
+A self-contained cookbook lives at **[EXAMPLES.md](EXAMPLES.md)**.
+
+You can also find more complex examples inside the [`tests/examples/`](tests/examples) directory. To natively batch-compile all documents inside the folder, execute the bash runner:
+```bash
+cd tests/examples
+./run.sh
+```
+
+Below are basic `.docx` and `.pptx` files generated dynamically during our test suite from sample Markdown files:
+
+**Word Documents Examples**
+- Basic Title [assets/docx/basic.docx](assets/docx/basic.docx) *(from [basic.md](assets/docx/basic.md))*
+  ```bash
+  md2docx assets/docx/basic.md
+  ```
+- Author Injected [assets/docx/with_author.docx](assets/docx/with_author.docx) *(from [with_author.md](assets/docx/with_author.md))*
+  ```bash
+  md2docx assets/docx/with_author.md --author "Tester"
+  ```
+- Bibliography [assets/docx/with_bib.docx](assets/docx/with_bib.docx) *(from [with_bib.md](assets/docx/with_bib.md))*
+  ```bash
+  md2docx assets/docx/with_bib.md --bib "assets/references.bib" --bibliography-name "References"
+  ```
+- Language & Date (French) [assets/docx/with_lang.docx](assets/docx/with_lang.docx) *(from [with_lang.md](assets/docx/with_lang.md))*
+  ```bash
+  md2docx assets/docx/with_lang.md --author "User"
+  ```
+- Math Formulas [assets/docx/math.docx](assets/docx/math.docx) *(from [math.md](assets/docx/math.md))*
+  ```bash
+  md2docx assets/docx/math.md
+  ```
+
+**PowerPoint Slides Examples**
+- Extensive Example [assets/pptx/example.pptx](assets/pptx/example.pptx) *(from [example.md](assets/pptx/example.md))*
+  ```bash
+  md2pptx assets/pptx/example.md
+  ```
+- Branded Template [tests/examples/branded_slides.pptx](tests/examples/branded_slides.pptx) *(from [branded_slides.md](tests/examples/branded_slides.md) + [Presentation1.pptx](tests/examples/Presentation1.pptx))*
+  ```bash
+  md2pptx tests/examples/branded_slides.md --reference-doc tests/examples/Presentation1.pptx
+  ```
+
+---
+
+## Quality & Reliability
+
+
+`md2star` is built for reliability. Our automated test suite covers:
+- [x] **Metadata accuracy**: title extraction, author injection, and subtitle composition.
+- [x] **Bibliography rendering**: citeproc pipeline against the curated [references.bib](assets/references.bib) snapshot.
+- [x] **Date localization**: French weekday/month rendering and date-format injection.
+- [x] **Preprocessor invariants**: list spacing, code-block preservation, HTML-table conversion, pipe-table separator normalization, image width injection, language detection, mermaid fallback, math-in-code unwrapping, PPTX slide isolation.
+- [x] **Offline-mode enforcement**: every network-touching phase refuses to run with `--offline`.
+
+### Integration tests (shell)
+
+Requires **Pandoc** installed:
+```bash
+make test
+```
+
+### Unit tests (Python)
+
+Requires **pytest** and your generated virtual environment:
+```bash
+python -m pytest tests/ -v
+```
+
+For more details, see [tests/README.md](tests/README.md).
+
+---
+
+## Customization
+
+### Metadata Defaults
+Adjust your global defaults in `md2star/data/metadata.yaml`:
+```yaml
+author: "Your Default Name"
+date_format: "%A, %e %B %Y"
+lang: "en-US"
+```
+
+Chosen conventions:
+
+  + `date_format` uses an `strftime()`-style format string.
+See [C/POSIX date-time formatting documentation](https://pubs.opengroup.org/onlinepubs/9699919799/functions/strftime.html) for more information.
+
+  + `lang` uses a BCP 47 language tag (e.g., `en-US`, `fr-FR`).
+See [RFC 5646 documentation](https://datatracker.ietf.org/doc/html/rfc5646) for more information.
+
+### Styling Templates
+
+Two levels of customization, from project-local to global:
+
+**Per-project** (recommended): drop a `template.docx` or `template.pptx` next to your Markdown file. Every md2star wrapper auto-detects it and passes it as `--reference-doc`. Commit it alongside your source so collaborators and CI produce identical branded output.
+
+If neither `template.docx` (preferred) nor the legacy `.pandoc-reference.docx` (still honored with a deprecation notice) exists, md2star falls back to the bundled default shipped inside the wheel. Pass `--allow-remote-templates` to opt into a one-time download from `deraison.ai`:
+
+```
+https://deraison.ai/template.docx
+https://deraison.ai/template.pptx
+```
+
+You then edit that local copy in Word / PowerPoint / LibreOffice and commit it whenever you're happy with the styling.
+
+**Global** (changes the bundled default for every project that hasn't pinned its own): modify the master templates in `md2star/data/` to change fonts, margins, or logos:
+- `md2star/data/template.docx`
+- `md2star/data/template.pptx`
+
+These are shipped inside the wheel and used as the offline fallback when no
+`template.{docx,pptx}` is found next to your Markdown. After editing, run
+`make reinstall` so the changes take effect for already-installed CLIs.
+
+---
+
+## Developer Documentation
+
+For contributors and advanced users interested in the inner workings of our Python logic and AST parsing hooks, check our internal API guides:
+- [Developer Guide](docs/developer_guide.md)
+
+---
+
+## Related Projects
+
+- **[Pandoc](https://pandoc.org/)**: The engine that makes document conversion universal.
+- **[MarkItDown](https://github.com/microsoft/markitdown)**: A utility by Microsoft that performs the reverse operation, converting Office documents and other formats *into* Markdown.
+- **[Obsidian](https://obsidian.md/)**: Our recommended environment for writing high-fidelity Markdown.
+- **[Zotero](https://www.zotero.org/)**: The ideal research companion for managing your `.bib` bibliographies.
+
+---
+
+## Troubleshooting
+
+| Issue | Solution |
+|------|----------|
+| `md2docx: command not found` | Add `~/.local/bin` to your PATH (`pipx ensurepath`) and restart your shell. |
+| `pandoc: command not found` | Install [Pandoc](https://pandoc.org/installing.html). |
+| `mmdc` errors / mermaid blocks left as code | Install Node.js ≥16 so `npx` can fetch `@mermaid-js/mermaid-cli`. |
+| Want the LLM linter to run | Pass `--lint`. It is off by default; with `--lint`, the wrapper starts the Ollama daemon and pulls the model on demand. Requires `ollama` on `PATH`; otherwise it silently no-ops. |
+| `--lint` printed a model-pull error | The first run downloads `gemma4:e2b-mlx` (macOS) or `gemma4:e2b` (Linux/Windows). If the pull failed (e.g. offline), md2star falls back to the original Markdown silently — fix your network and re-run. |
+| `md2pdf: LibreOffice not found` | Install LibreOffice (`brew install --cask libreoffice` / `apt-get install libreoffice` / winget). |
+| PPTX template layout warnings | Normal if a template lacks standard slide-layout names; output is still valid. |
+| Remote image not embedded | Pass `--allow-remote-images` to opt into the download (md2star is offline-by-default). |
+
+---
+
+## Security model & offline mode
+
+`md2star` is **offline by default**. No `.md` file you process can
+make a network call on its own. The `--allow-remote-images` /
+`--allow-remote-templates` flags opt in to specific network use
+cases; `--offline` makes the refusal explicit in scripts. Full
+security model: **[SECURITY.md](SECURITY.md)**.
+
+## Roadmap & status
+
+- See **[ROADMAP.md](ROADMAP.md)** for what's coming and what's
+  explicitly NOT in scope.
+- See **[CHANGELOG.md](CHANGELOG.md)** for the per-release diff.
+- See **[docs/audit.md](docs/audit.md)** for the latest honest
+  engineering audit (forces, risks, priorities).
+
+## Contributing
+
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the quickstart,
+project layout, and PR checklist. The TL;DR is `make dev` +
+`python -m pytest tests/` + `ruff check md2star/ tests/`.
+
+---
+
+## License
+
+Distributed under the **[BSD 3-Clause License](LICENSE)** — the same
+permissive license used by scikit-learn and other major scientific
+Python projects.
+
+**Author:** [Warith HARCHAOUI](https://www.linkedin.com/in/warith-harchaoui/)

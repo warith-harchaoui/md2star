@@ -1,0 +1,105 @@
+# Contributing to md2star
+
+Thanks for considering a contribution. md2star is a small project with one
+maintainer — small, well-scoped PRs are very welcome.
+
+## Quickstart
+
+```bash
+git clone https://github.com/warith-harchaoui/md2star.git
+cd md2star
+
+# Create a dev venv at .venv/ and install the package editable + dev extras.
+make dev
+
+# Activate it (or use ./.venv/bin/<tool> directly).
+source .venv/bin/activate
+
+# Run the test suite.
+python -m pytest tests/ -v
+
+# Run the integration suite (needs pandoc + the package installed).
+make test
+```
+
+`make dev` is the only setup step. `pyproject.toml` declares everything
+else (runtime deps, dev deps, console scripts, package data).
+
+## Project layout
+
+- `md2star/` — the importable Python package.
+  - `cli.py` — the single source of truth for `md2docx` / `md2pptx` /
+    `md2pdf` / `md2star`. There used to be a bash wrapper, a PowerShell
+    wrapper, and a `.cmd` wrapper. Don't bring them back.
+  - `doctor.py` — `md2star doctor` environment diagnostic.
+  - `preprocessing/` — the 12-phase Markdown preprocessor. The order
+    is in `pipeline.py` and is *load-bearing*; reordering needs a
+    correctness argument.
+  - `postprocess.py` — DOCX-only zip rewrite that re-injects the
+    `MyTable` / `MyTableSmall` styles Pandoc strips. Idempotent.
+  - `cache.py` — XDG cache dir resolver. Override with
+    `MD2STAR_CACHE_DIR` (tests do this via the autouse fixture).
+  - `data/` — bundled package data (Lua filter, defaults YAMLs,
+    templates, Mermaid config).
+- `tests/` — pytest suite. `conftest.py` redirects the cache to `tmp_path`
+  for every test. The three files:
+  - `test_preprocessing.py` (~80 tests) — the line-level pipeline.
+  - `test_postprocess.py` — DOCX style re-injection.
+  - `test_lua_filter.py` — the Pandoc Lua filter (drives pandoc as a
+    subprocess; skipped when pandoc is not on PATH).
+- `scripts/` — `install.sh` / `uninstall.sh` / `test.sh` and their
+  PowerShell siblings. Thin wrappers; the real install path is `pipx`.
+- `docs/developer_guide.md` — architectural notes (the why, not the what).
+
+## PR checklist
+
+Before opening a PR:
+
+- [ ] `python -m pytest tests/ -v` is green.
+- [ ] `ruff check md2star/ tests/` is clean (no new warnings).
+- [ ] If you touched the Lua filter, the integration suite still passes
+      (`make test`) — pytest alone does not cover end-to-end DOCX output.
+- [ ] If you added a new preprocessing phase, register its name in
+      `md2star.preprocessing.pipeline.PHASES` so `--skip-phase` knows
+      about it, and add at least one test in `tests/test_preprocessing.py`
+      covering the skip behavior.
+- [ ] No new files in `tests/examples/` larger than ~50 kB unless you've
+      checked it in via Git LFS. The regenerable demos live there as
+      Markdown only; their `.docx` / `.pptx` outputs are produced by
+      `tests/examples/run.sh` and intentionally not committed.
+- [ ] If you added user-facing flags, update both `README.md` and
+      `LISEZMOI.md` (and `CHANGELOG.md`'s `## [Unreleased]` section).
+- [ ] If you added a network-touching code path, route it through the
+      `--offline` / `--allow-remote-*` gates (see `md2star/cli.py`
+      and the contract in `SECURITY.md`).
+- [ ] All `.py` files you add or modify keep a module header docstring
+      with an Author block linking to
+      [Warith HARCHAOUI](https://linkedin.com/in/warith-harchaoui/),
+      NumPy-style docstrings on every public function/class, full type
+      annotations, and use `osh.info` / `osh.warning` / `osh.error`
+      / `osh.debug` from [os-helper](https://github.com/warith-harchaoui/os-helper)
+      instead of bare `print()` (docs are exempt).
+
+## Conventions
+
+- **One short docstring per module / public function.** The codebase
+  already documents *why*, not *what* — keep that bias.
+- **No backward-compat shims** unless you can name a real outside caller
+  that relies on the old API. This is a small, single-author project; do
+  the rename and update the imports.
+- **Don't add features beyond the PR's stated scope.** A bug fix doesn't
+  need surrounding cleanup; a refactor doesn't need to also touch the
+  CHANGELOG format. Smaller diffs review faster.
+
+## Reporting bugs
+
+Open an issue with: the input Markdown that triggers the bug, the exact
+command you ran, the full stderr output, and your `md2star --version` /
+`pandoc --version`. If the bug is in DOCX/PPTX output, attaching the
+produced file is much faster than a long description.
+
+## Licence
+
+By contributing you agree your contributions are released under the
+**BSD 3-Clause License**, the same licence as the rest of the project.
+See [LICENSE](LICENSE) for the full text.
