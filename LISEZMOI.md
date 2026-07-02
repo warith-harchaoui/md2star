@@ -20,6 +20,19 @@ d'images, largeurs de colonnes, isolation de diapositives PPTX — pour
 vous garder dans Markdown sans ouvrir Word pour corriger la mise en
 page.
 
+
+*Mode DOCX — algorithme d'ingénierie de Musk rendu en direct:*
+
+| Light | Dark |
+|---|---|
+| ![md2star DOCX — light](assets/light.png) | ![md2star DOCX — dark](assets/dark.png) |
+
+*PPTX mode — Pitch Deck de Kawasaki 10/20/30:*
+
+| Light | Dark |
+|---|---|
+| ![md2star PPTX — light](assets/pptx-light.png) | ![md2star PPTX — dark](assets/pptx-dark.png) |
+
 ## Pourquoi md2star ?
 
 Pandoc seul est puissant mais agnostique : il produit un DOCX brut,

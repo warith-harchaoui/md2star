@@ -17,6 +17,19 @@ wrong — list spacing, bibliography injection, LaTeX math, Mermaid
 diagrams, image embedding, table widths, PPTX slide isolation — so
 you stay in Markdown and never open Word to fix layout.
 
+*DOCX mode — Musk's five-step engineering algorithm rendered live:*
+
+| Light | Dark |
+|---|---|
+| ![md2star DOCX — light](assets/light.png) | ![md2star DOCX — dark](assets/dark.png) |
+
+*PPTX mode — Kawasaki's 10/20/30 pitch deck rendered live:*
+
+| Light | Dark |
+|---|---|
+| ![md2star PPTX — light](assets/pptx-light.png) | ![md2star PPTX — dark](assets/pptx-dark.png) |
+
+
 ## Why md2star?
 
 Pandoc by itself is powerful but unopinionated: it gives you a
