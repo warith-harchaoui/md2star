@@ -130,14 +130,19 @@ def _find_soffice() -> str | None:
     return str(mac_path) if mac_path.is_file() else None
 
 
-def render_markdown_to_pdf(markdown: str) -> bytes:
+def render_markdown_to_pdf(markdown: str, fmt: str = "docx") -> bytes:
     """
-    Run ``md2docx`` then ``soffice --convert-to pdf`` on a snippet.
+    Run ``md2{docx,pptx}`` then ``soffice --convert-to pdf`` on a snippet.
 
     Parameters
     ----------
     markdown : str
         Raw Markdown source from the editor.
+    fmt : str, optional
+        ``"docx"`` (default) uses the md2docx pipeline — the Musk
+        engineering-algorithm doc is the canonical example.
+        ``"pptx"`` uses md2pptx — the Kawasaki 10/20/30 deck is the
+        canonical example. Any other value raises.
 
     Returns
     -------
@@ -149,39 +154,43 @@ def render_markdown_to_pdf(markdown: str) -> bytes:
     RuntimeError
         Any pipeline step failed. The message names which step.
     """
+    if fmt not in ("docx", "pptx"):
+        raise RuntimeError(f"unsupported format: {fmt!r} (want docx or pptx)")
+
     # Each render gets its own subdir so the temp files do not pile up
     # between requests. ``WORK_DIR`` itself is shared.
     job_dir: Path = Path(tempfile.mkdtemp(prefix="job-", dir=WORK_DIR))
     md_path: Path = job_dir / "input.md"
     md_path.write_text(markdown, encoding="utf-8")
 
-    # ── md2docx ────────────────────────────────────────────────────
-    docx_path: Path = job_dir / "input.docx"
+    # ── md2{docx,pptx} ─────────────────────────────────────────────
+    out_path: Path = job_dir / f"input.{fmt}"
     md_proc = subprocess.run(
         [
             sys.executable, "-m", "md2star", "convert",
-            "--format", "docx",
+            "--format", fmt,
             "--input", str(md_path),
-            "--output", str(docx_path),
+            "--output", str(out_path),
         ],
         cwd=PROJECT_DIR,
         capture_output=True,
         text=True,
         timeout=60,
     )
-    if md_proc.returncode != 0 or not docx_path.is_file():
-        # Fall back to the user's $PATH ``md2docx`` if ``-m md2star``
-        # is not reachable (e.g. the project has not been pip-
-        # installed). This keeps the editor usable on a fresh clone.
-        md2docx_bin: str | None = shutil.which("md2docx")
-        if md2docx_bin is not None:
+    if md_proc.returncode != 0 or not out_path.is_file():
+        # Fall back to the user's $PATH ``md2docx`` / ``md2pptx`` if
+        # ``-m md2star`` is not reachable (e.g. the project has not
+        # been pip-installed). Keeps the editor usable on a fresh
+        # clone.
+        alt_bin: str | None = shutil.which(f"md2{fmt}")
+        if alt_bin is not None:
             md_proc = subprocess.run(
-                [md2docx_bin, str(md_path), "-o", str(docx_path)],
+                [alt_bin, str(md_path), "-o", str(out_path)],
                 capture_output=True, text=True, timeout=60,
             )
-        if md_proc.returncode != 0 or not docx_path.is_file():
+        if md_proc.returncode != 0 or not out_path.is_file():
             raise RuntimeError(
-                "md2docx step failed:\n"
+                f"md2{fmt} step failed:\n"
                 + (md_proc.stderr or md_proc.stdout or "").strip()
             )
 
@@ -195,14 +204,18 @@ def render_markdown_to_pdf(markdown: str) -> bytes:
         )
 
     profile_dir: Path = job_dir / "soffice-profile"
+    # Impress (soffice on a .pptx) needs an explicit impress filter to
+    # produce a PDF instead of the default Draw output on some
+    # LibreOffice builds. Writer (.docx) just needs ``pdf``.
+    convert_target: str = "pdf:impress_pdf_Export" if fmt == "pptx" else "pdf"
     soffice_proc = subprocess.run(
         [
             soffice,
             "--headless",
             f"-env:UserInstallation=file://{profile_dir}",
-            "--convert-to", "pdf",
+            "--convert-to", convert_target,
             "--outdir", str(job_dir),
-            str(docx_path),
+            str(out_path),
         ],
         capture_output=True,
         text=True,
@@ -231,9 +244,15 @@ class OverleafHandler(http.server.BaseHTTPRequestHandler):
 
     # ── GET ────────────────────────────────────────────────────────
     def do_GET(self) -> None:  # noqa: N802 (HTTP method case)
-        if self.path in ("/", "/index.html"):
+        # Strip the query string so ``/?theme=dark`` still resolves
+        # to the editor page (used both by the theme URL param and by
+        # headless-Chrome screenshot passes).
+        path: str = self.path.split("?", 1)[0]
+        if path in ("/", "/index.html"):
             self._serve_file(STATIC_DIR / "index.html", "text/html; charset=utf-8")
-        elif self.path == "/healthz":
+        elif path == "/example":
+            self._serve_example()
+        elif path == "/healthz":
             soffice: str | None = _find_soffice()
             payload: dict[str, Any] = {
                 "ok": soffice is not None,
@@ -246,7 +265,9 @@ class OverleafHandler(http.server.BaseHTTPRequestHandler):
 
     # ── POST ───────────────────────────────────────────────────────
     def do_POST(self) -> None:  # noqa: N802
-        if self.path != "/render":
+        # Route on the path minus its query string, same as GET.
+        path: str = self.path.split("?", 1)[0]
+        if path != "/render":
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         length: int = int(self.headers.get("Content-Length", "0"))
@@ -260,9 +281,14 @@ class OverleafHandler(http.server.BaseHTTPRequestHandler):
         if not markdown:
             self._send_json(HTTPStatus.BAD_REQUEST, {"error": "missing 'markdown'"})
             return
+        fmt: str = (payload.get("format") or "docx").lower()
+        if fmt not in ("docx", "pptx"):
+            self._send_json(HTTPStatus.BAD_REQUEST,
+                            {"error": f"unsupported format: {fmt}"})
+            return
         try:
             with RENDER_LOCK:
-                pdf: bytes = render_markdown_to_pdf(markdown)
+                pdf: bytes = render_markdown_to_pdf(markdown, fmt=fmt)
         except RuntimeError as exc:
             self._send_json(HTTPStatus.UNPROCESSABLE_ENTITY, {"error": str(exc)})
             return
@@ -284,6 +310,40 @@ class OverleafHandler(http.server.BaseHTTPRequestHandler):
         self.end_headers()
 
     # ── helpers ───────────────────────────────────────────────────
+    def _serve_example(self) -> None:
+        """Serve the bundled sample doc.
+
+        Query string ``?kind=pptx`` selects Kawasaki's 10/20/30 pitch
+        deck (``example_pptx.md``); anything else (default) returns
+        Musk's five-step engineering algorithm (``example.md``).
+
+        Each file is resolved from the installed ``md2star`` package
+        first (so the server works from any checkout), then from the
+        sibling ``md2star/data/`` folder inside the repo, then from
+        ``assets/``. The first match wins.
+        """
+        from urllib.parse import parse_qs, urlparse
+        qs: dict[str, list[str]] = parse_qs(urlparse(self.path).query)
+        kind: str = (qs.get("kind") or ["docx"])[0].lower()
+        stem: str = "example_pptx" if kind == "pptx" else "example"
+
+        candidates: list[Path] = []
+        try:
+            import md2star  # type: ignore
+            pkg_dir: Path = Path(md2star.__file__).resolve().parent
+            candidates.append(pkg_dir / "data" / f"{stem}.md")
+        except Exception:
+            pass
+        candidates += [
+            PROJECT_DIR / "md2star" / "data" / f"{stem}.md",
+            PROJECT_DIR / "assets" / f"{stem}.md",
+        ]
+        for cand in candidates:
+            if cand.is_file():
+                self._serve_file(cand, "text/markdown; charset=utf-8")
+                return
+        self.send_error(HTTPStatus.NOT_FOUND, f"{stem}.md not bundled")
+
     def _serve_file(self, path: Path, content_type: str) -> None:
         try:
             body: bytes = path.read_bytes()

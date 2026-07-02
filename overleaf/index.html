@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>md2star · split-pane editor</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
@@ -23,6 +24,34 @@
       outline: 2px solid #007AFF;
       outline-offset: 2px;
     }
+    /* PDF pages stacked vertically in the preview canvas container. */
+    #pdf-pages {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      padding: 16px;
+    }
+    #pdf-pages canvas {
+      background: #ffffff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+      max-width: 100%;
+      height: auto;
+    }
+    html.dark #pdf-pages canvas,
+    html[data-color-scheme="dark"] #pdf-pages canvas {
+      box-shadow: 0 1px 3px rgba(0,0,0,0.6), 0 1px 2px rgba(0,0,0,0.4);
+    }
+    /* Draggable split-pane divider — thin, invisible unless hovered. */
+    #splitter {
+      width: 6px;
+      cursor: col-resize;
+      background: transparent;
+      flex: 0 0 6px;
+    }
+    #splitter:hover, #splitter[data-dragging="true"] {
+      background: rgba(0, 122, 255, 0.25);
+    }
     /* Reduced-motion guard — kill the transitions for vestibular safety. */
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; animation: none !important; }
@@ -35,11 +64,68 @@
   <header class="sticky top-0 z-10 border-b border-neutral-200 bg-white/80 px-4 py-3 backdrop-blur dark:border-neutral-800 dark:bg-black/80">
     <div class="mx-auto flex max-w-6xl items-center gap-3">
       <h1 class="font-mono text-[15px] font-semibold">md2star · editor</h1>
+
+      <div id="format-toggle" role="tablist" aria-label="Output format"
+           class="ml-auto inline-flex overflow-hidden rounded-full border border-neutral-200
+                  bg-white text-[13px] dark:border-neutral-800 dark:bg-neutral-900">
+        <button type="button" role="tab" data-format="docx" aria-selected="true"
+                class="format-btn min-h-11 px-4 font-medium
+                       focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#007AFF]">
+          DOCX
+        </button>
+        <button type="button" role="tab" data-format="pptx" aria-selected="false"
+                class="format-btn min-h-11 px-4 font-medium
+                       focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#007AFF]">
+          PPTX
+        </button>
+      </div>
+
       <span id="status" role="status" aria-live="polite"
-            class="ml-auto inline-flex min-h-11 items-center rounded-full px-3 text-[13px]
+            class="inline-flex min-h-11 items-center rounded-full px-3 text-[13px]
                    bg-neutral-100 text-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
         idle
       </span>
+
+      <button id="theme-toggle" type="button"
+              aria-label="Toggle color scheme"
+              title="Toggle color scheme"
+              class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-full
+                     border border-neutral-200 bg-white px-3 text-[13px] font-medium text-neutral-700
+                     hover:bg-neutral-100
+                     focus-visible:ring-2 focus-visible:ring-[#007AFF] focus-visible:ring-offset-2
+                     dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200
+                     dark:hover:bg-neutral-800">
+        <svg id="theme-icon-light" width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+        </svg>
+        <svg id="theme-icon-dark" width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true" class="hidden">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+        <span id="theme-label" class="ml-2 hidden md:inline">Light</span>
+      </button>
+
+      <button id="download-btn" type="button" disabled
+              class="inline-flex min-h-11 items-center justify-center gap-2 rounded-full
+                     border border-neutral-200 bg-white px-4 py-2 text-[14px] font-medium text-neutral-700
+                     hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-50
+                     focus-visible:ring-2 focus-visible:ring-[#007AFF] focus-visible:ring-offset-2
+                     dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-200
+                     dark:hover:bg-neutral-800">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/>
+          <line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download PDF
+      </button>
+
       <button id="render-btn" type="button"
               class="inline-flex min-h-11 items-center justify-center rounded-full
                      bg-[#007AFF] px-4 py-2 text-[14px] font-semibold text-white
@@ -55,14 +141,15 @@
   <main class="mx-auto flex h-[calc(100vh-65px)] max-w-[1600px] gap-0">
 
     <!-- Left: source ─────────────────────────────────────────── -->
-    <section aria-labelledby="src-heading"
-             class="flex w-1/2 flex-col border-r border-neutral-200 dark:border-neutral-800">
+    <section id="pane-left" aria-labelledby="src-heading"
+             style="width: 50%;"
+             class="flex flex-col border-r border-neutral-200 dark:border-neutral-800">
       <div class="flex items-center gap-2 border-b border-neutral-200 px-4 py-2
                   text-[12px] uppercase tracking-wider text-neutral-500
                   dark:border-neutral-800 dark:text-neutral-400">
         <span id="src-heading">Markdown source</span>
         <span class="ml-auto font-mono">
-          <span id="char-count">0</span> chars
+          <span id="char-count">0</span> chars · <span id="line-count">0</span> lines
         </span>
       </div>
       <label for="editor" class="sr-only">Markdown source editor</label>
@@ -96,21 +183,27 @@ def hello(name: str) -> str:
 </textarea>
     </section>
 
+    <!-- Divider (draggable) ─────────────────────────────────── -->
+    <div id="splitter" role="separator"
+         aria-orientation="vertical"
+         aria-label="Resize panes"
+         tabindex="0"></div>
+
     <!-- Right: preview ──────────────────────────────────────── -->
-    <section aria-labelledby="prev-heading" class="flex w-1/2 flex-col">
+    <section id="pane-right" aria-labelledby="prev-heading"
+             style="width: calc(50% - 6px);"
+             class="flex flex-col">
       <div class="flex items-center gap-2 border-b border-neutral-200 px-4 py-2
                   text-[12px] uppercase tracking-wider text-neutral-500
                   dark:border-neutral-800 dark:text-neutral-400">
         <span id="prev-heading">PDF preview</span>
         <span id="prev-meta" class="ml-auto font-mono"></span>
       </div>
-      <div class="relative flex-1 bg-neutral-100 dark:bg-neutral-900">
-        <iframe id="preview" title="PDF preview"
-                class="absolute inset-0 h-full w-full border-0"
-                src="about:blank"></iframe>
+      <div class="relative flex-1 overflow-auto bg-neutral-100 dark:bg-neutral-900">
+        <div id="pdf-pages" aria-label="Rendered PDF pages"></div>
         <!-- Empty-state overlay; hidden once the first render completes. -->
         <div id="empty"
-             class="absolute inset-0 grid place-items-center p-8 text-center text-neutral-500
+             class="pointer-events-none absolute inset-0 grid place-items-center p-8 text-center text-neutral-500
                     dark:text-neutral-400">
           <div class="max-w-md space-y-2">
             <p class="text-[15px] font-medium">No PDF yet.</p>
@@ -126,7 +219,7 @@ def hello(name: str) -> str:
              channels (icon + text), so red is reinforcement, not the
              only cue. -->
         <div id="error" role="alert" aria-live="assertive"
-             class="absolute inset-x-0 bottom-0 hidden m-4 max-h-1/2 overflow-auto
+             class="pointer-events-auto absolute inset-x-0 bottom-0 hidden m-4 max-h-1/2 overflow-auto
                     rounded-2xl border border-red-300 bg-red-50 p-4 text-[13px] text-red-900
                     shadow-lg dark:border-red-700 dark:bg-red-950 dark:text-red-100">
           <h2 class="flex items-center gap-2 font-semibold">
@@ -147,31 +240,232 @@ def hello(name: str) -> str:
   </main>
 
   <script type="module">
+    // ── pdf.js — client-side PDF rasterisation ──────────────────
+    // Renders each page into a <canvas>. Works in real browsers AND
+    // in headless Chrome (which ships without the built-in PDF
+    // viewer plugin — the previous ``<iframe src=blob:>`` approach
+    // showed a black rectangle there).
+    const PDFJS_VERSION = '4.10.38';
+    const PDFJS_BASE = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_VERSION}/build`;
+    const pdfjsLib = await import(`${PDFJS_BASE}/pdf.min.mjs`);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = `${PDFJS_BASE}/pdf.worker.min.mjs`;
+
     // ── DOM handles ─────────────────────────────────────────────
     const editor      = document.getElementById('editor');
     const status      = document.getElementById('status');
     const charCount   = document.getElementById('char-count');
-    const preview     = document.getElementById('preview');
+    const lineCount   = document.getElementById('line-count');
+    const pagesEl     = document.getElementById('pdf-pages');
     const previewMeta = document.getElementById('prev-meta');
     const empty       = document.getElementById('empty');
     const errorEl     = document.getElementById('error');
     const errorBody   = document.getElementById('error-body');
     const renderBtn   = document.getElementById('render-btn');
+    const downloadBtn = document.getElementById('download-btn');
+    const themeBtn    = document.getElementById('theme-toggle');
+    const themeLight  = document.getElementById('theme-icon-light');
+    const themeDark   = document.getElementById('theme-icon-dark');
+    const themeLabel  = document.getElementById('theme-label');
+    const splitter    = document.getElementById('splitter');
+    const paneLeft    = document.getElementById('pane-left');
+    const paneRight   = document.getElementById('pane-right');
 
-    // We keep the last blob URL around so we can revoke it on the next
-    // render — browsers leak otherwise. ``null`` means no PDF yet.
-    let lastBlobUrl = null;
+    // ── State ───────────────────────────────────────────────────
+    let lastPdfBlob = null;
     let lastRenderedSource = null;
     let inFlight = false;
     let debounceTimer = null;
+    let currentFormat = 'docx';   // 'docx' | 'pptx'
 
     const DEBOUNCE_MS = 500;
+    // Source is keyed per format so switching DOCX ↔ PPTX doesn't
+    // clobber the other's draft.
+    const LS_KEY_SRC    = (fmt) => `md2star:editor:src:${fmt}`;
+    const LS_KEY_FMT    = 'md2star:editor:format';
+    const LS_KEY_THEME  = 'md2star:editor:theme';
+    const LS_KEY_SPLIT  = 'md2star:editor:split';
+
+    const formatBtns = Array.from(document.querySelectorAll('.format-btn'));
+
+    // ── Theme handling ──────────────────────────────────────────
+    // Precedence: ?theme=… > localStorage > OS media query. Toggle
+    // cycles light → dark → auto → light, with icon + label
+    // reflecting the *current effective* mode.
+    function applyTheme(mode) {
+      const root = document.documentElement;
+      if (mode === 'auto') {
+        root.removeAttribute('data-color-scheme');
+        root.classList.remove('dark');
+        const prefersDark = matchMedia('(prefers-color-scheme: dark)').matches;
+        if (prefersDark) root.classList.add('dark');
+      } else if (mode === 'dark') {
+        root.setAttribute('data-color-scheme', 'dark');
+        root.classList.add('dark');
+      } else {
+        root.setAttribute('data-color-scheme', 'light');
+        root.classList.remove('dark');
+      }
+      const isDark = root.classList.contains('dark');
+      themeLight.classList.toggle('hidden', isDark);
+      themeDark.classList.toggle('hidden', !isDark);
+      themeLabel.textContent = mode.charAt(0).toUpperCase() + mode.slice(1);
+      themeBtn.setAttribute('aria-label',
+        `Toggle color scheme (current: ${mode})`);
+    }
+
+    function currentTheme() {
+      return document.documentElement.dataset.themeMode || 'auto';
+    }
+
+    function setTheme(mode) {
+      document.documentElement.dataset.themeMode = mode;
+      applyTheme(mode);
+      try { localStorage.setItem(LS_KEY_THEME, mode); } catch {}
+    }
+
+    // ── Format toggle ──────────────────────────────────────────
+    function applyFormatUI(fmt) {
+      formatBtns.forEach(b => {
+        const active = b.dataset.format === fmt;
+        b.setAttribute('aria-selected', active ? 'true' : 'false');
+        b.className = [
+          'format-btn min-h-11 px-4 font-medium',
+          'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#007AFF]',
+          active
+            ? 'bg-[#007AFF] text-white'
+            : 'text-neutral-700 hover:bg-neutral-100 dark:text-neutral-200 dark:hover:bg-neutral-800',
+        ].join(' ');
+      });
+    }
+
+    async function loadExampleFor(fmt) {
+      const kind = fmt === 'pptx' ? 'pptx' : 'docx';
+      try {
+        const res = await fetch(`/example?kind=${kind}`, { cache: 'no-store' });
+        if (res.ok) {
+          const text = await res.text();
+          if (text.trim()) return text;
+        }
+      } catch {}
+      return null;
+    }
+
+    async function switchFormat(fmt, { force = false } = {}) {
+      if (!['docx', 'pptx'].includes(fmt)) return;
+      // Save the current buffer under its own key before swapping.
+      try { localStorage.setItem(LS_KEY_SRC(currentFormat), editor.value); } catch {}
+      currentFormat = fmt;
+      applyFormatUI(fmt);
+      try { localStorage.setItem(LS_KEY_FMT, fmt); } catch {}
+      // Load the new format's autosave or fall back to /example.
+      let next = null;
+      try { next = localStorage.getItem(LS_KEY_SRC(fmt)); } catch {}
+      if (force || !next || !next.trim()) {
+        next = (await loadExampleFor(fmt)) || next || '';
+      }
+      editor.value = next;
+      updateCounters();
+      lastRenderedSource = null;
+      lastPdfBlob = null;
+      downloadBtn.disabled = true;
+      pagesEl.replaceChildren();
+      empty.classList.remove('hidden');
+      previewMeta.textContent = '';
+      render({ force: true });
+    }
+
+    // ── Bootstrap: source + theme + split ratio + format ───────
+    // Precedence for the editor's initial value:
+    //   1. ``?example=1`` URL param → always fetch /example (used
+    //      by the gallery screenshot pass to force a clean shot).
+    //   2. Per-format localStorage snapshot from a prior session.
+    //   3. GET /example?kind=<format> (Musk for docx, Kawasaki for
+    //      pptx — the docs bundled with the CLI).
+    //   4. The static placeholder that ships in the textarea.
+    const urlParams = new URLSearchParams(location.search);
+    const wantsExample = urlParams.get('example') === '1';
+    const urlFormat = urlParams.get('format');
+    let bootFormat = 'docx';
+    try {
+      bootFormat = urlFormat
+        || localStorage.getItem(LS_KEY_FMT)
+        || 'docx';
+    } catch {}
+    if (!['docx', 'pptx'].includes(bootFormat)) bootFormat = 'docx';
+    currentFormat = bootFormat;
+    applyFormatUI(currentFormat);
+
+    let savedSrc = null;
+    try { savedSrc = localStorage.getItem(LS_KEY_SRC(currentFormat)); } catch {}
+    if (!wantsExample && savedSrc && savedSrc.trim()) {
+      editor.value = savedSrc;
+    } else {
+      const text = await loadExampleFor(currentFormat);
+      if (text) editor.value = text;
+    }
+
+    formatBtns.forEach(b => {
+      b.addEventListener('click', () => switchFormat(b.dataset.format));
+    });
+    try {
+      const urlTheme = new URLSearchParams(location.search).get('theme');
+      const savedTheme = localStorage.getItem(LS_KEY_THEME);
+      setTheme(urlTheme || savedTheme || 'auto');
+    } catch { setTheme('auto'); }
+    try {
+      const savedSplit = parseFloat(localStorage.getItem(LS_KEY_SPLIT) || '0.5');
+      if (savedSplit > 0.15 && savedSplit < 0.85) applySplit(savedSplit);
+    } catch {}
+
+    // React to OS-level scheme changes when we're in "auto".
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      const mode = document.documentElement.dataset.themeMode || 'auto';
+      if (mode === 'auto') applyTheme('auto');
+    });
+
+    themeBtn.addEventListener('click', () => {
+      const cur = document.documentElement.dataset.themeMode || 'auto';
+      const next = { light: 'dark', dark: 'auto', auto: 'light' }[cur] || 'light';
+      setTheme(next);
+    });
+
+    // ── Split-pane resize ──────────────────────────────────────
+    function applySplit(ratio) {
+      const clamped = Math.max(0.15, Math.min(0.85, ratio));
+      paneLeft.style.width  = `${clamped * 100}%`;
+      paneRight.style.width = `calc(${(1 - clamped) * 100}% - 6px)`;
+    }
+    let dragging = false;
+    splitter.addEventListener('pointerdown', (ev) => {
+      dragging = true;
+      splitter.setAttribute('data-dragging', 'true');
+      splitter.setPointerCapture(ev.pointerId);
+    });
+    splitter.addEventListener('pointermove', (ev) => {
+      if (!dragging) return;
+      const main = splitter.parentElement.getBoundingClientRect();
+      const ratio = (ev.clientX - main.left) / main.width;
+      applySplit(ratio);
+    });
+    splitter.addEventListener('pointerup', (ev) => {
+      dragging = false;
+      splitter.removeAttribute('data-dragging');
+      const main = splitter.parentElement.getBoundingClientRect();
+      const ratio = (ev.clientX - main.left) / main.width;
+      try { localStorage.setItem(LS_KEY_SPLIT, String(ratio)); } catch {}
+    });
+    // Keyboard resize: ArrowLeft/Right moves the split in 5 % steps.
+    splitter.addEventListener('keydown', (ev) => {
+      const cur = paneLeft.getBoundingClientRect().width /
+                  splitter.parentElement.getBoundingClientRect().width;
+      if (ev.key === 'ArrowLeft')  { applySplit(cur - 0.05); ev.preventDefault(); }
+      if (ev.key === 'ArrowRight') { applySplit(cur + 0.05); ev.preventDefault(); }
+    });
 
     // ── Render orchestration ────────────────────────────────────
     async function render({ force = false } = {}) {
       const md = editor.value;
       if (!md.trim()) return;
-      // Skip identical re-renders to avoid spamming soffice.
       if (!force && md === lastRenderedSource) return;
       if (inFlight) return;
 
@@ -184,7 +478,7 @@ def hello(name: str) -> str:
         const res = await fetch('/render', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ markdown: md }),
+          body: JSON.stringify({ markdown: md, format: currentFormat }),
         });
         if (!res.ok) {
           // Try to surface the server's JSON error body.
@@ -199,13 +493,14 @@ def hello(name: str) -> str:
           throw new Error(msg);
         }
         const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
-        lastBlobUrl = url;
-        preview.src = url;
+        lastPdfBlob = blob;
+        const numPages = await renderPdf(blob);
         empty.classList.add('hidden');
+        downloadBtn.disabled = false;
         const ms = Math.round(performance.now() - started);
-        previewMeta.textContent = `${(blob.size / 1024).toFixed(1)} KB · ${ms} ms`;
+        previewMeta.textContent =
+          `${numPages} page${numPages === 1 ? '' : 's'} · ` +
+          `${(blob.size / 1024).toFixed(1)} KB · ${ms} ms`;
         lastRenderedSource = md;
         setStatus('ready', 'idle');
       } catch (err) {
@@ -215,6 +510,38 @@ def hello(name: str) -> str:
       } finally {
         inFlight = false;
       }
+    }
+
+    async function renderPdf(blob) {
+      const buf = await blob.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      pagesEl.replaceChildren();
+      // Guard against dpr=0 in some headless environments; also cap
+      // to 2 so very-high-DPI machines don't allocate 4× texture RAM.
+      const dpr = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
+      // Fit the PDF to the container width so long pages don't force
+      // horizontal scroll on narrow splits.
+      const containerWidth = pagesEl.clientWidth - 32; // padding
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const baseViewport = page.getViewport({ scale: 1 });
+        const fitScale = containerWidth > 0
+          ? containerWidth / baseViewport.width
+          : 1;
+        const viewport = page.getViewport({ scale: fitScale * dpr });
+        const canvas = document.createElement('canvas');
+        canvas.width  = viewport.width;
+        canvas.height = viewport.height;
+        canvas.style.width  = `${viewport.width  / dpr}px`;
+        canvas.style.height = `${viewport.height / dpr}px`;
+        canvas.setAttribute('aria-label', `Page ${i} of ${pdf.numPages}`);
+        pagesEl.appendChild(canvas);
+        await page.render({
+          canvasContext: canvas.getContext('2d'),
+          viewport,
+        }).promise;
+      }
+      return pdf.numPages;
     }
 
     function setStatus(text, kind) {
@@ -228,14 +555,34 @@ def hello(name: str) -> str:
         error:     'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-200',
       }[kind] || '';
       status.className = [
-        'ml-auto inline-flex min-h-11 items-center rounded-full px-3 text-[13px]',
+        'inline-flex min-h-11 items-center rounded-full px-3 text-[13px]',
         palette,
       ].join(' ');
     }
 
+    // ── Download ──────────────────────────────────────────────
+    downloadBtn.addEventListener('click', () => {
+      if (!lastPdfBlob) return;
+      const url = URL.createObjectURL(lastPdfBlob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'md2star-preview.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoke on the next tick so the browser has time to consume it.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+
     // ── Inputs ─────────────────────────────────────────────────
+    function updateCounters() {
+      const val = editor.value;
+      charCount.textContent = val.length;
+      lineCount.textContent = val ? val.split('\n').length : 0;
+    }
     editor.addEventListener('input', () => {
-      charCount.textContent = editor.value.length;
+      updateCounters();
+      try { localStorage.setItem(LS_KEY_SRC(currentFormat), editor.value); } catch {}
       clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => render(), DEBOUNCE_MS);
     });
@@ -246,10 +593,18 @@ def hello(name: str) -> str:
         ev.preventDefault();
         render({ force: true });
       }
+      // Cmd/Ctrl + S → download the current PDF (no accidental
+      // browser "save page" dialog).
+      if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === 's') {
+        if (lastPdfBlob) {
+          ev.preventDefault();
+          downloadBtn.click();
+        }
+      }
     });
 
     // First render on load.
-    charCount.textContent = editor.value.length;
+    updateCounters();
     render();
   </script>
 </body>
