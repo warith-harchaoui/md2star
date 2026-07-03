@@ -403,7 +403,7 @@ def normalize_pipe_tables(
     min_total: int = 90,
     min_per_col: int = 3,
     min_weight_per_col: int = 15,
-    single_word_slack: float = 1.30,
+    single_word_slack: float = 1.7,
 ) -> str:
     """Rewrite pipe-table separators with proportional dashes; ensure trailing blank line.
 
