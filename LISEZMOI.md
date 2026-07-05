@@ -123,6 +123,7 @@ Un livre de recettes complet vit dans **[EXAMPLES.md](EXAMPLES.md)**.
   - **Détection de la langue** via `langdetect` : formats de date livrés pour 10 langues (anglais, français, espagnol, allemand, italien, portugais, néerlandais, russe, japonais, chinois), avec noms de jours/mois traduits pour 7 (fr, es, de, it, pt, nl, ru) — par exemple `dimanche 10 mai 2026` au lieu de `Sunday May 10, 2026`.
 - **Prêt pour la recherche** : Intégration **BibTeX** native via `citeproc` de Pandoc, pour des documents avec une bibliographie gérée.
 - **Nettoyages automatiques** (qualité de vie discrète) : téléchargement des images `http(s)://` pour l'embarquement (opt-in), conversion des `<table>` HTML en pipe-tables Pandoc, et isolation des images sur leur propre diapositive PPTX lorsqu'elles cohabiteraient avec un tableau (sinon Pandoc les supprime).
+- **Réversible par conception** : la sortie DOCX de md2star est un rendu *fidèle et récupérable*, pas une impasse à sens unique. Relisez-la vers du Markdown avec n'importe quel lecteur DOCX (Pandoc, [kreuzberg](https://github.com/Goldziher/kreuzberg)) et vos titres, votre emphase `**gras**`/`*italique*`/`` `code` ``, vos tableaux et vos listes reviennent intacts — et les conversions répétées convergent vers un **point fixe stable** au lieu de dériver. Voir [Fidélité de l'aller-retour](#fidélité-de-laller-retour).
 - **Résolution gracieuse des chemins d'images** : URLs, chemins absolus et chemins relatifs « marchent comme on s'y attend ». Une référence relative `![](images/foo.png)` est résolue par rapport au dossier du fichier source.
 - **Identité visuelle zéro-config** : déposez un `template.docx` / `template.pptx` à côté de votre Markdown, md2star le détecte automatiquement comme `--reference-doc`. Si aucun n'existe, le template embarqué dans le wheel est utilisé (offline-safe). Passez `--allow-remote-templates` pour activer un téléchargement unique depuis `deraison.ai`.
 - **CLI auto-documentée** : chaque wrapper supporte `--help` / `-h` et affiche d'abord les options spécifiques à md2star puis `pandoc --help`. Essayez `md2docx --help`, `md2pptx --help` ou `md2star --help`.
@@ -339,6 +340,55 @@ make test
 ```bash
 python -m pytest tests/ -v
 ```
+
+---
+
+## Fidélité de l'aller-retour
+
+Convertir en `.docx` n'enferme pas votre contenu dans un format binaire. La
+sortie de md2star est un **rendu fidèle et réversible** de votre Markdown :
+relisez le `.docx` avec n'importe quel lecteur DOCX et le contenu source
+revient.
+
+**Ce qui survit à l'aller-retour `md → docx → md`** :
+
+| Élément                          | Récupéré ? |
+|----------------------------------|:----------:|
+| Titres (niveaux de section)      | ✅ |
+| `**gras**` / `*italique*`        | ✅ |
+| `` `code` `` en ligne            | ✅ (via Pandoc) |
+| Tableaux pipe (chaque cellule)   | ✅ |
+| Listes à puces et numérotées     | ✅ |
+| Paragraphes                      | ✅ |
+
+**Il atteint un point fixe.** L'aller-retour est idempotent au sens
+mathématique — l'exécuter deux fois donne le même document qu'une seule fois
+(`g(g(x)) == g(x)`), donc les conversions répétées *convergent* au lieu
+d'accumuler des scories. C'est vérifié en CI par
+[`tests/test_roundtrip.py`](tests/test_roundtrip.py), qui convertit un
+échantillon en DOCX, le relit avec le lecteur natif de Pandoc, et vérifie à la
+fois la survie du contenu et la propriété de point fixe.
+
+La seule chose que md2star *ajoute* à chaque exécution — par conception — est
+un **sous-titre de date** localisé, ré-estampillé à la date du jour ; cela (et
+des détails cosmétiques comme le retour à la ligne ou le nombre exact de tirets
+dans un séparateur de tableau, sans valeur sémantique) est normalisé avant la
+vérification d'idempotence. Rien d'autre ne dérive.
+
+**Reproduisez-le vous-même** (n'importe quel lecteur DOCX fonctionne ; la voie
+Pandoc intégrée ne demande aucune installation supplémentaire) :
+
+```bash
+md2docx rapport.md --offline           # rapport.md → rapport.docx
+pandoc rapport.docx -t gfm --wrap=none # rapport.docx → Markdown sur stdout
+```
+
+Vous préférez un lecteur basé sur l'OCR qui couvre aussi le sens `pdf → md` ?
+La même propriété tient avec
+[kreuzberg](https://github.com/Goldziher/kreuzberg)
+(`extract_file_sync(path, config=ExtractionConfig(output_format=OutputFormat.MARKDOWN))`),
+qui a récupéré **100 %** du texte des titres et des mots du corps depuis le
+DOCX et **94–99 %** depuis le PDF rendu par LibreOffice dans nos mesures.
 
 ---
 

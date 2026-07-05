@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "md2star"
-version = "2.1.0"
+version = "2.2.0"
 description = "Markdown → DOCX/PPTX/PDF bridge built on Pandoc, with curated styling, Mermaid rendering, and bibliography support."
 readme = "README.md"
 license = "BSD-3-Clause"

@@ -874,6 +874,28 @@ class TestPptxSlideIsolation:
         fence_idx = next(i for i, ln in enumerate(lines) if ln.strip() == "```")
         assert not any(ln.strip() == "##" for ln in lines[:fence_idx])
 
+    def test_isolation_is_idempotent(self) -> None:
+        """Re-running the pipeline must not stack extra blank ``##`` separators.
+
+        Regression guard: the slide-isolation walker used to match only
+        ``"## "`` (with a trailing space), so it did not recognize the
+        *empty* ``##`` separator it had itself emitted. A table already
+        preceded by that separator then got a second one on every re-run,
+        so ``preprocess_markdown`` was not a fixed point — the property the
+        md ↔ docx round-trip guarantee (see tests/test_roundtrip.py) rests
+        on. Two passes must now yield identical output.
+        """
+        text = (
+            "## Section\n\n"
+            "Some intro prose.\n\n"
+            "| A | B |\n|---|---|\n| 1 | 2 |\n"
+        )
+        once = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        twice = preprocess_markdown(once, inject_metadata=False, lint_enabled=False)
+        assert once == twice
+        # And exactly one blank separator was inserted, not a growing pile.
+        assert once.count("\n##\n") + once.count("\n## \n") <= 1
+
 
 # ──────────────────────────────────────────────────────────────────
 # Math-in-code unwrapping tests

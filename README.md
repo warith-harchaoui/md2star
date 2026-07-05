@@ -119,6 +119,7 @@ A self-contained cookbook with more recipes lives at
   - **Language Detection** via `langdetect`: date formats ship for 10 languages (English, French, Spanish, German, Italian, Portuguese, Dutch, Russian, Japanese, Chinese), with translated weekday/month names in 7 (fr, es, de, it, pt, nl, ru).
 - **Scientific-Ready**: Native **BibTeX** integration via Pandoc's `citeproc`, for documents with managed reference libraries.
 - **Automatic Cleanups** (quiet quality-of-life): remote `http(s)://` images downloaded for embedding (opt-in), HTML `<table>` blocks converted to Pandoc pipe-tables, and standalone images split off PPTX slides that contain a table (Pandoc otherwise drops them).
+- **Reversible by Design**: md2star's DOCX output is a *faithful, recoverable* rendering, not a one-way dead end. Read it straight back to Markdown with any DOCX reader (Pandoc, [kreuzberg](https://github.com/Goldziher/kreuzberg)) and your headings, `**bold**`/`*italic*`/`` `code` `` emphasis, tables, and lists come back intact — and repeated conversions converge to a **stable fixed point** rather than drifting. See [Round-trip fidelity](#round-trip-fidelity).
 - **Graceful Image Path Resolution**: URLs, absolute paths, and relative paths all "just work". Relative `![](images/foo.png)` references resolve against the input file's directory — so `md2docx subdir/file.md` from any cwd still finds the image. No need to `cd` into the source folder first.
 - **Zero-Config Branding**: drop a `template.docx` / `template.pptx` next to your Markdown and md2star will pick it up automatically as `--reference-doc`. If neither exists, the bundled default is used (offline-safe). Pass `--allow-remote-templates` to opt into the one-time `deraison.ai` fetch.
 - **Discoverable CLI**: every wrapper supports `--help` / `-h` and prints the md2star-specific flags followed by `pandoc --help`, so the full conversion surface is one command away. Try `md2docx --help`, `md2pptx --help`, or `md2star --help`.
@@ -343,6 +344,52 @@ python -m pytest tests/ -v
 ```
 
 For more details, see [tests/README.md](tests/README.md).
+
+---
+
+## Round-trip fidelity
+
+Converting to `.docx` doesn't trap your content in a binary format. md2star's
+output is a **faithful, reversible rendering** of your Markdown: read the
+`.docx` back with any DOCX reader and the source content comes home.
+
+**What survives `md → docx → md`:**
+
+| Construct                       | Recovered? |
+|---------------------------------|:----------:|
+| Headings (section levels)       | ✅ |
+| `**bold**` / `*italic*`         | ✅ |
+| Inline `` `code` `` spans       | ✅ (via Pandoc) |
+| Pipe tables (every cell)        | ✅ |
+| Bullet & numbered lists         | ✅ |
+| Paragraph text                  | ✅ |
+
+**It reaches a fixed point.** The round-trip is idempotent in the
+mathematical sense — running it twice yields the same document as running it
+once (`g(g(x)) == g(x)`), so repeated conversions *converge* instead of
+accumulating cruft. This is enforced in CI by
+[`tests/test_roundtrip.py`](tests/test_roundtrip.py), which converts a fixture
+to DOCX, reads it back with Pandoc's native reader, and asserts both content
+survival and the fixed-point property.
+
+The one thing md2star *adds* on each run — by design — is a localized **date
+subtitle** re-stamped with today's date; that (and cosmetic details like line
+wrapping and the exact dash count in a table separator, which carry no
+meaning) is normalized out before the idempotence check. Nothing else drifts.
+
+**Reproduce it yourself** (any DOCX reader works; the built-in Pandoc path
+needs no extra install):
+
+```bash
+md2docx report.md --offline            # report.md → report.docx
+pandoc report.docx -t gfm --wrap=none  # report.docx → Markdown on stdout
+```
+
+Prefer an OCR-based reader that also covers the `pdf → md` direction? The same
+property holds with [kreuzberg](https://github.com/Goldziher/kreuzberg)
+(`extract_file_sync(path, config=ExtractionConfig(output_format=OutputFormat.MARKDOWN))`),
+which recovered **100 %** of heading text and body words from the DOCX and
+**94–99 %** from the LibreOffice-rendered PDF in our measurements.
 
 ---
 

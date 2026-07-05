@@ -12,6 +12,7 @@ artifacts never escape the test directory.
 | `test_preprocessing.py` | The 11-phase Markdown preprocessor (~80 tests): list spacing, HTML→pipe-table conversion, mermaid rendering, math unwrap, image normalization, PPTX slide isolation, `--skip-phase`, language detection. |
 | `test_lua_filter.py` | The Pandoc Lua filter — drives `pandoc --lua-filter` against fixture Markdown. Skipped when pandoc is not on PATH. |
 | `test_postprocess.py` | `inject_table_styles` round-trips against a synthesised DOCX zip. |
+| `test_roundtrip.py` | `md → docx → md` fidelity: content survival + the fixed-point (`g(g(x)) == g(x)`) idempotence guarantee, read back with Pandoc's native DOCX reader. Skipped when pandoc is not on PATH. |
 | `examples/` | Multi-page demo `.md` sources (Markdown only — the corresponding `.docx` / `.pptx` outputs are regenerable via `run.sh` and not committed). |
 
 ## Running

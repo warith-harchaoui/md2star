@@ -364,7 +364,16 @@ def isolate_images_for_pptx(content: str) -> str:
             out.append(line)
             continue
 
-        if stripped.startswith("## ") or stripped.startswith("# "):
+        # A new slide boundary — a top-level (``#``) or slide (``##``)
+        # heading. We match the *empty* forms (``#`` / ``##`` with no
+        # text) too: those are the blank separators this very function
+        # emits below, and an earlier check of ``startswith("## ")``
+        # (note the trailing space) failed to recognize them. That made
+        # the pass non-idempotent — every re-conversion of an already
+        # slide-isolated document stacked another blank ``##`` in front
+        # of each table/image. Treating our own separator as the heading
+        # it is keeps ``preprocess_markdown`` a fixed point.
+        if stripped in ("#", "##") or stripped.startswith(("## ", "# ")):
             section_has_table = False
             section_has_content = False
             in_table = False

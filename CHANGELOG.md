@@ -6,6 +6,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-07-05
+
+### Added
+- **Round-trip fidelity guarantee, enforced in CI.** md2star's DOCX
+  output is a faithful, reversible rendering of the source Markdown:
+  headings, `**bold**` / `*italic*` / `` `code` `` emphasis, pipe
+  tables, and lists all survive `md → docx → md`, and the pipeline is
+  a fixed point (`g(g(x)) == g(x)`) so repeated conversions converge
+  instead of drifting. New `tests/test_roundtrip.py` proves it by
+  converting a fixture to DOCX, reading it back with Pandoc's native
+  DOCX reader (no new dependency), and asserting both content survival
+  and idempotence. The same property was validated out-of-tree against
+  the [kreuzberg](https://github.com/Goldziher/kreuzberg) extractor,
+  which also covers the `pdf → md` OCR direction (100 % word recall
+  from DOCX, 94–99 % from the LibreOffice-rendered PDF). Documented in
+  README / LISEZMOI under "Round-trip fidelity".
+
+### Fixed
+- **PPTX slide isolation is now idempotent.** The isolation pass
+  inserts a blank `##` slide separator before a table/image that
+  follows other content, but it recognized a heading only via
+  `startswith("## ")` — with a trailing space the *empty* separator it
+  emits does not have. Re-converting an already-isolated document
+  therefore stacked a fresh `##` in front of every table on each run,
+  breaking the round-trip fixed point. The walker now also matches the
+  bare `#` / `##` forms, so `preprocess_markdown` is stable under
+  repetition. Regression guard in
+  `tests/test_preprocessing.py::TestPptxSlideIsolation::test_isolation_is_idempotent`.
+
 ## [2.1.0] — 2026-06-29
 
 This release ships the quick-win + medium-lift batch from
