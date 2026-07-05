@@ -39,3 +39,4 @@ make test                   # or: bash scripts/test.sh
 - **Bibliography**: citeproc against the curated `assets/references.bib`.
 - **Date localisation**: French weekday / month rendering via the in-filter dictionary.
 - **Preprocessor invariants**: list spacing, fenced-block preservation, HTML-table conversion, pipe-table separator scaling, image width injection, language detection, mermaid fallback, math-in-code unwrap, PPTX slide isolation, `--skip-phase` plumbing.
+- **Round-trip fidelity**: `md → docx → md` preserves headings, emphasis, tables, and lists, and the pipeline is a fixed point (`g(g(x)) == g(x)`).
