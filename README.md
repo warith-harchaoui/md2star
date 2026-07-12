@@ -50,6 +50,17 @@ md2pptx slides.md             # markdown → PPTX
 md2pdf  paper.md              # markdown → PDF (needs LibreOffice)
 ```
 
+Prefer HTTP or MCP? md2star also ships a FastAPI surface and an MCP server:
+
+```bash
+pip install 'md2star[api,mcp]'
+
+md2star-api                    # FastAPI: /health, /doctor, /convert — docs at /docs
+curl -F 'file=@report.md' 'http://localhost:8000/convert?fmt=docx' -o report.docx
+
+md2star-mcp                    # same tools (doctor / convert) over MCP
+```
+
 See **[docs/installation.md](docs/installation.md)** for the full
 per-OS matrix (macOS / Ubuntu / Fedora / Arch / Windows), feature-
 by-feature dependency table, verification recipe, and the

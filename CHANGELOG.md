@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-07-12
+
+### Added
+- **FastAPI HTTP surface** (`md2star.api`, `[api]` extra) — the converter as
+  HTTP endpoints: `GET /health`, `GET /doctor` (the same environment diagnostic
+  as `md2star doctor --json` — which tools are present, per-format feature
+  status), and `POST /convert` (upload a `.md`, pick `docx`/`pptx`/`pdf`, stream
+  back the compiled document; optional `author`/`lang`/`date` metadata). Missing
+  system tools surface as `503`, invalid input as `400`. Run it with `md2star-api`
+  or `uvicorn md2star.api:app`.
+- **MCP surface** (`md2star.mcp`, `[mcp]` extra) — exposes the FastAPI app as MCP
+  tools via `fastapi-mcp`, so an MCP client (Claude Desktop, agents, IDEs) can
+  call `doctor` / `convert` as first-class tools. Run it with `md2star-mcp` or
+  `python -m md2star.mcp`.
+- Smoke + round-trip tests for both surfaces (`tests/test_api.py`,
+  `tests/test_mcp.py`); the `/convert` round-trip renders a real DOCX when Pandoc
+  is present. CI installs the `api`/`mcp` deps via `[dev]` so they run on every
+  push. The `api.py`/`mcp.py` modules are excluded from the coverage gate (their
+  happy path needs a running server + Pandoc), mirroring `__main__.py`.
+
 ## [2.2.0] — 2026-07-05
 
 ### Added
