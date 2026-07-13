@@ -196,6 +196,8 @@ def preprocess_markdown(
         Hard-disable every network-touching phase. Takes precedence
         over ``allow_remote_images`` and ``lint_enabled``.
     """
+    # The effective skip-set is the union of the CLI flag and any
+    # ``md2star_skip:`` list in the document's own front-matter.
     skip = set(_normalize_skip(skip_phases))
     skip |= _normalize_skip(_extract_skip_from_metadata(content))
 
@@ -204,6 +206,8 @@ def preprocess_markdown(
     if offline:
         skip |= {"lint", "remote_images"}
 
+    # Phase 1 — optional LLM syntax lint, first so later regex passes operate
+    # on already-corrected Markdown.
     if lint_enabled and "lint" not in skip:
         content = lint_with_llm(content)
 

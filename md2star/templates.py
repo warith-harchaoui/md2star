@@ -61,6 +61,8 @@ def _bundled_template_path(fmt: str) -> Path:
     table).
     """
     from importlib import resources
+    # joinpath one component at a time: Python 3.10's MultiplexedPath only
+    # accepts a single arg per call, so the multi-arg form would break there.
     ref = resources.files("md2star.data")
     for part in (f"template.{fmt}",):
         ref = ref.joinpath(part)
@@ -74,6 +76,9 @@ def _candidates(input_dir: Path, fmt: str) -> list[tuple[str, Path]]:
     so the user-visible "which template wins" answer stays in sync
     with the actual conversion path.
     """
+    # Highest priority first: a template committed next to the source, then the
+    # legacy dotfile name, then the XDG cache, then the always-present bundled
+    # copy. _first_existing() walks this list top-down to pick the winner.
     return [
         ("per-project (template)", input_dir / f"template.{fmt}"),
         ("per-project (legacy)",   input_dir / f".pandoc-reference.{fmt}"),
@@ -84,6 +89,7 @@ def _candidates(input_dir: Path, fmt: str) -> list[tuple[str, Path]]:
 
 def _first_existing(candidates: list[tuple[str, Path]]) -> tuple[str, Path] | None:
     """Return the first ``(label, path)`` whose path exists, or ``None``."""
+    # Order is priority (see _candidates): the first hit is the active template.
     for label, path in candidates:
         if path.exists():
             return label, path
@@ -102,15 +108,21 @@ def cmd_list(args: argparse.Namespace) -> int:
     each existing file with ``✓``, marks the first existing one
     as the active winner with ``→``. No conversion, no network.
     """
+    # Resolve relative to --dir if given, else the current directory — the same
+    # anchor the real conversion uses for per-project templates.
     input_dir = Path(args.dir).expanduser().resolve() if args.dir else Path.cwd()
 
+    # This is program OUTPUT (a report the user reads), so it goes to stdout via
+    # print, not the logging surface.
     print(f"md2star templates — resolution from {input_dir}\n")
     for fmt in ("docx", "pptx"):
         print(f"  [{fmt}]")
         candidates = _candidates(input_dir, fmt)
+        # The winner is the first existing candidate; mark it distinctly below.
         winner = _first_existing(candidates)
         winner_path = winner[1] if winner else None
         for label, path in candidates:
+            # → active winner, ✓ present-but-shadowed, space = absent.
             mark = "→" if path == winner_path else ("✓" if path.exists() else " ")
             size_note = ""
             if path.exists():

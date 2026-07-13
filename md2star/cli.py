@@ -265,7 +265,9 @@ def _run_pandoc(
     extra_args: list[str],
 ) -> int:
     """Spawn pandoc with our Lua filter + metadata, return its exit code."""
+    # _require_pandoc raises MissingDependencyError (→ exit 127) if absent.
     pandoc = _require_pandoc()
+    # Base invocation: our bundled Lua filter + metadata defaults are always on.
     cmd = [
         pandoc,
         str(preprocessed_md),
@@ -278,6 +280,7 @@ def _run_pandoc(
         # The user can override us via --reference-doc in extra_args; pandoc
         # uses the last value, so we always put ours first.
         cmd.extend(["--reference-doc", str(reference_doc)])
+    # Verbatim pandoc pass-through comes last so users can override anything.
     cmd.extend(extra_args)
     return subprocess.call(cmd)
 
@@ -305,11 +308,13 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
         ),
         add_help=True,
     )
+    # ── Positional + output ───────────────────────────────────────────
     parser.add_argument("input", help="Path to the input .md file.")
     parser.add_argument(
         "-o", "--output",
         help="Output path (default: <input>.<fmt>).",
     )
+    # ── Document metadata forwarded to Pandoc ─────────────────────────
     parser.add_argument("--author", help="Document author (Pandoc metadata).")
     parser.add_argument(
         "--bib",
@@ -333,6 +338,7 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
               "date via the language-aware `date_format` metadata."),
     )
 
+    # ── Lint toggle (mutually exclusive so --lint/--no-lint can't clash) ─
     lint_group = parser.add_mutually_exclusive_group()
     lint_group.add_argument(
         "--lint", action="store_true",
@@ -449,7 +455,9 @@ def _convert(fmt: str, argv: list[str]) -> int:
     else:
         docx_path = out_path
 
-    # Build the pandoc metadata / flag list from our high-level options.
+    # Build the pandoc metadata / flag list from our high-level options. Each
+    # is appended only when supplied, so unset options fall back to the
+    # template / metadata.yaml defaults rather than injecting empty values.
     if args.author:
         pandoc_extras.extend(["--metadata", f"author={args.author}"])
     if args.lang:
@@ -705,27 +713,35 @@ def main(argv: list[str] | None = None) -> int:
     # configure() is idempotent, so that just updates the level.
     configure_logging()
 
+    # No args or -h → help; -V → version. Both are terminal, exit 0.
     if not argv or argv[0] in ("-h", "--help"):
         _print_top_level_help()
         return 0
     if argv[0] in ("-V", "--version"):
+        # Version is program output → stdout via print, not the logger.
         print(f"md2star {__version__}")
         return 0
 
+    # First token selects the subcommand; the rest is its own argv.
     sub, rest = argv[0], argv[1:]
 
+    # Conversion subcommands delegate to the same entry points the standalone
+    # md2docx/md2pptx/md2pdf console scripts use — one code path, no drift.
     if sub == "docx":
         return md2docx_main(rest)
     if sub == "pptx":
         return md2pptx_main(rest)
     if sub == "pdf":
         return md2pdf_main(rest)
+    # Non-conversion subcommands import lazily so a plain ``md2docx`` run never
+    # pays the import cost of doctor/templates it won't use.
     if sub == "doctor":
         from .doctor import main as doctor_main
         return doctor_main(rest)
     if sub == "templates":
         from .templates import main as templates_main
         return templates_main(rest)
+    # cache-dir / clear-cache both emit their result to stdout (script-friendly).
     if sub == "cache-dir":
         print(cache_dir())
         return 0

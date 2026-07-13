@@ -55,6 +55,8 @@ _CODE_SPAN_RE = re.compile(r"`([^`\n]+)`")
 
 def _strip_math_delims(chunk: str) -> str:
     """Return the content of a math chunk with its delimiters removed."""
+    # Check the 2-char display delimiters ($$, \[) before the 1-char inline
+    # ones so ``$$x$$`` strips both dollars, not just the outer pair.
     if chunk.startswith("$$") and chunk.endswith("$$"):
         return chunk[2:-2].strip()
     if chunk.startswith("$") and chunk.endswith("$"):
@@ -115,10 +117,14 @@ def _merge_code_span(content: str) -> str | None:
 
     delim = "$$" if _wants_display_math(math_chunks) else "$"
 
+    # Walk the split parts in order, re-emitting each into the unified math
+    # expression: even parts are prose (wrapped in \text{}), odd parts are the
+    # inner math (delimiters stripped, since the whole thing gets re-wrapped).
     pieces: list[str] = []
     for idx, part in enumerate(parts):
         if idx % 2 == 0:
             rendered = _textify(part)
+            # Skip empty text fragments (e.g. between adjacent math chunks).
             if rendered:
                 pieces.append(rendered)
         else:
@@ -126,6 +132,7 @@ def _merge_code_span(content: str) -> str | None:
             if inner:
                 pieces.append(inner)
 
+    # Everything collapsed to nothing → signal "leave the span alone".
     if not pieces:
         return None
     return f"{delim}{' '.join(pieces)}{delim}"

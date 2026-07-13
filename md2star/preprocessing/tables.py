@@ -48,11 +48,17 @@ class _TableParser(HTMLParser):
 
     def __init__(self) -> None:
         super().__init__()
+        # Accumulated output: completed rows of already-rendered cell strings,
+        # plus the indices of rows that came from <th>/<thead> (header rows).
         self.rows: list[list[str]] = []
         self.header_rows: set[int] = set()
+        # Streaming cursors — the row/cell currently being built (None between
+        # elements) and a flag for "are we inside a cell right now?".
         self._current_row: list[str] | None = None
         self._current_cell: list[str] | None = None
         self._in_cell: bool = False
+        # Open inline markers (``**``, `` ` ``…) awaiting their close tag, so
+        # nested formatting is emitted in the right order.
         self._inline_stack: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list) -> None:  # noqa: ARG002

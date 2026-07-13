@@ -64,6 +64,10 @@ def _default_lint_model() -> str:
 DEFAULT_LINT_MODEL = _default_lint_model()
 
 
+# The prompt is deliberately strict and repetitive: an LLM's instinct is to
+# "improve" prose, but this pass must ONLY repair syntax. The explicit NEVER
+# rules + the length guard in lint_with_llm are two independent defences
+# against the model silently rewriting the user's words.
 _LINT_PROMPT = """\
 You are a Markdown syntax fixer. You receive raw Markdown and must return
 ONLY the fixed Markdown — nothing else (no explanations, no code fences).
@@ -226,6 +230,7 @@ def lint_with_llm(content: str, model: str | None = None) -> str:
     the request. *model* defaults to :data:`DEFAULT_LINT_MODEL` (which
     honors the ``MD2STAR_LINT_MODEL`` env override).
     """
+    # Resolve the model once (env override or per-OS default) up front.
     if model is None:
         model = _default_lint_model()
 
@@ -283,8 +288,10 @@ def lint_with_llm(content: str, model: str | None = None) -> str:
             )
             return content
 
+        # Passed the length sanity check → accept the model's corrected markdown.
         return fixed
 
     except Exception as e:
+        # Any failure (network, JSON, decode) is non-fatal — keep the original.
         logger.warning(f"md2star warning: LLM lint failed: {e}")
         return content

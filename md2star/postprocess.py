@@ -126,11 +126,15 @@ def inject_table_styles(docx_path: str) -> bool:
 
     new_styles = ET.tostring(root, encoding="utf-8", xml_declaration=True)
 
+    # A .docx is a zip and zips can't be edited in place, so rebuild it into a
+    # sibling temp file, swapping only word/styles.xml, then atomically move it
+    # over the original — a crash mid-write can't corrupt the user's document.
     tmp_path = docx_path + ".tmp"
     with zipfile.ZipFile(docx_path, "r") as zin, zipfile.ZipFile(
         tmp_path, "w", zipfile.ZIP_DEFLATED
     ) as zout:
         for item in zin.infolist():
+            # Copy every member verbatim except the styles part we mutated.
             data = zin.read(item.filename)
             if item.filename == "word/styles.xml":
                 data = new_styles
@@ -174,13 +178,16 @@ def _strip_table_normal_xml(xml_bytes: bytes) -> tuple[bytes, bool]:
         root = ET.fromstring(xml_bytes)
     except ET.ParseError:
         return xml_bytes, False
+    # ElementTree needs the fully-qualified {namespace}tag form to match WordML.
     style_tag = f"{{{_W_NS}}}style"
     style_id_attr = f"{{{_W_NS}}}styleId"
+    # Find the one <w:style> whose styleId is TableNormal0 (if any).
     victim = None
     for style in root.findall(style_tag):
         if style.get(style_id_attr) == "TableNormal0":
             victim = style
             break
+    # Absent already → report "unchanged" so the caller can no-op (idempotent).
     if victim is None:
         return xml_bytes, False
     root.remove(victim)

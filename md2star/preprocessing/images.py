@@ -302,15 +302,21 @@ def html_images_to_markdown(content: str) -> str:
         placeholders[token] = match.group(0)
         return token
 
+    # 0. Stash fenced code blocks under NUL tokens so an <img> shown *as an
+    #    example* inside a code fence isn't rewritten.
     stashed = re.sub(
         r"```[^\n]*\n.*?\n```", _stash, content, flags=re.DOTALL
     )
+    # 1. Collapse wrapped ``<p|div|…><img></…>`` to just the Markdown image
+    #    (the wrapper would make Pandoc drop the whole HTML block).
     stashed = _WRAPPED_HTML_IMG_RE.sub(
         lambda m: _html_img_to_markdown(m.group("img")), stashed
     )
+    # 2. Convert any remaining bare ``<img>`` tags in place.
     stashed = _BARE_HTML_IMG_RE.sub(
         lambda m: _html_img_to_markdown(m.group(0)), stashed
     )
+    # 3. Restore the stashed code blocks verbatim.
     for token, block in placeholders.items():
         stashed = stashed.replace(token, block)
     return stashed
@@ -331,14 +337,18 @@ def _svg_to_png(svg_path: str, max_px: int) -> str | None:
     svg_path = os.path.abspath(svg_path)
     if not os.path.exists(svg_path):
         return None
+    # Cache key folds in max_px so different size requests don't collide.
     out_path = str(cache_dir("resized") / f"{_hash_path(svg_path)}_max{max_px}.png")
 
+    # Reuse the cached PNG unless the source SVG is newer (edited since).
     if os.path.exists(out_path) and os.path.getmtime(out_path) >= os.path.getmtime(svg_path):
         return out_path
 
+    # Backend 1: rsvg-convert — a fast standalone CLI with no Python deps.
     rsvg = shutil.which("rsvg-convert")
     if rsvg is not None:
         try:
+            # -w sets the output width; 30s guards against a pathological SVG.
             subprocess.run(
                 [rsvg, "-w", str(max_px), "-o", out_path, svg_path],
                 check=True,
@@ -353,12 +363,14 @@ def _svg_to_png(svg_path: str, max_px: int) -> str | None:
                 f"md2star warning: rsvg-convert failed on {svg_path}: {e}"
             )
 
+    # Backend 2: cairosvg — pure-Python API, but needs the native cairo lib.
     try:
         import cairosvg  # type: ignore[import-untyped]
 
         cairosvg.svg2png(url=svg_path, write_to=out_path, output_width=max_px)
         return out_path
     except Exception:
+        # Not installed / cairo missing → fall through to the warn-and-keep path.
         pass
 
     # Neither backend available: keep the original SVG and tell the user how
@@ -412,9 +424,14 @@ def _resize_raster(img_path: str, max_px: int) -> str:
 
     try:
         with Image.open(img_path) as img:
+            # For big downscales, pre-blur (sigma grows with the factor) to
+            # avoid aliasing/moiré that LANCZOS alone leaves on high-frequency
+            # detail — a standard "resample after low-pass" step.
             if scale > 2.0:
                 sigma = (scale - 1.0) / 2.0
                 img = img.filter(ImageFilter.GaussianBlur(radius=sigma))
+            # Round to whole pixels, clamping to ≥1 so a tiny image never
+            # collapses to a zero dimension.
             new_w = max(1, int(round(w / scale)))
             new_h = max(1, int(round(h / scale)))
             img = img.resize((new_w, new_h), Image.LANCZOS)
@@ -456,17 +473,24 @@ def process_image_assets(content: str, base_dir: str, max_px: int = 1600) -> str
     before Pandoc sees the document.
     """
     def _process_src(src: str) -> str:
+        # Only local files are normalised; remote/data refs and missing paths
+        # are returned untouched (nothing safe to do without the bytes).
         if src.startswith(_URL_PREFIXES):
             return src
         path = src if os.path.isabs(src) else os.path.join(base_dir, src)
         if not os.path.exists(path):
             return src
         ext = os.path.splitext(path)[1].lower()
+        # SVGs become PNGs (Office renders SVG inconsistently); on failure keep
+        # the original ref so the doc still builds.
         if ext == ".svg":
             png = _svg_to_png(path, max_px)
             return png if png else src
+        # Everything else: downscale if oversized (a no-op when already small).
         return _resize_raster(path, max_px)
 
+    # Two rewriters share _process_src but reassemble their own match groups —
+    # Markdown ``![](src)`` vs HTML ``<img src="...">``.
     def _md_rewrite(m: re.Match) -> str:
         return f"{m.group(1)}{_process_src(m.group(2))}{m.group(3)}"
 
