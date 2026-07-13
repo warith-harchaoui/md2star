@@ -20,7 +20,7 @@ Author
 
 from __future__ import annotations
 
-__version__: str = "2.3.0"
+__version__: str = "2.4.0"
 
 from .preprocessing import (
     DEFAULT_ALT_TEXT_MODEL,

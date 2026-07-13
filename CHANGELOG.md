@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-07-13
+
 ### Added
 - **Central logging surface** (`md2star/logging.py`) with `configure()` +
   `get_logger()`. All 31 stderr *diagnostics* (deprecation notices, download
