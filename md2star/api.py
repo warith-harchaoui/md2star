@@ -51,6 +51,9 @@ import shutil
 import tempfile
 from pathlib import Path
 
+# FastAPI is an OPTIONAL dependency (the ``[api]`` extra). Importing this
+# module without it should fail with an actionable install hint rather than a
+# bare ModuleNotFoundError, so we re-raise with the exact pip command.
 try:
     from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
     from fastapi.responses import FileResponse
@@ -108,15 +111,20 @@ def doctor() -> dict:
         The same payload as ``md2star doctor --json``: a list of ``checks``, a
         per-format ``features`` map, and a ``core_failing`` flag.
     """
+    # Reuse the exact same check engine as the CLI's ``doctor`` so the HTTP and
+    # terminal diagnostics never drift apart; we only reshape it into JSON.
     report = run_checks()
     return {
+        # Flatten each Check dataclass into a plain dict for the JSON response.
         "checks": [
             {"name": c.name, "status": c.status, "detail": c.detail, "section": c.section}
             for c in report.checks
         ],
+        # Per-format readiness (can we actually produce docx/pptx/pdf/mermaid?).
         "features": {
             fmt: report.feature_status(fmt) for fmt in ("docx", "pptx", "pdf", "mermaid")
         },
+        # True when a core tool is missing — a quick top-level red/green flag.
         "core_failing": report.core_failing(),
     }
 
@@ -155,6 +163,8 @@ async def convert(
         system tool (Pandoc / LibreOffice) is missing, 500 on any other
         conversion failure.
     """
+    # Normalise + validate the target format up front so a typo fails fast with
+    # a 400 rather than deep inside the converter.
     fmt = fmt.lower()
     if fmt not in _FORMAT_MEDIA:
         raise HTTPException(
@@ -162,17 +172,25 @@ async def convert(
             detail=f"fmt must be one of {sorted(_FORMAT_MEDIA)}; got {fmt!r}",
         )
 
+    # One temp dir per request holds the upload + the rendered output. We
+    # register its cleanup as a background task so it runs AFTER FileResponse
+    # has finished streaming — deleting it earlier would truncate the download.
     work = tempfile.mkdtemp(prefix="md2star_api_")
     background.add_task(shutil.rmtree, work, ignore_errors=True)
 
     # md2star's converter is path-in / path-out; stage the upload on disk and
     # give it an explicit output path so we know exactly what to stream back.
+    # Derive a safe stem from the upload name (falling back to "document" when
+    # the client sends no/empty filename) and reuse it for both the staged
+    # input and the output, so the download keeps a sensible name.
     stem = Path(file.filename or "document").stem or "document"
     in_path = os.path.join(work, f"{stem}.md")
     out_path = os.path.join(work, f"{stem}.{fmt}")
     with open(in_path, "wb") as f:
         f.write(await file.read())
 
+    # Translate the optional query params into the same CLI flags the converter
+    # already understands — only appending a flag when the caller supplied it.
     argv = [in_path, "-o", out_path]
     for flag, value in (("--author", author), ("--lang", lang), ("--date", date)):
         if value:
@@ -207,8 +225,12 @@ def main() -> None:
     """
     import uvicorn
 
+    # Host/port are env-overridable so the same image runs unchanged across
+    # environments (0.0.0.0 to be reachable from outside a container).
     host = os.environ.get("MD2STAR_HOST", "0.0.0.0")
     port = int(os.environ.get("MD2STAR_PORT", "8000"))
+    # Single worker: conversions shell out to Pandoc/LibreOffice, so scale by
+    # running several processes behind a load balancer, not in-process workers.
     uvicorn.run(app, host=host, port=port, workers=1)
 
 

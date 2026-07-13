@@ -143,18 +143,24 @@ def _run_version(cmd: list[str], timeout: float = 5.0,
 
 
 def _check_pandoc(report: Report, which: Callable[[str], str | None]) -> None:
+    """Check for pandoc — the one hard dependency (Core section)."""
     path = which("pandoc")
+    # Pandoc is CORE: without it nothing converts, so a miss is MISSING in the
+    # default Core section, which flips ``core_failing()`` and fails doctor.
     if path is None:
         report.add(
             "Pandoc", STATUS_MISSING,
             "Install: https://pandoc.org/installing.html",
         )
         return
+    # Present → record the version + resolved path for the report.
     version = _run_version([path, "--version"]) or "(unknown version)"
     report.add("Pandoc", STATUS_OK, f"{version} — {path}")
 
 
 def _check_libreoffice(report: Report, which: Callable[[str], str | None]) -> None:
+    """Check for LibreOffice — needed only for PDF (Optional section)."""
+    # Try the two PATH names plus the macOS .app location that isn't on PATH.
     candidates = [
         which("soffice"),
         which("libreoffice"),
@@ -162,7 +168,9 @@ def _check_libreoffice(report: Report, which: Callable[[str], str | None]) -> No
             if Path("/Applications/LibreOffice.app/Contents/MacOS/soffice").exists()
             else None,
     ]
+    # First hit wins; None means "not found anywhere".
     path = next((p for p in candidates if p), None)
+    # Optional section: a miss degrades PDF to PARTIAL but never fails doctor.
     if path is None:
         report.add(
             "LibreOffice", STATUS_MISSING,
@@ -176,7 +184,10 @@ def _check_libreoffice(report: Report, which: Callable[[str], str | None]) -> No
 
 
 def _check_node(report: Report, which: Callable[[str], str | None]) -> None:
+    """Check for Node.js — needed only for mermaid rendering (Optional)."""
     path = which("node")
+    # INFO (not MISSING): mermaid is a niche feature, so absence is informational
+    # rather than a warning — we don't want to alarm users who never use it.
     if path is None:
         report.add(
             "Node.js", STATUS_INFO,
@@ -218,7 +229,9 @@ def _check_mermaid_cli(report: Report, which: Callable[[str], str | None]) -> No
 
 
 def _check_ollama(report: Report, which: Callable[[str], str | None]) -> None:
+    """Check for Ollama — needed only for the --lint LLM pass (Optional)."""
     path = which("ollama")
+    # INFO for the same reason as Node: --lint is strictly opt-in.
     if path is None:
         report.add(
             "Ollama", STATUS_INFO,
@@ -231,6 +244,9 @@ def _check_ollama(report: Report, which: Callable[[str], str | None]) -> None:
 
 
 def _check_templates(report: Report) -> None:
+    """Verify the wheel actually shipped its bundled templates."""
+    # The two templates are packaged data; both must be present for the
+    # offline-default styling to work.
     try:
         docx = resources.files("md2star.data").joinpath("template.docx")
         pptx = resources.files("md2star.data").joinpath("template.pptx")
@@ -243,6 +259,8 @@ def _check_templates(report: Report) -> None:
             return
     except (FileNotFoundError, ModuleNotFoundError, OSError):
         pass
+    # Reaching here means the packaged data is missing — a corrupt/partial
+    # install, hence ERROR (not just a warning): reinstalling is the fix.
     report.add(
         "Bundled templates", STATUS_ERROR,
         "template.docx and/or template.pptx missing from the installed wheel — reinstall md2star.",
@@ -269,8 +287,12 @@ def _check_cache(report: Report) -> None:
 
 
 def _check_python(report: Report) -> None:
+    """Confirm the interpreter meets md2star's minimum version."""
     v = sys.version_info
     detail = f"{v.major}.{v.minor}.{v.micro} — {sys.executable}"
+    # 3.10 is our floor (match/case, PEP 604 unions used throughout). Running
+    # under an older interpreter is an ERROR, not a warning — features will
+    # genuinely be broken.
     if (v.major, v.minor) < (3, 10):
         report.add(
             "Python", STATUS_ERROR,
@@ -281,6 +303,7 @@ def _check_python(report: Report) -> None:
 
 
 def _check_md2star(report: Report) -> None:
+    """Record md2star's own version so bug reports pin an exact build."""
     report.add("md2star", STATUS_OK, f"{__version__}")
 
 
@@ -308,6 +331,9 @@ def run_checks(
     """
     which = which or shutil.which
     report = Report()
+    # Order matters only for display grouping (render() re-groups by section),
+    # but we run environment → core tools → optional tools → packaging so the
+    # report reads roughly most-fundamental first.
     _check_python(report)
     _check_md2star(report)
     _check_pandoc(report, which)
@@ -340,6 +366,7 @@ def render(report: Report) -> str:
 
     for section, rows in sections.items():
         out.append(f"{section}:")
+        # Pad names to the longest in THIS section so status columns line up.
         width = max((len(r.name) for r in rows), default=10)
         for r in rows:
             label = r.name.ljust(width)
@@ -347,6 +374,8 @@ def render(report: Report) -> str:
             out.append(f"  {label}  {r.status:7}{tail}")
         out.append("")
 
+    # Bottom rollup: translate the raw checks into per-format readiness, which
+    # is what the user actually cares about ("can I make a PDF?").
     out.append("Result:")
     targets = [
         ("DOCX export",      report.feature_status("docx")),

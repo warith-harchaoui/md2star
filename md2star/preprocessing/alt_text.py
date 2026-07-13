@@ -104,12 +104,16 @@ def _generate_alt(image_path: str, model: str, timeout: float = 60.0) -> str | N
     Returns the trimmed response on success, ``None`` on any failure — the
     caller treats ``None`` as "leave the markdown unchanged".
     """
+    # Ollama's vision API takes images as base64 in the JSON body, so read the
+    # bytes and encode. An unreadable file → None ("leave markdown unchanged").
     try:
         with open(image_path, "rb") as f:
             img_b64 = base64.b64encode(f.read()).decode("ascii")
     except OSError:
         return None
 
+    # stream=False so we get one complete JSON response; low temperature keeps
+    # alt-text deterministic-ish and on-task rather than creative.
     payload = json.dumps({
         "model": model,
         "prompt": _ALT_PROMPT,
@@ -156,6 +160,8 @@ def fill_empty_alt_text(
     if model is None:
         model = _default_alt_text_model()
 
+    # Three cheap pre-flight gates: no Ollama, no running daemon, or no model →
+    # return the content untouched. This pass is never load-bearing.
     if not is_ollama_installed():
         return content
     if not _ping_ollama(2):
@@ -169,9 +175,13 @@ def fill_empty_alt_text(
     cache = cache_dir("alt-text")
 
     def _process(match: re.Match) -> str:
+        # Called once per empty-alt image. Any early return keeps the original
+        # ``![](src)`` so a single un-processable image never breaks the doc.
         src = match.group(2)
+        # Remote/data URIs can't be read off disk to feed the vision model.
         if src.startswith(_URL_PREFIXES):
             return match.group(0)
+        # Relative srcs resolve against the document's dir (see base_dir).
         path = src if os.path.isabs(src) else os.path.join(base_dir, src)
         if not os.path.exists(path):
             return match.group(0)
@@ -179,9 +189,13 @@ def fill_empty_alt_text(
         img_hash = _hash_file(path)
         if img_hash is None:
             return match.group(0)
+        # Cache key = image content hash + model, so re-runs are free and a
+        # model swap re-generates. Sanitise ':' / '/' for a safe filename.
         safe_model = model.replace(":", "_").replace("/", "_")
         cache_file = cache / f"{img_hash}_{safe_model}.txt"
 
+        # Reuse a cached description when present; otherwise call the model and
+        # persist the result. An empty generation → keep the original markdown.
         if cache_file.exists():
             alt = cache_file.read_text(encoding="utf-8").strip()
         else:
@@ -202,9 +216,12 @@ def fill_empty_alt_text(
         alt_clean = alt.replace("]", "\\]")
         return f"![{alt_clean}]({src})"
 
+    # Walk line by line tracking fenced code blocks so we never rewrite an
+    # ``![]()`` that's really a code sample. Only prose lines get _process.
     out_lines: list[str] = []
     in_code = False
     for line in content.split("\n"):
+        # A ``` fence toggles code mode; the fence line itself is passed through.
         if line.lstrip().startswith("```"):
             in_code = not in_code
             out_lines.append(line)

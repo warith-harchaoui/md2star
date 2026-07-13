@@ -42,13 +42,17 @@ def _template_body_font(template_docx: str) -> str | None:
     Falls back to ``docDefaults`` ``rPrDefault`` if ``Normal`` does not declare
     its own ``<w:rFonts/>``. Returns ``None`` if the template cannot be read.
     """
+    # A .docx is a zip; the paragraph styles live in word/styles.xml. Any read
+    # failure (missing file, not a zip) just means "no font info" → None.
     try:
         with zipfile.ZipFile(template_docx) as z:
             styles = z.read("word/styles.xml").decode("utf-8")
     except (FileNotFoundError, KeyError, zipfile.BadZipFile):
         return None
 
-    # Look at the Normal style first.
+    # Prefer the ``Normal`` paragraph style's own font: that's the body text
+    # font diagrams should visually match. We isolate the whole <w:style> block
+    # first, then pull the ascii font out of its <w:rFonts>.
     normal = re.search(
         r'<w:style[^>]*w:styleId="Normal"[^>]*>.*?</w:style>',
         styles,
@@ -59,7 +63,7 @@ def _template_body_font(template_docx: str) -> str | None:
         if m:
             return m.group(1)
 
-    # Fall back to docDefaults.
+    # Normal didn't declare its own font → inherit the document-wide default.
     m = re.search(
         r"<w:docDefaults>.*?<w:rFonts[^/]*w:ascii=\"([^\"]+)\"",
         styles,
@@ -94,12 +98,18 @@ def _build_mermaid_config(font_family: str | None) -> tuple[str, str] | None:
     if cfg is None:
         return None
 
+    # Splice the template's body font into the theme, with a web-safe fallback
+    # chain so mmdc still renders if that exact font isn't on the box.
     if font_family:
         theme_vars = cfg.setdefault("themeVariables", {})
         theme_vars["fontFamily"] = f"{font_family}, Arial, Helvetica, sans-serif"
 
+    # Key the config file (and, upstream, the render cache) on the MD5 of the
+    # *merged* config with sorted keys — so any palette edit, not just the
+    # font, deterministically produces a new key and invalidates stale PNGs.
     key = hashlib.md5(json.dumps(cfg, sort_keys=True).encode("utf-8")).hexdigest()[:12]
     resolved_path = str(cache_dir("mermaid") / f"config_{key}.json")
+    # Write once per unique config; identical configs reuse the same file.
     if not os.path.exists(resolved_path):
         with open(resolved_path, "w", encoding="utf-8") as f:
             json.dump(cfg, f)
@@ -141,13 +151,19 @@ def render_mermaid_local(content: str, out_dir: str) -> str:  # noqa: ARG001
     mermaid_dir = cache_dir("mermaid")
     filepath = str(mermaid_dir / f"{cache_key}.png")
 
+    # Cache hit: an identical diagram (same source + font + config) was already
+    # rendered, so skip the expensive npx/Chromium spin-up entirely.
     if os.path.exists(filepath):
         return filepath
 
+    # mmdc reads from a file, not stdin — stage the markup next to the output.
     tmp_input = str(mermaid_dir / f"{cache_key}.mmd")
     with open(tmp_input, "w", encoding="utf-8") as f:
         f.write(content)
 
+    # ``npx -y`` fetches the pinned mermaid-cli on demand, so users don't need a
+    # global install. transparent background blends into any page; --scale 2
+    # renders at 2× for crisp diagrams in print/PDF.
     cmd = [
         "npx", "-y", "@mermaid-js/mermaid-cli",
         "-i", tmp_input, "-o", filepath,
@@ -169,13 +185,17 @@ def render_mermaid_local(content: str, out_dir: str) -> str:  # noqa: ARG001
     except (FileNotFoundError, ModuleNotFoundError):
         pass
 
+    # 60s cap: a hung headless browser shouldn't stall the whole conversion.
     result = subprocess.run(cmd, capture_output=True, timeout=60)
 
+    # The .mmd was only scratch input — best-effort cleanup, ignore if gone.
     try:
         os.remove(tmp_input)
     except OSError:
         pass
 
+    # Treat "non-zero exit" OR "no PNG produced" as failure; raising lets the
+    # caller keep the original code fence instead of losing the diagram.
     if result.returncode != 0 or not os.path.exists(filepath):
         stderr = result.stderr.decode(errors="replace").strip()
         raise RuntimeError(

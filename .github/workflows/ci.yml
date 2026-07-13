@@ -32,6 +32,21 @@ jobs:
       - run: ruff check md2star/ tests/
 
   # ──────────────────────────────────────────────────────────────────
+  # Comment-density gate (house coding-standard rule 4). Fails when any
+  # non-glue source file drops below the 15% floor. Pure stdlib, so no
+  # install step is needed.
+  # ──────────────────────────────────────────────────────────────────
+  comment-density:
+    name: comment-density
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python scripts/audit_comments.py md2star
+
+  # ──────────────────────────────────────────────────────────────────
   # Static shellcheck on the install / uninstall / test scripts.
   # Catches quoting bugs, unset variables, common shell-only issues.
   # ──────────────────────────────────────────────────────────────────

@@ -31,11 +31,25 @@ class Md2starError(Exception):
     ``hint`` default so callers don't have to repeat the boilerplate.
     """
 
+    # Class-level default carried by every subclass; a subclass overrides it by
+    # simply redeclaring ``default_hint``. This is why the concrete errors below
+    # are one-liners — they inherit all behaviour and only swap this string.
     default_hint: str = ""
 
     def __init__(self, message: str, *, hint: str | None = None) -> None:
         super().__init__(message)
+        # ``hint`` is keyword-only (the ``*``) so call sites read self-
+        # documenting: ``raise InvalidInputError(msg, hint=...)``. An explicit
+        # ``hint=""`` is respected; only ``None`` (the default) falls back to
+        # the class default, so a caller can deliberately suppress the hint.
         self.hint = hint if hint is not None else self.default_hint
+
+
+# ── Concrete errors ──────────────────────────────────────────────────────
+# Each subclass below is intentionally minimal: its *type* is the signal the
+# CLI switches on (e.g. MissingDependencyError → exit 127), and its
+# ``default_hint`` is the actionable text shown under the headline. The
+# docstrings explain *when* each fires; there is no behaviour to add.
 
 
 class MissingDependencyError(Md2starError):
@@ -116,6 +130,8 @@ class UnsafePathError(Md2starError):
     )
 
 
+# Explicit public surface: ``from md2star.errors import *`` re-exports only
+# these names, and it documents the intended API for downstream importers.
 __all__ = [
     "Md2starError",
     "MissingDependencyError",

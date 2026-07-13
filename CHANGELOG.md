@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Maintenance
+- **Comment-density pass (coding-standard rule 4).** Added *why* comments
+  across the previously under-documented modules (`doctor`, `images`,
+  `lint`, `alt_text`, `mermaid`, `api`, `errors`, `language`, `cache`);
+  every non-glue source file is now above the 15 % floor (package-wide
+  13.5 % → 23.4 %). No behaviour change.
+- **New `scripts/audit_comments.py`** — a stdlib comment-density auditor
+  (docstring-aware, unlike `cloc`) with a CI gate job that fails when any
+  non-glue file drops below the floor. Covered by `tests/test_audit_comments.py`.
+
 ## [2.4.0] — 2026-07-13
 
 ### Added

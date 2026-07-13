@@ -52,6 +52,9 @@ logger = get_logger(__name__)
 
 def _default_lint_model() -> str:
     """Return the default Ollama tag, honoring ``MD2STAR_LINT_MODEL`` if set."""
+    # Explicit override wins (lets users pin a bigger/smaller model). Otherwise
+    # pick the MLX build on macOS — it's the Apple-Silicon-optimised variant —
+    # and the plain build everywhere else.
     override = os.environ.get("MD2STAR_LINT_MODEL")
     if override:
         return override
@@ -85,6 +88,9 @@ Return ONLY the fixed Markdown, character for character where no fix is needed."
 
 def _fetch_ollama_models(timeout: float = 2.0) -> list[str] | None:
     """Return installed model names from ``/api/tags``, or None if unreachable."""
+    # /api/tags lists locally-pulled models. A broad except → None means
+    # "daemon unreachable"; callers treat that as "no models" and degrade
+    # gracefully rather than surfacing a connection error to the user.
     try:
         req = urllib.request.Request(
             "http://localhost:11434/api/tags",
@@ -94,6 +100,7 @@ def _fetch_ollama_models(timeout: float = 2.0) -> list[str] | None:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception:
         return None
+    # Keep only non-empty model names from the response.
     return [m.get("name", "") for m in data.get("models", []) if m.get("name")]
 
 
@@ -116,11 +123,14 @@ def is_ollama_installed() -> bool:
 def _model_present(model: str, timeout: float = 2.0) -> bool:
     """Return True if *model* is already pulled and the daemon can see it."""
     names = _fetch_ollama_models(timeout)
+    # Daemon unreachable → treat the model as absent (caller will try a pull).
     if names is None:
         return False
+    # Exact tag match is the common case.
     if model in names:
         return True
-    # Ollama stores untagged pulls as ``name:latest``; tolerate that form.
+    # Ollama stores untagged pulls as ``name:latest``; tolerate that form so a
+    # user who ran ``ollama pull gemma4:e2b`` isn't told it's missing.
     if ":" not in model and f"{model}:latest" in names:
         return True
     return False
@@ -142,6 +152,8 @@ def _ensure_model_pulled(model: str) -> bool:
         f"md2star: lint model {model!r} missing; running `ollama pull "
         f"{model}` (one-time download)…"
     )
+    # 15-minute cap covers a multi-GB first pull on a slow link; we discard
+    # the progress bar (DEVNULL) but keep stderr to surface a real error.
     try:
         result = subprocess.run(
             ["ollama", "pull", model],
@@ -150,6 +162,7 @@ def _ensure_model_pulled(model: str) -> bool:
             timeout=900,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        # Binary vanished or the pull ran too long → give up on lint, not crash.
         logger.warning(f"md2star warning: model pull failed: {e}")
         return False
 
@@ -194,6 +207,8 @@ def _ensure_ollama_running() -> bool:
         )
         return False
 
+    # Poll for up to ~5s (10 × 0.5s) while the freshly-spawned daemon boots.
+    # If it never answers, give up so lint stays strictly best-effort.
     for _ in range(10):
         time.sleep(0.5)
         if _ping_ollama(1):
@@ -223,12 +238,16 @@ def lint_with_llm(content: str, model: str | None = None) -> str:
             "https://ollama.com to enable it."
         )
         return content
+    # Remaining gates spawn the daemon / pull the model as needed; any failure
+    # short-circuits to the untouched content.
     if not _ensure_ollama_running():
         return content
     if not _ensure_model_pulled(model):
         return content
 
     try:
+        # temperature=0.0 for a deterministic, minimal syntax fix — we want a
+        # corrector, not a creative rewriter. The prompt precedes the document.
         payload = json.dumps({
             "model": model,
             "prompt": _LINT_PROMPT + "\n\n" + content,
@@ -245,12 +264,15 @@ def lint_with_llm(content: str, model: str | None = None) -> str:
             },
             method="POST",
         )
+        # 30s cap on the whole request; the response holds the fixed markdown.
         with urllib.request.urlopen(req, timeout=30) as resp:
             result = json.loads(resp.read().decode("utf-8"))
             fixed = result.get("response", "").strip()
 
+        # Empty response → nothing to apply, keep the original.
         if not fixed:
             return content
+        # Compare lengths as a cheap sanity check (see the guard just below).
         original_len = len(content.strip())
         fixed_len = len(fixed)
         if fixed_len < original_len * 0.5 or fixed_len > original_len * 2.0:

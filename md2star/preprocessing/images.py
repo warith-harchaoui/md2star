@@ -81,9 +81,11 @@ def resize_image_for_cell(src: str, base_dir: str, max_px: int = 400) -> str:
     backend (returns the original on any failure). Output is written to the
     XDG cache dir (``cell/<src-hash><ext>``), not next to the input file.
     """
+    # Only local files can be opened + resized; remote/data URIs pass through.
     if src.startswith(("http://", "https://", "//", "data:")):
         return src
 
+    # Resolve relative srcs against the document dir, then normalise.
     abs_src = src if os.path.isabs(src) else os.path.join(base_dir, src)
     abs_src = os.path.abspath(abs_src)
 
@@ -95,18 +97,25 @@ def resize_image_for_cell(src: str, base_dir: str, max_px: int = 400) -> str:
 
         with Image.open(abs_src) as img:
             w, h = img.size
+            # Already small enough → don't spend cycles re-encoding it.
             if w <= max_px and h <= max_px:
                 return abs_src
 
             ext = os.path.splitext(abs_src)[1] or ".png"
             out_path = str(cache_dir("cell") / f"{_hash_path(abs_src)}{ext}")
+            # Reuse a cached thumbnail unless the source is newer (mtime check),
+            # so editing the image invalidates the stale downscale.
             if os.path.exists(out_path) and os.path.getmtime(out_path) >= os.path.getmtime(abs_src):
                 return out_path
 
+            # thumbnail() downscales in place preserving aspect ratio; LANCZOS
+            # is the high-quality resampling filter.
             img.thumbnail((max_px, max_px), Image.LANCZOS)
             img.save(out_path)
         return out_path
     except Exception:
+        # Any Pillow failure (unknown format, truncated file) → use the
+        # original; a too-big cell image is better than a broken conversion.
         return abs_src
 
 
@@ -131,10 +140,13 @@ def image_size_attr(src: str) -> str:
     except (FileNotFoundError, OSError, ValueError):
         return "{width=100%}"
 
+    # Degenerate dimensions (corrupt header) → safe historical fallback.
     if width_px <= 0 or height_px <= 0:
         return "{width=100%}"
 
-    # Width binds when the image is "wider" than the box's aspect ratio.
+    # Pick the single binding constraint by comparing the image's aspect ratio
+    # to the box's: a "wide" image is limited by width, a "tall" one by height.
+    # Emitting only one keeps Pandoc's aspect-ratio preservation intact.
     if width_px / height_px >= _MAX_WIDTH_CM / _MAX_HEIGHT_CM:
         return f"{{width={_MAX_WIDTH_CM:g}cm}}"
     return f"{{height={_MAX_HEIGHT_CM:g}cm}}"
@@ -158,6 +170,8 @@ def fix_image_widths(content: str) -> str:
 
     result_lines: list[str] = []
     for line in content.split("\n"):
+        # Skip table rows: a page-wide cap inside a cell would still overflow
+        # the cell, so those images are physically resized elsewhere.
         if PIPE_TABLE_ROW_RE.match(line):
             result_lines.append(line)
         else:
@@ -172,6 +186,8 @@ def resize_images_in_markdown_tables(content: str, base_dir: str = ".") -> str:
     """
     result_lines: list[str] = []
     for line in content.split("\n"):
+        # Only rewrite inside pipe-table rows — everything else keeps its
+        # normal (page-sized) image handling.
         if PIPE_TABLE_ROW_RE.match(line):
             def _resize_match(m: re.Match) -> str:
                 alt = m.group(1)
@@ -197,10 +213,13 @@ def absolutize_image_paths(content: str, base_dir: str) -> str:
 
     def _rewrite(match: re.Match) -> str:
         prefix, src, suffix = match.group(1), match.group(2), match.group(3)
+        # Leave URLs and already-absolute paths alone; only relatives need work.
         if src.startswith(_URL_PREFIXES) or os.path.isabs(src):
             return match.group(0)
+        # normpath collapses ../ and duplicate separators for a clean abs path.
         return f"{prefix}{os.path.normpath(os.path.join(abs_base, src))}{suffix}"
 
+    # Track fenced code so example snippets with relative paths aren't rewritten.
     out_lines: list[str] = []
     in_code = False
     for line in content.split("\n"):
@@ -244,13 +263,16 @@ def _html_img_to_markdown(img_tag: str) -> str:
     purpose so the produced Markdown stays portable across Pandoc writers.
     A missing ``src`` falls through as the original tag (nothing to convert).
     """
+    # Parse all key="value" attrs (lower-cased keys) into a dict for lookup.
     attrs = {
         m.group("name").lower(): m.group("value")
         for m in _HTML_ATTR_RE.finditer(img_tag)
     }
+    # No src → not a real image tag; hand it back unchanged.
     src = attrs.get("src")
     if not src:
         return img_tag
+    # Carry over only the portable attributes (alt, src, optional width).
     alt = attrs.get("alt", "")
     width = attrs.get("width", "")
     out = f"![{alt}]({src})"
