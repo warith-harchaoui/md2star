@@ -42,6 +42,10 @@ import sys
 from pathlib import Path
 
 from .cache import cache_dir
+from .logging import get_logger
+
+# Module logger — child of the root "md2star" logger (configured by the CLI).
+logger = get_logger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────
 # Candidate enumeration — mirrors `_resolve_reference_doc` priority
@@ -138,13 +142,15 @@ def cmd_path(args: argparse.Namespace) -> int:
 
     winner = _first_existing(_candidates(input_dir, args.fmt))
     if winner is None:
-        print(
+        # No template anywhere is an install bug — diagnostic to stderr.
+        logger.error(
             f"md2star: no template.{args.fmt} found at any candidate path "
-            f"(per-project / cached / bundled). Reinstall md2star.",
-            file=sys.stderr,
+            f"(per-project / cached / bundled). Reinstall md2star."
         )
         return 2
 
+    # The resolved path itself is program OUTPUT (scripts capture it), so it
+    # stays on stdout via print — not the logging surface.
     print(winner[1])
     return 0
 

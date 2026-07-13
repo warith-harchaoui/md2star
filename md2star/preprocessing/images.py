@@ -31,13 +31,16 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import urllib.request
 
 from PIL import Image
 
 from ..cache import cache_dir
+from ..logging import get_logger
 from .regexes import PIPE_TABLE_ROW_RE
+
+# Module logger — child of the root "md2star" logger (configured by the CLI).
+logger = get_logger(__name__)
 
 # A4 content area (portrait, ~25 mm margins) is ≈ 160 × 247 mm. We cap each
 # image at a slightly tighter box so the rendered file also fits inside a
@@ -323,9 +326,9 @@ def _svg_to_png(svg_path: str, max_px: int) -> str | None:
             )
             return out_path
         except Exception as e:
-            print(
-                f"md2star warning: rsvg-convert failed on {svg_path}: {e}",
-                file=sys.stderr,
+            # rsvg failed — fall through to the cairosvg / warn-and-keep path.
+            logger.warning(
+                f"md2star warning: rsvg-convert failed on {svg_path}: {e}"
             )
 
     try:
@@ -336,11 +339,12 @@ def _svg_to_png(svg_path: str, max_px: int) -> str | None:
     except Exception:
         pass
 
-    print(
+    # Neither backend available: keep the original SVG and tell the user how
+    # to enable conversion.
+    logger.warning(
         f"md2star warning: cannot convert SVG {svg_path} — install "
         "`librsvg` (brew install librsvg / apt install librsvg2-bin) "
-        "or `cairosvg` (pip) to enable SVG support. Original kept.",
-        file=sys.stderr,
+        "or `cairosvg` (pip) to enable SVG support. Original kept."
     )
     return None
 
@@ -398,9 +402,9 @@ def _resize_raster(img_path: str, max_px: int) -> str:
             img.save(out_path)
         return out_path
     except Exception as e:
-        print(
-            f"md2star warning: cannot resize {img_path}: {e}",
-            file=sys.stderr,
+        # Resizing is best-effort: on any failure keep the original image.
+        logger.warning(
+            f"md2star warning: cannot resize {img_path}: {e}"
         )
         return img_path
 
@@ -514,9 +518,10 @@ def download_remote_images(content: str, out_dir: str) -> str:  # noqa: ARG001
                     with open(local_path, "wb") as f:
                         f.write(data)
             except Exception as e:
-                print(
-                    f"md2star warning: Failed to download image {url}: {e}",
-                    file=sys.stderr,
+                # Download failed: leave the original remote reference in place
+                # so pandoc can still try (or the user can fix the URL).
+                logger.warning(
+                    f"md2star warning: Failed to download image {url}: {e}"
                 )
                 return match.group(0)
 

@@ -31,6 +31,11 @@ import sys
 import xml.etree.ElementTree as ET
 import zipfile
 
+from .logging import get_logger
+
+# Module logger — child of the root "md2star" logger (configured by the CLI).
+logger = get_logger(__name__)
+
 # WordprocessingML namespace. We register it as the default prefix ``w`` so
 # the serialized output matches what every other Office tooling produces.
 _W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
@@ -101,9 +106,10 @@ def inject_table_styles(docx_path: str) -> bool:
     try:
         root = ET.fromstring(styles_bytes)
     except ET.ParseError as exc:
-        print(
-            f"md2star warning: word/styles.xml parse failed ({exc}); skipping inject",
-            file=sys.stderr,
+        # Defensive: a malformed styles.xml means we skip injection rather
+        # than corrupt the .docx — warn and leave the document as pandoc built it.
+        logger.warning(
+            f"md2star warning: word/styles.xml parse failed ({exc}); skipping inject"
         )
         return False
 
@@ -249,11 +255,16 @@ def strip_table_normal_for_pdf(docx_path: str) -> bool:
 
 
 if __name__ == "__main__":
+    # Standalone debug entry (`python -m md2star.postprocess <file.docx>`):
+    # configure logging ourselves since there's no CLI wrapper to do it.
+    from .logging import configure as _configure_logging
+    _configure_logging()
+
     if len(sys.argv) != 2:
-        print("Usage: python -m md2star.postprocess <output.docx>", file=sys.stderr)
+        logger.error("Usage: python -m md2star.postprocess <output.docx>")
         sys.exit(1)
     path = sys.argv[1]
     if not os.path.exists(path):
-        print(f"md2star warning: {path} not found", file=sys.stderr)
+        logger.warning(f"md2star warning: {path} not found")
         sys.exit(0)
     inject_table_styles(path)

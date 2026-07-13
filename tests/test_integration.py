@@ -19,6 +19,7 @@ soffice piping, mermaid plumbing — not to retest pandoc itself.
 
 from __future__ import annotations
 
+import logging
 import re
 import shutil
 import zipfile
@@ -163,15 +164,15 @@ class TestPdf:
 
 @needs_pandoc
 class TestRemoteImagesPolicy:
-    def test_default_does_not_download(self, tmp_path, capsys):
+    def test_default_does_not_download(self, tmp_path, caplog):
+        caplog.set_level(logging.WARNING, logger="md2star")
         out = tmp_path / "images.docx"
         rc = _convert("docx", FIXTURES / "images.md", out)
         assert rc == 0
-        # The warning is the contract surface — without the flag, the
-        # CLI prints one line on stderr naming the blocked URL.
-        stderr = capsys.readouterr().err
+        # The warning is the contract surface — without the flag, md2star logs
+        # one line naming the blocked URL and the opt-in flag.
         assert (
-            "--allow-remote-images" in stderr
+            "--allow-remote-images" in caplog.text
         ), "expected the soft-refusal warning to mention the opt-in flag"
 
 

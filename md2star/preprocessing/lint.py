@@ -44,6 +44,11 @@ import sys
 import time
 import urllib.request
 
+from ..logging import get_logger
+
+# Module logger — child of the root "md2star" logger (configured by the CLI).
+logger = get_logger(__name__)
+
 
 def _default_lint_model() -> str:
     """Return the default Ollama tag, honoring ``MD2STAR_LINT_MODEL`` if set."""
@@ -131,10 +136,11 @@ def _ensure_model_pulled(model: str) -> bool:
     if _model_present(model):
         return True
 
-    print(
+    # Progress narration (INFO): a first-run model pull can take minutes, so
+    # tell the user why the command appears to hang.
+    logger.info(
         f"md2star: lint model {model!r} missing; running `ollama pull "
-        f"{model}` (one-time download)…",
-        file=sys.stderr,
+        f"{model}` (one-time download)…"
     )
     try:
         result = subprocess.run(
@@ -144,15 +150,14 @@ def _ensure_model_pulled(model: str) -> bool:
             timeout=900,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired) as e:
-        print(f"md2star warning: model pull failed: {e}", file=sys.stderr)
+        logger.warning(f"md2star warning: model pull failed: {e}")
         return False
 
     if result.returncode != 0:
         stderr = result.stderr.decode("utf-8", errors="replace").strip()
-        print(
+        logger.warning(
             f"md2star warning: `ollama pull {model}` exited "
-            f"{result.returncode}: {stderr}",
-            file=sys.stderr,
+            f"{result.returncode}: {stderr}"
         )
         return False
     return True
@@ -169,10 +174,11 @@ def _ensure_ollama_running() -> bool:
     if _ping_ollama(2):
         return True
 
-    print(
+    # Narrate the background spawn (INFO): we start a long-lived `ollama serve`
+    # on the user's behalf, so it should not be silent.
+    logger.info(
         "md2star: --lint requested but no Ollama instance answered on "
-        "localhost:11434; starting `ollama serve` in the background.",
-        file=sys.stderr,
+        "localhost:11434; starting `ollama serve` in the background."
     )
 
     try:
@@ -182,10 +188,9 @@ def _ensure_ollama_running() -> bool:
             stderr=subprocess.DEVNULL,
         )
     except FileNotFoundError:
-        print(
+        logger.warning(
             "md2star: `ollama` executable not found; skipping lint. "
-            "Install Ollama from https://ollama.com to enable --lint.",
-            file=sys.stderr,
+            "Install Ollama from https://ollama.com to enable --lint."
         )
         return False
 
@@ -210,11 +215,12 @@ def lint_with_llm(content: str, model: str | None = None) -> str:
         model = _default_lint_model()
 
     if not is_ollama_installed():
-        print(
+        # --lint is opt-in; if the dependency is missing we degrade to a no-op
+        # rather than failing the whole conversion.
+        logger.warning(
             "md2star: --lint requested but `ollama` is not installed; "
             "skipping the lint pass. Install Ollama from "
-            "https://ollama.com to enable it.",
-            file=sys.stderr,
+            "https://ollama.com to enable it."
         )
         return content
     if not _ensure_ollama_running():
@@ -248,14 +254,15 @@ def lint_with_llm(content: str, model: str | None = None) -> str:
         original_len = len(content.strip())
         fixed_len = len(fixed)
         if fixed_len < original_len * 0.5 or fixed_len > original_len * 2.0:
-            print(
-                "md2star warning: LLM lint output size too different, skipping",
-                file=sys.stderr,
+            # Coarse hallucination/truncation guard: a wildly different length
+            # means we distrust the model and keep the original untouched.
+            logger.warning(
+                "md2star warning: LLM lint output size too different, skipping"
             )
             return content
 
         return fixed
 
     except Exception as e:
-        print(f"md2star warning: LLM lint failed: {e}", file=sys.stderr)
+        logger.warning(f"md2star warning: LLM lint failed: {e}")
         return content

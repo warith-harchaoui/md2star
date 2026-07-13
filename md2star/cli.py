@@ -58,8 +58,14 @@ from .errors import (
     Md2starError,
     MissingDependencyError,
 )
+from .logging import configure as configure_logging
+from .logging import get_logger
 from .postprocess import inject_table_styles, strip_table_normal_for_pdf
 from .preprocessing import preprocess_markdown
+
+# Module logger — a dotted child of the root "md2star" logger, so it inherits
+# the handler + level installed by ``configure_logging`` at CLI startup.
+logger = get_logger(__name__)
 
 # Per-format default reference template URL. Kept user-facing — when the URL
 # changes you also want to update the README / CHANGELOG / install docs.
@@ -141,10 +147,10 @@ def _resolve_reference_doc(
 
     legacy = in_dir / f".pandoc-reference.{fmt}"
     if legacy.exists():
-        print(
+        # Still honoured, but nudge the user toward the current name.
+        logger.warning(
             f"md2star: '.pandoc-reference.{fmt}' is deprecated; "
-            f"rename it to 'template.{fmt}'.",
-            file=sys.stderr,
+            f"rename it to 'template.{fmt}'."
         )
         return legacy
 
@@ -161,19 +167,18 @@ def _resolve_reference_doc(
             )
             with urllib.request.urlopen(req, timeout=15) as resp:
                 cached.write_bytes(resp.read())
-            print(
-                f"md2star: cached default template from {url} "
-                f"→ {cached}",
-                file=sys.stderr,
+            # Informational: confirm the (opt-in) network fetch happened.
+            # INFO so it stays visible by default but --quiet can hide it.
+            logger.info(
+                f"md2star: cached default template from {url} → {cached}"
             )
             return cached
         except Exception as exc:
             # Leave no partial file behind.
             cached.unlink(missing_ok=True)
-            print(
+            logger.warning(
                 f"md2star: template download failed ({exc}); "
-                "falling back to the bundled default.",
-                file=sys.stderr,
+                "falling back to the bundled default."
             )
 
     bundled = _bundled_template(fmt)
@@ -377,6 +382,20 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
               "preprocessor leaves remote refs in place and warns "
               "once on stderr when any were skipped."),
     )
+    # ── Verbosity (routes md2star's own diagnostics through logging) ──
+    # Mutually exclusive: --verbose lowers the threshold to DEBUG, --quiet
+    # raises it to ERROR. The default (neither) is INFO, which preserves the
+    # pre-logging behaviour where every diagnostic printed unconditionally.
+    verbosity_group = parser.add_mutually_exclusive_group()
+    verbosity_group.add_argument(
+        "-v", "--verbose", action="store_true",
+        help="Show debug-level diagnostics on stderr.",
+    )
+    verbosity_group.add_argument(
+        "-q", "--quiet", action="store_true",
+        help="Suppress info + warnings; only errors reach stderr.",
+    )
+
     parser.add_argument(
         "-V", "--version", action="version",
         version=f"md2star {__version__}",
@@ -398,6 +417,10 @@ def _convert(fmt: str, argv: list[str]) -> int:
     """Run the full Markdown → .docx/.pptx/.pdf pipeline. Returns the exit code."""
     parser = _make_format_parser(fmt)
     args, pandoc_extras = _split_known(parser, argv)
+
+    # Wire the logging surface first, before any resolver/preprocess step can
+    # emit a diagnostic, so --verbose/--quiet take effect for the whole run.
+    configure_logging(verbose=args.verbose, quiet=args.quiet)
 
     in_path = Path(args.input).expanduser().resolve()
     if not in_path.exists():
@@ -496,10 +519,9 @@ def _convert(fmt: str, argv: list[str]) -> int:
         try:
             inject_table_styles(str(docx_path))
         except Exception as exc:
-            print(
+            logger.warning(
                 f"md2star warning: postprocess failed ({exc}); "
-                "the .docx is otherwise complete.",
-                file=sys.stderr,
+                "the .docx is otherwise complete."
             )
 
     # 6. PDF-only: shell out to headless LibreOffice. The intermediate
@@ -514,10 +536,9 @@ def _convert(fmt: str, argv: list[str]) -> int:
         try:
             strip_table_normal_for_pdf(str(docx_path))
         except Exception as exc:
-            print(
+            logger.warning(
                 f"md2star warning: TableNormal0 strip failed ({exc}); "
-                "PDF tables may render with empty cells.",
-                file=sys.stderr,
+                "PDF tables may render with empty cells."
             )
         rc = _convert_docx_to_pdf(docx_path, out_path)
         # Always remove the intermediate DOCX — the user asked for a PDF.
@@ -581,22 +602,20 @@ def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> int:
                 cmd, capture_output=True, timeout=120, check=False,
             )
         except subprocess.TimeoutExpired:
-            print("md2pdf: LibreOffice timed out after 120s.", file=sys.stderr)
+            logger.error("md2pdf: LibreOffice timed out after 120s.")
             return 1
         if proc.returncode != 0:
             stderr = proc.stderr.decode("utf-8", errors="replace").strip()
-            print(
-                f"md2pdf: LibreOffice exited {proc.returncode}: {stderr}",
-                file=sys.stderr,
+            logger.error(
+                f"md2pdf: LibreOffice exited {proc.returncode}: {stderr}"
             )
             return proc.returncode
 
         produced = Path(workdir) / (docx_path.stem + ".pdf")
         if not produced.exists():
-            print(
+            logger.error(
                 f"md2pdf: LibreOffice did not produce {produced.name}. "
-                f"stderr: {proc.stderr.decode(errors='replace')!r}",
-                file=sys.stderr,
+                f"stderr: {proc.stderr.decode(errors='replace')!r}"
             )
             return 1
         pdf_path.parent.mkdir(parents=True, exist_ok=True)
@@ -617,10 +636,13 @@ def _render_error(exc: Md2starError) -> None:
     failure mode is something we already anticipated (see
     :mod:`md2star.errors`).
     """
-    print(f"md2star: {exc}", file=sys.stderr)
+    # Headline goes at error level; each hint line is emitted separately so
+    # the "%(message)s" formatter keeps the original two-block, indented
+    # layout (no per-line "md2star:" prefix on the wrapped hint).
+    logger.error(f"md2star: {exc}")
     if exc.hint:
         for line in exc.hint.splitlines():
-            print(f"  {line}", file=sys.stderr)
+            logger.error(f"  {line}")
 
 
 def _run_format(fmt: str, argv: list[str] | None) -> int:
@@ -677,6 +699,12 @@ def main(argv: list[str] | None = None) -> int:
     """
     argv = list(sys.argv[1:] if argv is None else argv)
 
+    # Install the logging handler with defaults so the dispatch-level paths
+    # below (unknown subcommand, etc.) have a stderr sink. The conversion
+    # subcommands re-invoke configure() with their parsed --verbose/--quiet;
+    # configure() is idempotent, so that just updates the level.
+    configure_logging()
+
     if not argv or argv[0] in ("-h", "--help"):
         _print_top_level_help()
         return 0
@@ -706,7 +734,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"md2star: cleared cache ({freed / 1024:.1f} KiB freed)")
         return 0
 
-    print(f"md2star: unknown subcommand {sub!r}", file=sys.stderr)
+    logger.error(f"md2star: unknown subcommand {sub!r}")
+    # Help text (not a diagnostic) still goes straight to stderr via print.
     _print_top_level_help(file=sys.stderr)
     return 2
 

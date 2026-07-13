@@ -16,6 +16,7 @@ argparse layer.
 
 from __future__ import annotations
 
+import logging
 from unittest.mock import patch
 
 from md2star.preprocessing import preprocess_markdown
@@ -49,20 +50,23 @@ class TestRemoteImagesDefaultDeny:
         # consequence of "no network was permitted".)
         assert "https://example.invalid/banner.png" in result
 
-    def test_warning_mentions_the_opt_in_flag(self, capsys):
+    def test_warning_mentions_the_opt_in_flag(self, caplog):
+        # The skip warning now flows through the md2star logger, so assert on
+        # captured records rather than stderr.
+        caplog.set_level(logging.WARNING, logger="md2star")
         preprocess_markdown(
             MD_WITH_REMOTE_IMG, inject_metadata=False, lint_enabled=False,
         )
-        stderr = capsys.readouterr().err
-        assert "--allow-remote-images" in stderr
-        assert "https://example.invalid/banner.png" in stderr
+        assert "--allow-remote-images" in caplog.text
+        assert "https://example.invalid/banner.png" in caplog.text
 
-    def test_no_warning_when_no_remote_images(self, capsys):
+    def test_no_warning_when_no_remote_images(self, caplog):
+        # No remote image → no skip warning should be logged at all.
+        caplog.set_level(logging.WARNING, logger="md2star")
         preprocess_markdown(
             MD_WITH_LOCAL_IMG, inject_metadata=False, lint_enabled=False,
         )
-        stderr = capsys.readouterr().err
-        assert "--allow-remote-images" not in stderr
+        assert "--allow-remote-images" not in caplog.text
 
 
 class TestRemoteImagesOptIn:

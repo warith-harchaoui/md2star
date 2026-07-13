@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Central logging surface** (`md2star/logging.py`) with `configure()` +
+  `get_logger()`. All 31 stderr *diagnostics* (deprecation notices, download
+  / render / lint fallbacks, LibreOffice failures) now go through a single
+  `"md2star"` logger instead of scattered `print(..., file=sys.stderr)`
+  calls. Program *output* (`Wrote: …`, `doctor --json`, `templates list`)
+  stays on stdout, so piping is unaffected.
+- **`--verbose` / `--quiet`** flags on `md2docx` / `md2pptx` / `md2pdf`
+  (and the `md2star` subcommands). `--verbose` shows debug-level detail,
+  `--quiet` limits stderr to errors. The default is unchanged: every
+  message that used to print still prints.
+
 ## [2.3.0] — 2026-07-12
 
 ### Added

@@ -36,9 +36,9 @@ Author
 from __future__ import annotations
 
 import re
-import sys
 from collections.abc import Iterable
 
+from ..logging import get_logger
 from .alt_text import fill_empty_alt_text
 from .images import (
     absolutize_image_paths,
@@ -54,6 +54,9 @@ from .math import unwrap_math_in_code_spans
 from .mermaid import render_mermaid_local
 from .regexes import PIPE_TABLE_ROW_RE
 from .tables import convert_html_tables, normalize_pipe_tables
+
+# Module logger — child of the root "md2star" logger (configured by the CLI).
+logger = get_logger(__name__)
 
 # Canonical, stable phase names. The CLI ``--skip-phase`` flag (and any
 # ``md2star_skip:`` metadata key in a document's YAML front-matter) refers
@@ -97,11 +100,11 @@ def _warn_remote_images_blocked(content: str) -> None:
         return
     sample = matches[0]
     extra = f" (and {len(matches) - 1} more)" if len(matches) > 1 else ""
-    print(
+    # One actionable breadcrumb pointing at the opt-in download flag.
+    logger.warning(
         f"md2star: skipped remote image {sample!r}{extra} — pass "
         f"--allow-remote-images to download them, or --offline to "
-        f"silence this warning explicitly.",
-        file=sys.stderr,
+        f"silence this warning explicitly."
     )
 
 
@@ -112,11 +115,11 @@ def _normalize_skip(skip_phases: Iterable[str] | None) -> frozenset[str]:
     asked = {p.strip() for p in skip_phases if p and p.strip()}
     unknown = asked - PHASES
     if unknown:
-        print(
+        # Warn on typo'd phase names but proceed with the valid subset.
+        logger.warning(
             f"md2star warning: unknown --skip-phase name(s): "
             f"{', '.join(sorted(unknown))}. Known phases: "
-            f"{', '.join(sorted(PHASES))}.",
-            file=sys.stderr,
+            f"{', '.join(sorted(PHASES))}."
         )
     return frozenset(asked & PHASES)
 
@@ -276,9 +279,10 @@ def preprocess_markdown(
                             out_lines.append("")
                         out_lines.append(f"![]({img_name})\n")
                     except Exception as e:
-                        print(
-                            f"md2star warning: Mermaid rendering failed: {e}",
-                            file=sys.stderr,
+                        # Rendering failed: keep the original mermaid code
+                        # fence so nothing is lost from the document.
+                        logger.warning(
+                            f"md2star warning: Mermaid rendering failed: {e}"
                         )
                         out_lines.append("```mermaid")
                         out_lines.extend(mermaid_lines)

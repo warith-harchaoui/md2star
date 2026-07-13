@@ -39,16 +39,19 @@ import hashlib
 import json
 import os
 import re
-import sys
 import urllib.request
 
 from ..cache import cache_dir
+from ..logging import get_logger
 from .lint import (
     _default_lint_model,
     _ensure_model_pulled,
     _ping_ollama,
     is_ollama_installed,
 )
+
+# Module logger — child of the root "md2star" logger (configured by the CLI).
+logger = get_logger(__name__)
 
 # Match ``![<empty>](src)`` outside of code blocks. The alt group is
 # ``\s*`` so any combination of empty / whitespace alt qualifies; src is
@@ -188,9 +191,10 @@ def fill_empty_alt_text(
             try:
                 cache_file.write_text(alt, encoding="utf-8")
             except OSError as e:
-                print(
-                    f"md2star warning: could not cache alt-text for {path}: {e}",
-                    file=sys.stderr,
+                # A failed cache write is non-fatal: we still return the alt
+                # text, we just don't persist it for next time.
+                logger.warning(
+                    f"md2star warning: could not cache alt-text for {path}: {e}"
                 )
 
         # Escape any closing-bracket the model produced — would break the
