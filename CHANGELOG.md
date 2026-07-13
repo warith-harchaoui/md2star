@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.4.1] — 2026-07-13
+
 ### Maintenance
 - **Comment-density pass (coding-standard rule 4).** Added *why* comments
   across the previously under-documented modules (`doctor`, `images`,
