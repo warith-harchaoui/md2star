@@ -18,12 +18,21 @@ source .venv/bin/activate
 # Run the test suite.
 python -m pytest tests/ -v
 
+# Or just the fast subset (skips the LibreOffice/kreuzberg OCR round-trip).
+python -m pytest -m "not slow" -q
+
 # Run the integration suite (needs pandoc + the package installed).
 make test
 ```
 
 `make dev` is the only setup step. `pyproject.toml` declares everything
 else (runtime deps, dev deps, console scripts, package data).
+
+If you prefer not to use `make`, the equivalent one-liner into an
+already-activated venv is `pip install -r requirements-dev.txt` (installs
+`-e .[dev]`: pytest, pytest-cov, ruff, pypdf, the api/mcp deps, and
+kreuzberg for the OCR round-trip test). `pip install -r requirements.txt`
+gives you the runtime set only (`-e .`).
 
 ## Project layout
 
@@ -42,21 +51,31 @@ else (runtime deps, dev deps, console scripts, package data).
   - `data/` — bundled package data (Lua filter, defaults YAMLs,
     templates, Mermaid config).
 - `tests/` — pytest suite. `conftest.py` redirects the cache to `tmp_path`
-  for every test. The three files:
-  - `test_preprocessing.py` (~80 tests) — the line-level pipeline.
+  for every test. The load-bearing files:
+  - `test_preprocessing.py` (~85 tests) — the line-level pipeline.
   - `test_postprocess.py` — DOCX style re-injection.
   - `test_lua_filter.py` — the Pandoc Lua filter (drives pandoc as a
     subprocess; skipped when pandoc is not on PATH).
-- `scripts/` — `install.sh` / `uninstall.sh` / `test.sh` and their
-  PowerShell siblings. Thin wrappers; the real install path is `pipx`.
+  - `test_offline_security.py` — the `--offline` / `--allow-remote-*`
+    network gates (the contract documented in `SECURITY.md`).
+  - `test_roundtrip_ocr.py` — the md → docx → pdf → text OCR round-trip;
+    marked `slow` (needs LibreOffice + kreuzberg) and skipped by
+    `pytest -m "not slow"`.
+
+  Other files cover the CLI, doctor, API/MCP surfaces, templates, and
+  bibliography localization.
+- `scripts/` — `install.sh` / `uninstall.sh` / `test.sh` plus the
+  PowerShell siblings (`install.ps1` / `uninstall.ps1` / `update.ps1`)
+  and `audit_comments.py`. Thin wrappers; the real install path is `pipx`.
 - `docs/developer_guide.md` — architectural notes (the why, not the what).
 
 ## PR checklist
 
 Before opening a PR:
 
-- [ ] `python -m pytest tests/ -v` is green.
-- [ ] `ruff check md2star/ tests/` is clean (no new warnings).
+- [ ] `python -m pytest tests/ -v` is green (`pytest -m "not slow"` for a
+      faster local loop that skips the LibreOffice/kreuzberg round-trip).
+- [ ] `ruff check md2star tests` is clean (no new warnings).
 - [ ] If you touched the Lua filter, the integration suite still passes
       (`make test`) — pytest alone does not cover end-to-end DOCX output.
 - [ ] If you added a new preprocessing phase, register its name in
@@ -75,13 +94,15 @@ Before opening a PR:
 - [ ] All `.py` files you add or modify keep a module header docstring
       with an Author block linking to
       [Warith HARCHAOUI](https://linkedin.com/in/warith-harchaoui/),
-      NumPy-style docstrings on every public function/class, and full
-      type annotations.
+      NumPy-style docstrings on **every** function and class — public
+      *and* private (`_helper`, `__dunder__`, nested closures included;
+      no exemption for visibility) — and full type annotations.
 
 ## Conventions
 
-- **One short docstring per module / public function.** The codebase
-  already documents *why*, not *what* — keep that bias.
+- **One short docstring per module / function** — public and private
+  alike. The codebase already documents *why*, not *what* — keep that
+  bias.
 - **No backward-compat shims** unless you can name a real outside caller
   that relies on the old API. This is a small, single-author project; do
   the rename and update the imports.

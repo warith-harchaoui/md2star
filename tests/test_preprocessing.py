@@ -8,6 +8,12 @@ rendering, math unwrapping, image normalization, PPTX slide isolation, …).
 A shared ``conftest.py`` fixture redirects the on-disk cache to a fresh
 ``tmp_path`` for every test, so SVG/raster artifacts land in a known
 location and do not pollute the user's real ``$XDG_CACHE_HOME/md2star/``.
+
+Design note (rule 13 — "rationalize at the 100-test mark"): value-varying
+micro-tests are folded into ``@pytest.mark.parametrize`` cases so every
+(input, expected) pair remains a distinct, named case while the function
+count stays small. Genuinely distinct behaviours and regression pins stay
+as their own functions.
 """
 
 from __future__ import annotations
@@ -29,168 +35,182 @@ def _module_importable(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
 
-# ──────────────────────────────────────────────────────────────────
-# Basic / edge-case tests
-# ──────────────────────────────────────────────────────────────────
+def _pp(text: str, **kwargs) -> str:
+    """Run ``preprocess_markdown`` with the test-default flags.
+
+    Almost every test disables metadata injection and linting so it can
+    assert on the structural transform alone. This helper centralizes
+    those defaults; callers override via ``**kwargs`` when they need the
+    language/metadata passes on.
+
+    Parameters
+    ----------
+    text : str
+        Markdown source to preprocess.
+    **kwargs
+        Forwarded to ``preprocess_markdown``; overrides the defaults.
+
+    Returns
+    -------
+    str
+        The preprocessed markdown.
+    """
+    # Default the two flags most tests turn off, but let callers win.
+    kwargs.setdefault("inject_metadata", False)
+    kwargs.setdefault("lint_enabled", False)
+    return preprocess_markdown(text, **kwargs)
 
 
-class TestPreprocessMarkdownBasic:
-    """Tests for trivial and edge-case inputs."""
+def _separator_cells(result: str) -> list[str]:
+    """Return the cells of a pipe-table separator row (``|:--|--:|``).
 
-    def test_empty_string(self) -> None:
-        """Empty input should return an empty string."""
-        # Edge case: function must handle empty input gracefully
-        assert preprocess_markdown("", inject_metadata=False, lint_enabled=False) == ""
+    Parameters
+    ----------
+    result : str
+        Preprocessed markdown containing exactly one pipe-table.
 
-    def test_no_lists(self) -> None:
-        """Content without any list items should pass through unchanged."""
-        # No list markers present → no transformations should occur
-        text = "Hello\nworld\n\nParagraph two."
-        assert preprocess_markdown(text, inject_metadata=False, lint_enabled=False) == text
-
-    def test_blank_lines_only(self) -> None:
-        """A string of blank lines should pass through unchanged."""
-        # Edge case: only whitespace, no actual content
-        text = "\n\n\n"
-        assert preprocess_markdown(text, inject_metadata=False, lint_enabled=False) == text
-
-
-# ──────────────────────────────────────────────────────────────────
-# Unordered list tests
-# ──────────────────────────────────────────────────────────────────
-
-
-class TestUnorderedLists:
-    """Tests for dash, star, and plus-style list markers."""
-
-    def test_blank_line_inserted_before_dash_item(self) -> None:
-        """A blank line should be inserted when text precedes a dash list."""
-        # Common case: paragraph followed by list needs spacing for Pandoc
-        result = preprocess_markdown("Hello\n- item", inject_metadata=False, lint_enabled=False)
-        assert result == "Hello\n\n- item"
-
-    def test_blank_line_inserted_before_star_item(self) -> None:
-        """Works with asterisk markers too."""
-        # Markdown supports multiple unordered list markers
-        result = preprocess_markdown("Hello\n* item", inject_metadata=False, lint_enabled=False)
-        assert result == "Hello\n\n* item"
-
-    def test_blank_line_inserted_before_plus_item(self) -> None:
-        """Works with plus markers too."""
-        # Plus (+) is another valid unordered list marker
-        result = preprocess_markdown("Hello\n+ item", inject_metadata=False, lint_enabled=False)
-        assert result == "Hello\n\n+ item"
-
-    def test_no_double_blank_line(self) -> None:
-        """If a blank line already precedes a list item, no extra is added."""
-        # Idempotency: don't add blank lines if one already exists
-        text = "Hello\n\n- item"
-        assert preprocess_markdown(text, inject_metadata=False, lint_enabled=False) == text
-
-    def test_consecutive_items_get_blank_lines(self) -> None:
-        """Each consecutive list item should be separated by a blank line."""
-        # Converts "tight" lists to "loose" lists for better DOCX/PPTX spacing
-        result = preprocess_markdown("- a\n- b\n- c", inject_metadata=False, lint_enabled=False)
-        assert result == "- a\n\n- b\n\n- c"
+    Returns
+    -------
+    list[str]
+        Per-column separator cell strings, outer pipes stripped.
+    """
+    # A separator row is the only ``|``-line made purely of ``|-: `` chars.
+    sep_line = next(
+        ln for ln in result.split("\n")
+        if ln.startswith("|") and set(ln) <= set("|-: ")
+    )
+    return sep_line.strip("|").split("|")
 
 
 # ──────────────────────────────────────────────────────────────────
-# Ordered list tests
+# Basic / edge-case pass-through
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestOrderedLists:
-    """Tests for numbered list markers (1., 2., …)."""
-
-    def test_ordered_list_item(self) -> None:
-        """Numbered list items should also get blank lines inserted."""
-        # Ordered lists use the same spacing logic as unordered lists
-        result = preprocess_markdown("Intro\n1. First\n2. Second", inject_metadata=False, lint_enabled=False)
-        assert result == "Intro\n\n1. First\n\n2. Second"
-
-    def test_multi_digit_numbers(self) -> None:
-        """Multi-digit numbers (10., 100., …) should still be matched."""
-        # Regex must handle numbers > 9 correctly
-        result = preprocess_markdown("Intro\n10. Tenth", inject_metadata=False, lint_enabled=False)
-        assert result == "Intro\n\n10. Tenth"
-
-
-# ──────────────────────────────────────────────────────────────────
-# Nested list tests
-# ──────────────────────────────────────────────────────────────────
-
-
-class TestNestedLists:
-    """Tests for indented (nested) list items."""
-
-    def test_nested_list_items(self) -> None:
-        """Indented sub-items should also be separated by blank lines."""
-        # Nested lists preserve indentation while adding spacing
-        result = preprocess_markdown("- parent\n  - child", inject_metadata=False, lint_enabled=False)
-        assert result == "- parent\n\n  - child"
+# Inputs that must survive the pipeline byte-for-byte. Each guards a
+# different "no transformation should fire" edge case.
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param("", id="empty-string"),
+        pytest.param("Hello\nworld\n\nParagraph two.", id="prose-no-lists"),
+        pytest.param("\n\n\n", id="blank-lines-only"),
+        pytest.param("Hello\n\n- item", id="already-spaced-list"),
+    ],
+)
+def test_passthrough_unchanged(text: str) -> None:
+    """Inputs with nothing to transform pass through byte-for-byte."""
+    assert _pp(text) == text
 
 
 # ──────────────────────────────────────────────────────────────────
-# Code-block preservation tests
+# List spacing (unordered, ordered, nested)
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestCodeBlocks:
-    """List-like syntax inside fenced code blocks must NOT be altered."""
-
-    def test_code_block_preserved(self) -> None:
-        """Lines inside ``` … ``` should not trigger blank-line injection."""
-        # Critical: code examples often contain list-like syntax that must not be altered
-        text = "```\n- not a list\n```"
-        assert preprocess_markdown(text, inject_metadata=False, lint_enabled=False) == text
-
-    def test_code_block_with_surrounding_text(self) -> None:
-        """Code block between paragraphs: only real lists get spacing."""
-        # Mixed content: code block contains list-like syntax, followed by a real list
-        text = "Before\n```\n- code\n```\nAfter\n- real list"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        # The "- code" inside the fence should be untouched (code preservation)
-        assert "```\n- code\n```" in result
-        # The real list item after the fence should get a blank line (list formatting)
-        assert "After\n\n- real list" in result
-
-
-# ──────────────────────────────────────────────────────────────────
-# Mixed content tests
-# ──────────────────────────────────────────────────────────────────
-
-
-class TestMixedContent:
-    """Tests combining headings, paragraphs, lists, and code blocks."""
-
-    def test_heading_then_list(self) -> None:
-        """A heading followed by a list should get a blank line."""
-        # Headings are treated like paragraphs: need spacing before lists
-        result = preprocess_markdown("## Heading\n- item", inject_metadata=False, lint_enabled=False)
-        assert result == "## Heading\n\n- item"
-
-    def test_paragraph_list_paragraph(self) -> None:
-        """Paragraph → list → paragraph round-trip."""
-        # Complex scenario: multiple list items between paragraphs
-        text = "Intro\n- a\n- b\nOutro"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert "Intro\n\n- a\n\n- b\nOutro" == result
+# One case per list flavour: a blank line must be injected between the
+# preceding block and each list item so Pandoc treats it as a loose list.
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        pytest.param("Hello\n- item", "Hello\n\n- item", id="dash-marker"),
+        pytest.param("Hello\n* item", "Hello\n\n* item", id="star-marker"),
+        pytest.param("Hello\n+ item", "Hello\n\n+ item", id="plus-marker"),
+        pytest.param(
+            "- a\n- b\n- c", "- a\n\n- b\n\n- c", id="consecutive-items"
+        ),
+        pytest.param(
+            "Intro\n1. First\n2. Second",
+            "Intro\n\n1. First\n\n2. Second",
+            id="ordered-single-digit",
+        ),
+        # Regex must handle numbers > 9, not just 1-9.
+        pytest.param("Intro\n10. Tenth", "Intro\n\n10. Tenth", id="ordered-multi-digit"),
+        # Indented sub-items keep their indent while still getting spacing.
+        pytest.param(
+            "- parent\n  - child", "- parent\n\n  - child", id="nested-item"
+        ),
+        # Headings are treated like paragraphs: they need spacing before a list.
+        pytest.param(
+            "## Heading\n- item", "## Heading\n\n- item", id="heading-then-list"
+        ),
+        # Paragraph → list → paragraph: spacing goes in front of the list only.
+        pytest.param(
+            "Intro\n- a\n- b\nOutro",
+            "Intro\n\n- a\n\n- b\nOutro",
+            id="paragraph-list-paragraph",
+        ),
+    ],
+)
+def test_blank_line_inserted_before_lists(text: str, expected: str) -> None:
+    """Text preceding a list item gets a blank line inserted (all marker kinds)."""
+    assert _pp(text) == expected
 
 
 # ──────────────────────────────────────────────────────────────────
-# Mermaid Block tests
+# Code-block preservation
+# ──────────────────────────────────────────────────────────────────
+
+
+def test_code_block_list_syntax_preserved() -> None:
+    """Lines inside ``` … ``` must not trigger blank-line injection."""
+    # Critical: code examples often contain list-like syntax to leave alone.
+    text = "```\n- not a list\n```"
+    assert _pp(text) == text
+
+
+def test_code_block_with_surrounding_real_list() -> None:
+    """A fenced list-like block is left alone; a real list after it gets spacing."""
+    # Mixed content: fence contains list-like syntax, then a genuine list.
+    text = "Before\n```\n- code\n```\nAfter\n- real list"
+    result = _pp(text)
+    # The "- code" inside the fence stays untouched (code preservation).
+    assert "```\n- code\n```" in result
+    # The real list item after the fence gets its blank line (list formatting).
+    assert "After\n\n- real list" in result
+
+
+# ──────────────────────────────────────────────────────────────────
+# Bibliography & citation preservation
+# ──────────────────────────────────────────────────────────────────
+
+
+# Pandoc ``@key`` / ``[@key]`` citations must survive verbatim, whether they
+# sit inside a list (which does get spacing) or in flowing prose (untouched).
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        pytest.param(
+            "Related works:\n- [@pearl2000]\n- See @smith2019 for details",
+            "Related works:\n\n- [@pearl2000]\n\n- See @smith2019 for details",
+            id="citations-in-list",
+        ),
+        pytest.param(
+            "As proven by @einstein1905, this works.\n\nMore info [@turing1936].",
+            "As proven by @einstein1905, this works.\n\nMore info [@turing1936].",
+            id="inline-citations",
+        ),
+    ],
+)
+def test_citations_preserved(text: str, expected: str) -> None:
+    """Pandoc bibliography citations survive intact (list spacing aside)."""
+    assert _pp(text) == expected
+
+
+# ──────────────────────────────────────────────────────────────────
+# Mermaid block rendering
 # ──────────────────────────────────────────────────────────────────
 
 
 class TestMermaidBlocks:
-    """Tests evaluating local Mermaid rendering pipeline."""
+    """Tests evaluating the local Mermaid rendering pipeline."""
 
     @patch("md2star.preprocessing.pipeline.render_mermaid_local")
     def test_mermaid_renders_success(self, mock_fetch) -> None:
         """A valid mermaid block is substituted with the rendered PNG absolute path."""
         mock_fetch.return_value = "/absolute/dummy.png"
         text = "Intro\n```mermaid\ngraph TD;\n    A-->B\n```\nOutro"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         assert "![](/absolute/dummy.png)" in result
         assert "```mermaid" not in result
 
@@ -199,40 +219,37 @@ class TestMermaidBlocks:
         """A failed mermaid render falls back gracefully without modifying source."""
         mock_fetch.side_effect = Exception("Test Mermaid Error")
         text = "Intro\n```mermaid\ngraph TD;\n    A-->B\n```\nOutro"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         assert "```mermaid\ngraph TD;\n    A-->B\n```" in result
         assert "![](" not in result
 
     @patch("md2star.preprocessing.pipeline.render_mermaid_local")
-    def test_mermaid_wide_diagram_caps_width(self, mock_fetch, tmp_path) -> None:
-        """A wider-than-tall PNG gets a ``{width=15cm}`` cap (height auto)."""
+    @pytest.mark.parametrize(
+        "size, expected_attr",
+        [
+            # A wider-than-tall PNG caps width (height auto).
+            pytest.param((3000, 1000), "{width=15cm}", id="wide-caps-width"),
+            # A taller-than-wide PNG caps height (width auto).
+            pytest.param((600, 2500), "{height=17cm}", id="tall-caps-height"),
+        ],
+    )
+    def test_mermaid_aspect_ratio_cap(
+        self, mock_fetch, tmp_path, size, expected_attr
+    ) -> None:
+        """A rendered mermaid PNG gets an A4 cap chosen by its aspect ratio."""
         from PIL import Image
 
-        png = tmp_path / "wide.png"
-        Image.new("RGB", (3000, 1000), "white").save(png)
+        png = tmp_path / "diagram.png"
+        Image.new("RGB", size, "white").save(png)
         mock_fetch.return_value = str(png)
-        text = "```mermaid\ngraph LR;\nA-->B\n```"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert f"![]({png}){{width=15cm}}" in result
-
-    @patch("md2star.preprocessing.pipeline.render_mermaid_local")
-    def test_mermaid_tall_diagram_caps_height(self, mock_fetch, tmp_path) -> None:
-        """A taller-than-wide PNG gets a ``{height=17cm}`` cap (width auto)."""
-        from PIL import Image
-
-        png = tmp_path / "tall.png"
-        Image.new("RGB", (600, 2500), "white").save(png)
-        mock_fetch.return_value = str(png)
-        text = "```mermaid\ngraph TD;\nA-->B\n```"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert f"![]({png}){{height=17cm}}" in result
+        result = _pp("```mermaid\ngraph LR;\nA-->B\n```")
+        assert f"![]({png}){expected_attr}" in result
 
     @patch("md2star.preprocessing.pipeline.render_mermaid_local")
     def test_mermaid_unreadable_png_falls_back_to_width100(self, mock_fetch) -> None:
         """If Pillow cannot open the render, the ``{width=100%}`` fallback still applies."""
         mock_fetch.return_value = "/absolute/dummy.png"
-        text = "```mermaid\ngraph TD;\nA-->B\n```"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp("```mermaid\ngraph TD;\nA-->B\n```")
         assert "![](/absolute/dummy.png){width=100%}" in result
 
 
@@ -244,63 +261,38 @@ class TestMermaidBlocks:
 class TestA4ImageCap:
     """Bare ``![](src)`` images are capped to A4 dimensions by aspect ratio."""
 
-    def test_wide_image_caps_width(self, tmp_path) -> None:
-        # Longest side ≤ 1600 px so process_image_assets leaves the path alone.
+    @pytest.mark.parametrize(
+        "size, expected_attr",
+        [
+            # Longest side ≤ 1600 px so process_image_assets leaves the path alone.
+            pytest.param((1500, 500), "{width=15cm}", id="wide-caps-width"),
+            pytest.param((500, 1500), "{height=17cm}", id="tall-caps-height"),
+        ],
+    )
+    def test_local_image_aspect_ratio_cap(self, tmp_path, size, expected_attr) -> None:
+        """A measurable local image gets an A4 cap chosen by aspect ratio."""
         from PIL import Image
 
-        png = tmp_path / "wide.png"
-        Image.new("RGB", (1500, 500), "white").save(png)
-        text = f"Photo:\n\n![]({png})\n"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert f"![]({png}){{width=15cm}}" in result
-
-    def test_tall_image_caps_height(self, tmp_path) -> None:
-        from PIL import Image
-
-        png = tmp_path / "tall.png"
-        Image.new("RGB", (500, 1500), "white").save(png)
-        text = f"Photo:\n\n![]({png})\n"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert f"![]({png}){{height=17cm}}" in result
+        png = tmp_path / "img.png"
+        Image.new("RGB", size, "white").save(png)
+        result = _pp(f"Photo:\n\n![]({png})\n")
+        assert f"![]({png}){expected_attr}" in result
 
     def test_remote_url_falls_back_to_width100(self) -> None:
         """URLs cannot be measured offline — fall back to the generic 100% width."""
-        text = "![](https://example.invalid/cannot-fetch.png)\n"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp("![](https://example.invalid/cannot-fetch.png)\n")
         assert "https://example.invalid/cannot-fetch.png){width=100%}" in result
 
     def test_existing_attrs_are_preserved(self) -> None:
         """Images that already declare ``{…}`` are left untouched."""
-        text = "![](/path/to/img.png){width=5cm}\n"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp("![](/path/to/img.png){width=5cm}\n")
         assert "![](/path/to/img.png){width=5cm}" in result
         assert "{width=15cm}" not in result
         assert "{height=17cm}" not in result
 
 
 # ──────────────────────────────────────────────────────────────────
-# Bibliography & Citation tests
-# ──────────────────────────────────────────────────────────────────
-
-
-class TestBibliographyCitations:
-    """Tests ensuring that Pandoc-style bibliography citations are preserved."""
-
-    def test_citations_in_lists(self) -> None:
-        """Citations inside lists should remain completely intact."""
-        text = "Related works:\n- [@pearl2000]\n- See @smith2019 for details"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert "Related works:\n\n- [@pearl2000]\n\n- See @smith2019 for details" == result
-
-    def test_inline_citations(self) -> None:
-        """Inline citations in regular text should not be touched."""
-        text = "As proven by @einstein1905, this works.\n\nMore info [@turing1936]."
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert text == result
-
-
-# ──────────────────────────────────────────────────────────────────
-# HTML table conversion tests
+# HTML table conversion
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -313,7 +305,7 @@ class TestHtmlTables:
             "<table><tr><th>Name</th><th>Value</th></tr>"
             "<tr><td>Alice</td><td>42</td></tr></table>"
         )
-        result = preprocess_markdown(html, inject_metadata=False, lint_enabled=False)
+        result = _pp(html)
         assert "| Name" in result
         assert "| Alice" in result
         assert "<table>" not in result
@@ -326,12 +318,11 @@ class TestHtmlTables:
             "<tr><td><code>3 sec</code></td><td><strong>Operator</strong></td><td>Hello</td></tr>"
             "</table>"
         )
-        result = preprocess_markdown(html, inject_metadata=False, lint_enabled=False)
+        result = _pp(html)
         assert "`3 sec`" in result
         assert "**Operator**" in result
         assert "<code>" not in result
         assert "<strong>" not in result
-
 
     def test_multirow_table(self) -> None:
         """Multiple data rows should all appear in the output."""
@@ -342,25 +333,24 @@ class TestHtmlTables:
             "<tr><td>3</td><td>4</td></tr>"
             "</table>"
         )
-        result = preprocess_markdown(html, inject_metadata=False, lint_enabled=False)
+        result = _pp(html)
         assert "| 1" in result
         assert "| 3" in result
 
     def test_table_separator_row(self) -> None:
         """Output must contain a separator line (---)."""
         html = "<table><tr><th>Col</th></tr><tr><td>data</td></tr></table>"
-        result = preprocess_markdown(html, inject_metadata=False, lint_enabled=False)
+        result = _pp(html)
         assert "|---" in result or "|--" in result
 
     def test_non_table_html_untouched(self) -> None:
         """Non-table HTML (e.g. <div>) should pass through unmodified."""
-        text = "<div>Hello</div>"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp("<div>Hello</div>")
         assert "<div>Hello</div>" in result
 
 
 # ──────────────────────────────────────────────────────────────────
-# Pipe-table separator normalization tests
+# Pipe-table separator normalization + cell wrapping
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -375,9 +365,7 @@ class TestPipeTableNormalization:
             "|---|---|---|\n"
             f"| C1 | {long_desc} | §6 |\n"
         )
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        sep_line = [ln for ln in result.split("\n") if ln.startswith("|") and set(ln) <= set("|-: ")][0]
-        cells = [c for c in sep_line.strip("|").split("|")]
+        cells = _separator_cells(_pp(text))
         assert len(cells) == 3
         # Middle cell must be the widest, by a lot.
         assert len(cells[1]) > len(cells[0]) * 5
@@ -388,15 +376,13 @@ class TestPipeTableNormalization:
     def test_blank_line_after_table(self) -> None:
         """A paragraph glued to a table must be split off by a blank line."""
         text = "| A | B |\n|---|---|\n| 1 | 2 |\nNext paragraph."
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         assert "| 1 | 2 |\n\nNext paragraph." in result
 
     def test_alignment_markers_preserved(self) -> None:
         """``:---:`` / ``---:`` / ``:---`` alignment markers must survive rewriting."""
         text = "| L | C | R |\n|:---|:---:|---:|\n| 1 | 2 | 3 |\n"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        sep_line = [ln for ln in result.split("\n") if ln.startswith("|") and set(ln) <= set("|-: ")][0]
-        cells = sep_line.strip("|").split("|")
+        cells = _separator_cells(_pp(text))
         assert cells[0].startswith(":") and not cells[0].endswith(":")
         assert cells[1].startswith(":") and cells[1].endswith(":")
         assert cells[2].endswith(":") and not cells[2].startswith(":")
@@ -404,14 +390,14 @@ class TestPipeTableNormalization:
     def test_idempotent(self) -> None:
         """Running preprocessing twice should produce the same output."""
         text = "| A | B |\n|---|---|\n| 1 | 2 |\n\nAfter."
-        once = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        twice = preprocess_markdown(once, inject_metadata=False, lint_enabled=False)
+        once = _pp(text)
+        twice = _pp(once)
         assert once == twice
 
     def test_table_in_code_block_untouched(self) -> None:
         """A pipe-table-looking block inside a fenced code block must not be rewritten."""
         text = "```\n| A | B |\n|---|---|\n| 1 | 2 |\n```\n"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         assert "|---|---|" in result
 
     def test_long_path_gets_soft_breaks(self) -> None:
@@ -423,7 +409,7 @@ class TestPipeTableNormalization:
             "|---|---|\n"
             "| data/conversations/long_record_id.json | one per conversation |\n"
         )
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         # Zero-width space (U+200B) should appear after slashes and underscores
         # inside the long path string.
         assert "/​" in result
@@ -436,8 +422,7 @@ class TestPipeTableNormalization:
     def test_short_cell_no_soft_breaks(self) -> None:
         """Cells without long unbreakable runs are not modified."""
         text = "| A | B |\n|---|---|\n| short | also short |\n"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert "​" not in result
+        assert "​" not in _pp(text)
 
     def test_long_cell_gets_br_breaks(self) -> None:
         """A >120 char cell is broken at sentence boundaries with ``<br/>``."""
@@ -447,7 +432,7 @@ class TestPipeTableNormalization:
             "This is the third sentence so the total exceeds the wrap threshold."
         )
         text = f"| A | B |\n|---|---|\n| short | {long_cell} |\n"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         assert "<br/>" in result
         # All visible content preserved (modulo whitespace shuffling).
         for fragment in ("first sentence", "second sentence", "third sentence"):
@@ -456,8 +441,7 @@ class TestPipeTableNormalization:
     def test_short_cell_not_wrapped(self) -> None:
         """A short cell must not get any ``<br/>`` inserted."""
         text = "| A | B |\n|---|---|\n| short | a brief explanation |\n"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert "<br" not in result
+        assert "<br" not in _pp(text)
 
     def test_code_span_in_cell_preserved(self) -> None:
         """Backtick code spans inside a cell are left exactly as-written."""
@@ -468,7 +452,7 @@ class TestPipeTableNormalization:
             "|---|---|\n"
             "| heuristic | `ROITELET_ROUTER_long_constant_name_here` |\n"
         )
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         assert "`ROITELET_ROUTER_long_constant_name_here`" in result
 
     def test_math_in_cell_preserved_from_soft_breaks(self) -> None:
@@ -480,42 +464,52 @@ class TestPipeTableNormalization:
             "|---|---|\n"
             "| $\\alpha_{long_subscript_name_here}$ | a long subscripted variable |\n"
         )
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         # Zero-width space (U+200B) must NOT appear inside the math chunk.
         assert "$\\alpha_{long_subscript_name_here}$" in result
         assert "​" not in result.split("$")[1]
 
 
 # ──────────────────────────────────────────────────────────────────
-# Image width auto-injection tests
+# Image width auto-injection (bare markdown images)
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestImageWidths:
-    """Tests that bare image links get {width=100%} appended."""
-
-    def test_bare_image_gets_width(self) -> None:
-        """An image with no attributes should receive {width=100%}."""
-        text = "![alt](/abs/path/to/image.png)"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert "![alt](/abs/path/to/image.png){width=100%}" in result
-
-    def test_image_with_existing_width_unchanged(self) -> None:
-        """An image that already specifies a width must not be double-decorated."""
-        text = "![alt](/abs/path/to/image.png){width=50%}"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert "{width=100%}" not in result
-        assert "{width=50%}" in result
-
-    def test_empty_alt_image(self) -> None:
-        """Images with empty alt text also need width injection."""
-        text = "![](https://example.com/img.jpg)"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert "{width=100%}" in result
+# ``process_image_assets`` cannot measure these (no local file), so they take
+# the generic ``{width=100%}`` path — unless an explicit width is present.
+@pytest.mark.parametrize(
+    "text, present, absent",
+    [
+        pytest.param(
+            "![alt](/abs/path/to/image.png)",
+            "![alt](/abs/path/to/image.png){width=100%}",
+            None,
+            id="bare-image-gets-width",
+        ),
+        pytest.param(
+            "![alt](/abs/path/to/image.png){width=50%}",
+            "{width=50%}",
+            "{width=100%}",
+            id="existing-width-not-double-decorated",
+        ),
+        pytest.param(
+            "![](https://example.com/img.jpg)",
+            "{width=100%}",
+            None,
+            id="empty-alt-remote-gets-width",
+        ),
+    ],
+)
+def test_bare_image_width_injection(text: str, present: str, absent: str | None) -> None:
+    """Bare image links get ``{width=100%}`` unless they already declare a width."""
+    result = _pp(text)
+    assert present in result
+    if absent is not None:
+        assert absent not in result
 
 
 # ──────────────────────────────────────────────────────────────────
-# Image path absolutization tests
+# Image path absolutization
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -523,69 +517,66 @@ class TestImagePathAbsolutization:
     """Relative image paths must be rewritten to absolute against ``base_dir``."""
 
     def test_relative_path_becomes_absolute(self, tmp_path) -> None:
-        text = "![](images/foo.png)"
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
+        """A plain relative path is joined onto base_dir."""
+        result = _pp("![](images/foo.png)", base_dir=str(tmp_path))
         assert f"![]({tmp_path}/images/foo.png)" in result
 
     def test_parent_relative_path_resolves(self, tmp_path) -> None:
         """``../`` segments must be normalized, not left literal."""
         sub = tmp_path / "sub"
         sub.mkdir()
-        text = "![](../foo.png)"
-        result = preprocess_markdown(
-            text, base_dir=str(sub), inject_metadata=False, lint_enabled=False
-        )
+        result = _pp("![](../foo.png)", base_dir=str(sub))
         assert f"![]({tmp_path}/foo.png)" in result
 
-    def test_absolute_path_unchanged(self, tmp_path) -> None:
-        text = "![](/already/absolute.png)"
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
-        assert "![](/already/absolute.png)" in result
-        assert str(tmp_path) + "/already" not in result
-
-    def test_http_url_unchanged(self, tmp_path) -> None:
-        """HTTP URLs must not be joined with base_dir even if download fails."""
-        text = "![](https://nonexistent.invalid.tld/img.png)"
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
-        assert "https://nonexistent.invalid.tld/img.png" in result
-        assert f"{tmp_path}/https:" not in result
-
-    def test_data_uri_unchanged(self, tmp_path) -> None:
-        text = "![](data:image/png;base64,iVBORw0KGgo=)"
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
-        assert "data:image/png;base64,iVBORw0KGgo=" in result
+    # Paths/URIs that must NOT be re-rooted under base_dir. Each guards a
+    # different "already resolvable / not a local path" class of ref.
+    @pytest.mark.parametrize(
+        "text, present, joined_prefix",
+        [
+            pytest.param(
+                "![](/already/absolute.png)",
+                "![](/already/absolute.png)",
+                "/already",
+                id="absolute-path",
+            ),
+            pytest.param(
+                "![](https://nonexistent.invalid.tld/img.png)",
+                "https://nonexistent.invalid.tld/img.png",
+                "https:",
+                id="http-url",
+            ),
+            pytest.param(
+                "![](data:image/png;base64,iVBORw0KGgo=)",
+                "data:image/png;base64,iVBORw0KGgo=",
+                "data:",
+                id="data-uri",
+            ),
+        ],
+    )
+    def test_non_relative_refs_not_rerooted(
+        self, tmp_path, text, present, joined_prefix
+    ) -> None:
+        """Absolute paths, HTTP URLs, and data URIs are never joined with base_dir."""
+        result = _pp(text, base_dir=str(tmp_path))
+        assert present in result
+        # The base_dir must not have been prepended onto the untouched ref.
+        assert f"{tmp_path}/{joined_prefix}" not in result
 
     def test_code_block_paths_untouched(self, tmp_path) -> None:
         """Image syntax inside fenced code blocks is example text, not a real ref."""
-        text = "```\n![](relative/in/code.png)\n```"
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
+        result = _pp("```\n![](relative/in/code.png)\n```", base_dir=str(tmp_path))
         assert "![](relative/in/code.png)" in result
         assert f"{tmp_path}/relative/in/code.png" not in result
 
     def test_multiple_images_same_line(self, tmp_path) -> None:
-        text = "![a](one.png) ![b](sub/two.png)"
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
+        """Every image on a single line is absolutized independently."""
+        result = _pp("![a](one.png) ![b](sub/two.png)", base_dir=str(tmp_path))
         assert f"![a]({tmp_path}/one.png)" in result
         assert f"![b]({tmp_path}/sub/two.png)" in result
 
     def test_linked_image(self, tmp_path) -> None:
         """The image inside ``[![](img)](url)`` must still be absolutized."""
-        text = "[![](thumb.png)](https://example.com)"
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
+        result = _pp("[![](thumb.png)](https://example.com)", base_dir=str(tmp_path))
         assert f"![]({tmp_path}/thumb.png)" in result
         assert "https://example.com" in result
 
@@ -595,14 +586,8 @@ class TestImagePathAbsolutization:
         ``normalize_pipe_tables`` sprinkles zero-width spaces into table
         contents for soft-wrapping, so we strip them before checking.
         """
-        text = (
-            "| col |\n"
-            "|-----|\n"
-            "| ![](cell.png) |\n"
-        )
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        ).replace("​", "")
+        text = "| col |\n|-----|\n| ![](cell.png) |\n"
+        result = _pp(text, base_dir=str(tmp_path)).replace("​", "")
         assert "(cell.png)" not in result
         assert str(tmp_path) in result
 
@@ -642,11 +627,9 @@ class TestImageAssetProcessing:
         reason="needs librsvg (rsvg-convert) or cairosvg installed",
     )
     def test_svg_rewritten_to_png(self, tmp_path) -> None:
+        """A markdown-image SVG is rendered to a cached PNG and the ref rewritten."""
         svg = self._make_svg(tmp_path)
-        text = f"![logo]({svg.name})"
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
+        result = _pp(f"![logo]({svg.name})", base_dir=str(tmp_path))
         # Cached PNGs land in cache_dir("resized") with a hash-based name.
         cached_pngs = list(cache_dir("resized").glob("*_max*.png"))
         assert cached_pngs, "expected the SVG to be rendered into the cache dir"
@@ -659,25 +642,22 @@ class TestImageAssetProcessing:
         reason="needs librsvg (rsvg-convert) or cairosvg installed",
     )
     def test_svg_inside_html_img_also_rewritten(self, tmp_path) -> None:
+        """An SVG referenced from a raw ``<img src>`` is rewritten too."""
         svg = self._make_svg(tmp_path, "diagram.svg")
         text = f'<img src="{svg.name}" alt="diagram" width="100%">'
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
+        result = _pp(text, base_dir=str(tmp_path))
         assert "diagram.svg" not in result
         # PNG lands in the cache, not next to the source.
         cached_pngs = list(cache_dir("resized").glob("*_max*.png"))
         assert any(str(p) in result for p in cached_pngs)
 
     def test_oversized_raster_downscaled(self, tmp_path) -> None:
+        """A >1600px raster gets a downscaled cached sibling, aspect preserved."""
         from PIL import Image as PILImage
 
         big = tmp_path / "big.png"
         PILImage.new("RGB", (3200, 1600), color=(0, 128, 255)).save(big)
-        text = f"![]({big.name})"
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
+        result = _pp(f"![]({big.name})", base_dir=str(tmp_path))
         cached = list(cache_dir("resized").glob("*_max1600.png"))
         assert cached, "expected a downscaled copy in the resized cache"
         with PILImage.open(cached[0]) as resized:
@@ -688,24 +668,19 @@ class TestImageAssetProcessing:
         assert str(cached[0]) in result
 
     def test_small_raster_passes_through(self, tmp_path) -> None:
+        """An under-threshold raster is left in place with nothing cached."""
         from PIL import Image as PILImage
 
         small = tmp_path / "small.png"
         PILImage.new("RGB", (400, 300), color=(255, 0, 0)).save(small)
-        text = f"![]({small.name})"
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
+        result = _pp(f"![]({small.name})", base_dir=str(tmp_path))
         assert str(small) in result
         # Nothing should have landed in the cache for an under-threshold image.
         assert not list(cache_dir("resized").glob("*"))
 
     def test_url_image_untouched(self, tmp_path) -> None:
         """The asset processor must not try to download / convert URLs."""
-        text = "![](https://example.invalid/img.svg)"
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
+        result = _pp("![](https://example.invalid/img.svg)", base_dir=str(tmp_path))
         assert "https://example.invalid/img.svg" in result
 
     def test_html_p_wrapped_img_flattened_to_markdown(self, tmp_path) -> None:
@@ -721,9 +696,7 @@ class TestImageAssetProcessing:
             f'  <img src="{img.name}" alt="hero shot" width="100%">\n'
             '</p>\n'
         )
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
+        result = _pp(text, base_dir=str(tmp_path))
         assert "<p" not in result and "<img" not in result
         assert f"![hero shot]({img})" in result
         assert "{width=100%}" in result
@@ -731,9 +704,7 @@ class TestImageAssetProcessing:
     def test_html_img_inside_fenced_code_preserved(self, tmp_path) -> None:
         """``<img>`` shown inside a code fence is example text, not a real ref."""
         text = "```\n<img src=\"shown-as-code.png\">\n```"
-        result = preprocess_markdown(
-            text, base_dir=str(tmp_path), inject_metadata=False, lint_enabled=False
-        )
+        result = _pp(text, base_dir=str(tmp_path))
         assert '<img src="shown-as-code.png">' in result
 
 
@@ -747,10 +718,19 @@ class TestSingleWordColumnSlack:
 
     @staticmethod
     def _separator_dashes(table_md: str) -> list[int]:
-        """Return the dash-count of each column in the separator row."""
-        result = preprocess_markdown(
-            table_md, inject_metadata=False, lint_enabled=False
-        )
+        """Return the dash-count of each column in the separator row.
+
+        Parameters
+        ----------
+        table_md : str
+            Raw markdown table to preprocess.
+
+        Returns
+        -------
+        list[int]
+            Per-column count of ``-`` characters in the separator row.
+        """
+        result = _pp(table_md)
         sep_line = next(
             ln for ln in result.split("\n") if re.match(r"^\|[-:|]+\|$", ln.strip())
         )
@@ -801,22 +781,39 @@ class TestSingleWordColumnSlack:
             "| abcdefgh | ab cdefg |\n"
             "| ijklmnop | ij klmno |\n"
         )
-        once = preprocess_markdown(
-            table, inject_metadata=False, lint_enabled=False
-        )
-        twice = preprocess_markdown(
-            once, inject_metadata=False, lint_enabled=False
-        )
+        once = _pp(table)
+        twice = _pp(once)
         assert once == twice, "single-word slack must not compound across runs"
 
 
 # ──────────────────────────────────────────────────────────────────
-# PPTX slide isolation tests
+# PPTX slide isolation
 # ──────────────────────────────────────────────────────────────────
 
 
 class TestPptxSlideIsolation:
     """Tables and images on a populated slide should be split onto fresh slides."""
+
+    @staticmethod
+    def _marker_between(result: str, start_pred, end_pred) -> bool:
+        """True iff a bare ``##`` slide marker sits between two matched lines.
+
+        Parameters
+        ----------
+        result : str
+            Preprocessed markdown to scan.
+        start_pred, end_pred : Callable[[str], bool]
+            Predicates picking the first line of the opening/closing anchor.
+
+        Returns
+        -------
+        bool
+            Whether any line strictly between the anchors is a lone ``##``.
+        """
+        lines = result.split("\n")
+        start = next(i for i, ln in enumerate(lines) if start_pred(ln))
+        end = next(i for i, ln in enumerate(lines) if end_pred(ln))
+        return any(ln.strip() == "##" for ln in lines[start + 1 : end])
 
     def test_table_after_prose_gets_own_slide(self) -> None:
         """A pipe-table that follows prose gets a synthetic blank ``##`` inserted."""
@@ -825,14 +822,12 @@ class TestPptxSlideIsolation:
             "Some intro prose.\n\n"
             "| A | B |\n|---|---|\n| 1 | 2 |\n"
         )
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         # A new blank ``##`` slide marker must appear between the prose and the
         # table so Pandoc renders the table on its own PPTX slide.
-        lines = result.split("\n")
-        prose_idx = next(i for i, ln in enumerate(lines) if "intro prose" in ln)
-        table_idx = next(i for i, ln in enumerate(lines) if ln.startswith("| A"))
-        between = lines[prose_idx + 1 : table_idx]
-        assert any(ln.strip() == "##" for ln in between)
+        assert self._marker_between(
+            result, lambda ln: "intro prose" in ln, lambda ln: ln.startswith("| A")
+        )
 
     def test_two_tables_in_one_section_each_get_own_slide(self) -> None:
         """A second table in the same section is split off onto a new slide."""
@@ -841,24 +836,20 @@ class TestPptxSlideIsolation:
             "| A | B |\n|---|---|\n| 1 | 2 |\n\n"
             "| C | D |\n|---|---|\n| 3 | 4 |\n"
         )
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        lines = result.split("\n")
-        first_table = next(i for i, ln in enumerate(lines) if ln.startswith("| A"))
-        second_table = next(i for i, ln in enumerate(lines) if ln.startswith("| C"))
-        between = lines[first_table + 1 : second_table]
-        assert any(ln.strip() == "##" for ln in between)
+        result = _pp(text)
+        assert self._marker_between(
+            result, lambda ln: ln.startswith("| A"), lambda ln: ln.startswith("| C")
+        )
 
     def test_first_table_in_section_not_isolated(self) -> None:
         """A table that opens a section directly is left where it is."""
         text = "## Section\n\n| A | B |\n|---|---|\n| 1 | 2 |\n"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         # No bare ``##`` slide marker should appear between the heading and the
         # table because the section starts with the table.
-        lines = result.split("\n")
-        heading_idx = next(i for i, ln in enumerate(lines) if ln.startswith("## "))
-        table_idx = next(i for i, ln in enumerate(lines) if ln.startswith("| A"))
-        between = lines[heading_idx + 1 : table_idx]
-        assert not any(ln.strip() == "##" for ln in between)
+        assert not self._marker_between(
+            result, lambda ln: ln.startswith("## "), lambda ln: ln.startswith("| A")
+        )
 
     def test_pipe_table_inside_code_block_not_treated_as_table(self) -> None:
         """A pipe-table-shaped block inside a fenced code block does not trigger isolation."""
@@ -867,7 +858,7 @@ class TestPptxSlideIsolation:
             "Some prose.\n\n"
             "```\n| A | B |\n|---|---|\n| 1 | 2 |\n```\n"
         )
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         # The code-fenced ``| A | B |`` must NOT trigger a slide split.
         # We assert by checking that no bare ``##`` was inserted before the fence.
         lines = result.split("\n")
@@ -890,15 +881,15 @@ class TestPptxSlideIsolation:
             "Some intro prose.\n\n"
             "| A | B |\n|---|---|\n| 1 | 2 |\n"
         )
-        once = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        twice = preprocess_markdown(once, inject_metadata=False, lint_enabled=False)
+        once = _pp(text)
+        twice = _pp(once)
         assert once == twice
         # And exactly one blank separator was inserted, not a growing pile.
         assert once.count("\n##\n") + once.count("\n## \n") <= 1
 
 
 # ──────────────────────────────────────────────────────────────────
-# Math-in-code unwrapping tests
+# Math-in-code unwrapping
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -911,64 +902,76 @@ class TestMathInCodeSpans:
     mixed text/math spans into a single math expression.
     """
 
-    def test_pure_inline_math_unwrapped(self) -> None:
-        """A code span whose content is exactly ``$x^2$`` becomes ``$x^2$``."""
-        result = preprocess_markdown("`$x^2$`", inject_metadata=False, lint_enabled=False)
-        assert result == "$x^2$"
+    # Each delimiter form (``$..$``, ``$$..$$``, ``\(..\)``, ``\[..\]``) is a
+    # distinct recognizer branch; a pure-math code span unwraps to bare math.
+    @pytest.mark.parametrize(
+        "src, expected",
+        [
+            pytest.param("`$x^2$`", "$x^2$", id="inline-dollar"),
+            pytest.param("`$$x^2$$`", "$$x^2$$", id="display-dollar"),
+            pytest.param(r"`\(x^2\)`", r"\(x^2\)", id="inline-paren"),
+            pytest.param(r"`\[x^2\]`", r"\[x^2\]", id="display-bracket"),
+        ],
+    )
+    def test_pure_math_unwrapped(self, src: str, expected: str) -> None:
+        """A code span whose content is exactly one math chunk unwraps to bare math."""
+        assert _pp(src) == expected
 
-    def test_pure_display_math_unwrapped(self) -> None:
-        """Display math ``$$..$$`` survives the unwrap with both delimiter pairs."""
-        result = preprocess_markdown("`$$x^2$$`", inject_metadata=False, lint_enabled=False)
-        assert result == "$$x^2$$"
+    # Mixed text+math spans collapse into a single ``$..$`` with prose wrapped
+    # in ``\text{}``; each case pins a different interleaving of text and math.
+    @pytest.mark.parametrize(
+        "src, expected",
+        [
+            # Headline case: snake_case prose reads as words, underscore would
+            # otherwise be parsed as a math subscript.
+            pytest.param(
+                "sharing one `quality_threshold $\\in [0,1]$` knob",
+                "sharing one $\\text{quality threshold} \\in [0,1]$ knob",
+                id="snake-case-identifier",
+            ),
+            # Text *after* the math chunk is wrapped in \text{}.
+            pytest.param(
+                "`$x^2$ when x is real`",
+                "$x^2 \\text{when x is real}$",
+                id="text-after-math",
+            ),
+            # Multiple math chunks interleaved with text merge into one expr.
+            pytest.param(
+                "`if $a$ then $b$`",
+                "$\\text{if} a \\text{then} b$",
+                id="multiple-math-chunks",
+            ),
+        ],
+    )
+    def test_mixed_text_math_merged(self, src: str, expected: str) -> None:
+        """Mixed text/math code spans collapse to one math expression."""
+        assert _pp(src) == expected
 
-    def test_paren_math_unwrapped(self) -> None:
-        r"""The ``\(..\)`` inline form is also recognized as math."""
-        result = preprocess_markdown(r"`\(x^2\)`", inject_metadata=False, lint_enabled=False)
-        assert result == r"\(x^2\)"
-
-    def test_bracket_math_unwrapped(self) -> None:
-        r"""The ``\[..\]`` display form is also recognized as math."""
-        result = preprocess_markdown(r"`\[x^2\]`", inject_metadata=False, lint_enabled=False)
-        assert result == r"\[x^2\]"
-
-    def test_snake_case_identifier_with_math_merged(self) -> None:
-        """The headline case: snake_case prose mixed with math collapses to one ``$..$``."""
-        # ``quality_threshold`` reads as the words "quality threshold" — the
-        # underscore would be parsed as a subscript inside math.
-        text = "sharing one `quality_threshold $\\in [0,1]$` knob"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert result == "sharing one $\\text{quality threshold} \\in [0,1]$ knob"
-
-    def test_text_after_math_merged(self) -> None:
-        """Text *after* the math chunk inside a code span is wrapped in \\text{}."""
-        text = "`$x^2$ when x is real`"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert result == "$x^2 \\text{when x is real}$"
-
-    def test_multiple_math_chunks_in_one_code_span(self) -> None:
-        """Multiple math chunks interleaved with text are merged into one expression."""
-        text = "`if $a$ then $b$`"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert result == "$\\text{if} a \\text{then} b$"
-
-    def test_plain_text_code_span_untouched(self) -> None:
-        """A code span without any math delimiters keeps its backticks."""
-        text = "Use `quality_threshold` to filter."
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert result == text
-
-    def test_math_inside_fenced_block_untouched(self) -> None:
-        """Backticked math inside a fenced code block stays verbatim — it's a code sample."""
-        # Inside a fence the user is showing literal Markdown source, so we
-        # must not rewrite it.
-        text = "```\nWrap math like `$x^2$` in backticks.\n```"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
-        assert "`$x^2$`" in result
+    # Inputs where the unwrap must NOT fire — no math delimiters, or the span
+    # is inside a fence where the source is being shown literally.
+    @pytest.mark.parametrize(
+        "text, must_contain",
+        [
+            pytest.param(
+                "Use `quality_threshold` to filter.",
+                "Use `quality_threshold` to filter.",
+                id="plain-code-span-untouched",
+            ),
+            pytest.param(
+                "```\nWrap math like `$x^2$` in backticks.\n```",
+                "`$x^2$`",
+                id="math-in-fence-untouched",
+            ),
+        ],
+    )
+    def test_no_unwrap_when_inapplicable(self, text: str, must_contain: str) -> None:
+        """Non-math code spans and fenced examples keep their backticks."""
+        assert must_contain in _pp(text)
 
     def test_math_in_pipe_table_cell(self) -> None:
         """The unwrap also applies inside pipe-table cells (line-level pass)."""
         text = "| Knob | Range |\n|---|---|\n| `quality_threshold $\\in [0,1]$` | tight |\n"
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         assert "$\\text{quality threshold} \\in [0,1]$" in result
         assert "`quality_threshold" not in result
 
@@ -983,25 +986,15 @@ class TestSkipPhase:
 
     def test_skip_image_widths_via_arg(self) -> None:
         """``skip_phases=['image_widths']`` leaves bare images untouched."""
-        text = "![](/abs/img.png)"
-        result = preprocess_markdown(
-            text,
-            inject_metadata=False,
-            lint_enabled=False,
-            skip_phases=["image_widths"],
-        )
+        result = _pp("![](/abs/img.png)", skip_phases=["image_widths"])
         assert "{width=100%}" not in result
         assert "![](/abs/img.png)" in result
 
     def test_skip_language_via_arg(self) -> None:
         """``skip_phases=['language']`` suppresses YAML lang/date_format injection."""
         text = "Ceci est un texte avec le, la, les, et, est."
-        result = preprocess_markdown(
-            text,
-            inject_metadata=True,
-            lint_enabled=False,
-            skip_phases=["language"],
-        )
+        # inject_metadata=True so the language phase would fire if not skipped.
+        result = _pp(text, inject_metadata=True, skip_phases=["language"])
         assert "lang:" not in result
         assert "date_format" not in result
 
@@ -1013,24 +1006,18 @@ class TestSkipPhase:
             "---\n\n"
             "![](/abs/img.png)\n"
         )
-        result = preprocess_markdown(text, inject_metadata=False, lint_enabled=False)
+        result = _pp(text)
         assert "{width=100%}" not in result
 
     def test_unknown_phase_name_is_warned_not_fatal(self) -> None:
         """A nonsense phase name prints a warning to stderr but does not raise."""
-        text = "![](/abs/img.png)"
-        result = preprocess_markdown(
-            text,
-            inject_metadata=False,
-            lint_enabled=False,
-            skip_phases=["this_phase_does_not_exist"],
-        )
+        result = _pp("![](/abs/img.png)", skip_phases=["this_phase_does_not_exist"])
         # Unknown name → no effect; image widths still get injected.
         assert "{width=100%}" in result
 
 
 # ──────────────────────────────────────────────────────────────────
-# Language Detection heuristic tests
+# Language detection heuristic
 # ──────────────────────────────────────────────────────────────────
 
 
@@ -1049,21 +1036,37 @@ class TestLanguageDetection:
         reason="langdetect not installed; language metadata is optional",
     )
 
-    def test_english_detection(self) -> None:
-        """Text with many English stop words gets en-US injected."""
-        text = "This is a simple text that has words like the and to in it."
-        result = preprocess_markdown(text, lint_enabled=False)
-        assert "lang: en-US" in result
-
-    def test_french_detection(self) -> None:
-        """Text with French stop words gets fr-FR injected."""
-        text = "Ceci est un texte avec le, la, les, et, est."
-        result = preprocess_markdown(text, lint_enabled=False)
-        assert "lang: fr-FR" in result
-
-    def test_existing_lang_respected(self) -> None:
-        """If a lang property is already in the YAML, it should not be overwritten."""
-        text = "---\nlang: de-DE\n---\n\nEnglish words like the and to."
-        result = preprocess_markdown(text, lint_enabled=False)
-        assert "lang: de-DE" in result
-        assert "lang: en-US" not in result
+    # Stop-word-heavy text in each language must inject the right ``lang:`` tag;
+    # a pre-declared lang must win over detection (no overwrite).
+    @pytest.mark.parametrize(
+        "text, present, absent",
+        [
+            pytest.param(
+                "This is a simple text that has words like the and to in it.",
+                "lang: en-US",
+                None,
+                id="english-detected",
+            ),
+            pytest.param(
+                "Ceci est un texte avec le, la, les, et, est.",
+                "lang: fr-FR",
+                None,
+                id="french-detected",
+            ),
+            pytest.param(
+                "---\nlang: de-DE\n---\n\nEnglish words like the and to.",
+                "lang: de-DE",
+                "lang: en-US",
+                id="existing-lang-respected",
+            ),
+        ],
+    )
+    def test_language_injection(self, text: str, present: str, absent: str | None) -> None:
+        """Language metadata is injected from stop words, but never overwrites an
+        explicit ``lang:`` already present in the front-matter."""
+        # Metadata injection stays ON here (the feature under test); only
+        # linting is disabled.
+        result = _pp(text, inject_metadata=True)
+        assert present in result
+        if absent is not None:
+            assert absent not in result

@@ -757,6 +757,15 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _print_top_level_help(file=sys.stdout) -> None:
+    """Print the top-level usage banner for the ``md2star`` dispatcher.
+
+    Parameters
+    ----------
+    file : TextIO, optional
+        Stream the banner is written to. Defaults to ``sys.stdout``; the
+        error path passes ``sys.stderr`` so the help does not contaminate a
+        piped stdout payload.
+    """
     print(
         f"md2star {__version__} — Markdown → DOCX/PPTX/PDF bridge\n\n"
         "Usage:\n"

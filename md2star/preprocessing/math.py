@@ -146,6 +146,19 @@ def unwrap_math_in_code_spans(text: str) -> str:
     Code spans with no math are returned verbatim.
     """
     def _replace(match: re.Match) -> str:
+        """Rewrite one matched code span, or leave it verbatim if it has no math.
+
+        Parameters
+        ----------
+        match : re.Match
+            A match of :data:`_CODE_SPAN_RE`; group 1 is the span's inner text.
+
+        Returns
+        -------
+        str
+            The merged math expression, or the original span (``match.group(0)``)
+            when the content holds no LaTeX math.
+        """
         merged = _merge_code_span(match.group(1))
         return merged if merged is not None else match.group(0)
 

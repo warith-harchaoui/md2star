@@ -101,33 +101,47 @@ You should pick md2star when **all** of these apply:
 | End-to-end-encrypted collab | **CryptPad** |
 | Team wiki with WYSIWYG | **Notion** (proprietary) or **Outline** (OSS) |
 
+> **A note on the GUI ratings.** Several rows below (WYSIWYG,
+> Mobile, Git-async) describe the local web editor. That GUI was
+> **removed from the core CLI wheel in v2.0** to keep the PyPI
+> package lean, and is slated to return as the opt-in
+> `md2star[gui]` extra in v2.1 (see `ROADMAP.md`). The star
+> ratings here reflect the author's editorial judgment of the
+> product *vision*, not what ships in the core CLI today — the
+> GUI-dependent capabilities are an opt-in extra, not part of the
+> default install.
+
 ### Where md2star deliberately doesn't compete
 
 - **Real-time collab**: 1 star, on purpose. Adding presence + CRDT
   would change the product into a different one. See
   `.private/GIT.md` for the analysis.
 - **WYSIWYG**: 3 stars. The split-pane preview is a deliberate
-  choice — it keeps the Markdown source clean and reviewable. We
-  do not plan to ship a single-pane WYSIWYG editor.
-- **Mobile**: 2 stars. The web GUI runs on `127.0.0.1` and assumes
+  choice — it keeps the Markdown source clean and reviewable. The
+  editor itself returns as the `md2star[gui]` extra (v2.1); a
+  single-pane WYSIWYG mode remains an investigation only and is
+  not committed.
+- **Mobile**: 2 stars. The local web GUI (returning as the
+  `md2star[gui]` extra in v2.1) binds to `127.0.0.1` and assumes
   desktop. A Tauri-based mobile shell is on the long-term backlog
   but not promised.
 - **Local-LLM**: 3 stars today (Ollama-based lint, optional). The
-  v1.5 + v1.6 git work adds commit-message generation and
-  LLM-assisted merge, which moves this toward 4 stars; the
-  Community Edition will support both local and BYO
-  OpenAI-compatible endpoints, with Premium hosting our own model
-  for users who don't want to run inference themselves.
+  planned git awareness inside the `[gui]` extra (ROADMAP P2,
+  v2.2+) would add commit-message generation and LLM-assisted
+  merge, which moves this toward 4 stars; the Community Edition
+  will support both local and BYO OpenAI-compatible endpoints,
+  with Premium hosting our own model for users who don't want to
+  run inference themselves.
 
 ### Where md2star wants to improve
 
 | Dimension | Current | Target | How |
 |---|---|---|---|
-| Git-async | ⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️⭐️ | v1.5: auto-commit + auto-push + visible status in the GUI. v1.6: LLM-assisted merge. |
-| Local-LLM | ⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️ | v1.5+v1.6 LLM features (commit messages, merge proposals). |
+| Git-async | ⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️⭐️ | Git awareness inside the `[gui]` extra (ROADMAP P2, v2.2+): read-only status → opt-in commit-on-save → opt-in push-on-save, rolled out in three phases. |
+| Local-LLM | ⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️ | The `md2star[ai]` extra (ROADMAP P1, v2.1) plus the git-awareness LLM features (commit messages, merge proposals). |
 | Mobile | ⭐️⭐️ | ⭐️⭐️⭐️ | Document the "use Working Copy + a hosted render endpoint" workflow as an explicit supported path. |
-| WYSIWYG | ⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️ | Investigate Lexical / TipTap-based single-pane editor as an opt-in mode (v2.0 candidate; not committed). |
-| Cite | ⭐️⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️⭐️ | Add Zotero Better-BibTeX integration. |
+| WYSIWYG | ⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️ | The split-pane editor returns as the `md2star[gui]` extra (v2.1). A Lexical / TipTap single-pane mode is an investigation only; not committed. |
+| Cite | ⭐️⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️⭐️ | Add Zotero Better-BibTeX integration (ROADMAP P2). |
 
 ### Where md2star will probably stay where it is
 

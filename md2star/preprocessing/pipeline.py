@@ -95,9 +95,13 @@ def _warn_remote_images_blocked(content: str) -> None:
     breadcrumb pointing at the opt-in flag.
     """
     import re
+    # Collect every remote ref up front so we can report an accurate count even
+    # though we only surface the first URL as a concrete example.
     matches = re.findall(r"!\[[^\]]*\]\((https?://[^)]+)\)", content)
     if not matches:
         return
+    # Show one representative URL and fold the rest into an "(and N more)" tail
+    # so a document with dozens of remote images still yields a single line.
     sample = matches[0]
     extra = f" (and {len(matches) - 1} more)" if len(matches) > 1 else ""
     # One actionable breadcrumb pointing at the opt-in download flag.
@@ -112,6 +116,8 @@ def _normalize_skip(skip_phases: Iterable[str] | None) -> frozenset[str]:
     """Validate ``skip_phases`` against :data:`PHASES`, warning on unknown names."""
     if not skip_phases:
         return frozenset()
+    # Tolerate whitespace and empty entries from comma-split CLI input before
+    # comparing against the canonical set — the user's typo shouldn't crash us.
     asked = {p.strip() for p in skip_phases if p and p.strip()}
     unknown = asked - PHASES
     if unknown:
@@ -139,11 +145,16 @@ def _extract_skip_from_metadata(content: str) -> set[str]:
     if not m:
         return set()
     block = m.group(1)
+    # Try the compact inline list form first (``md2star_skip: [a, b]``). It is
+    # the common hand-authored shape, so it is worth a cheap dedicated regex.
     inline = re.search(
         r"^md2star_skip\s*:\s*\[([^\]]*)\]", block, flags=re.MULTILINE
     )
     if inline:
+        # Strip surrounding quotes so both ``"language"`` and ``language`` parse.
         return {p.strip().strip("\"'") for p in inline.group(1).split(",") if p.strip()}
+    # Fall back to the YAML block-list form (one ``- name`` per line) only when
+    # the inline form was absent, keeping the two shapes mutually exclusive.
     multi = re.search(
         r"^md2star_skip\s*:[\r\n]+((?:\s*-\s*\S+[\r\n]+)+)",
         block,
@@ -232,6 +243,8 @@ def preprocess_markdown(
     if inject_metadata and "language" not in skip:
         meta_injection = get_language_metadata(content)
         if meta_injection:
+            # Never clobber keys the author set by hand: only inject ``lang`` /
+            # ``date_format`` when the front-matter does not already define them.
             injections = []
             if not re.search(r"^lang\s*:", content, flags=re.MULTILINE | re.IGNORECASE):
                 injections.append(f"lang: {meta_injection['lang']}")
@@ -245,15 +258,21 @@ def preprocess_markdown(
                     content, flags=re.DOTALL,
                 )
                 if yaml_match:
+                    # Splice the new keys just inside the existing ``---`` fence
+                    # so we preserve the author's original front-matter verbatim.
                     new_yaml = (
                         f"{yaml_match.group(1)}{injection_str}"
                         f"{yaml_match.group(2)}{yaml_match.group(3)}"
                     )
                     content = new_yaml + content[yaml_match.end():]
                 else:
+                    # No front-matter yet — wrap the injected keys in a new fence.
                     content = f"---\n{injection_str}---\n\n{content}"
 
     if "line_pass" not in skip:
+        # A tiny state machine walks the document line by line. Fence tracking
+        # lets us leave ordinary code verbatim while diverting ```mermaid blocks
+        # into a buffer we render as an image once the closing fence arrives.
         out_lines: list[str] = []
         in_code_block = False
         in_mermaid_block = False
@@ -262,7 +281,9 @@ def preprocess_markdown(
         for line in content.split("\n"):
             stripped_line = line.strip()
 
-            # Entering a fenced block
+            # Entering a fenced block. A mermaid fence is swallowed (buffered,
+            # not emitted) because we replace the whole block with an image;
+            # any other fence is copied through so its contents stay verbatim.
             if stripped_line.startswith("```") and not in_code_block:
                 in_code_block = True
                 if stripped_line.lower().startswith("```mermaid"):
@@ -279,6 +300,8 @@ def preprocess_markdown(
                     mermaid_content = "\n".join(mermaid_lines)
                     try:
                         img_name = render_mermaid_local(mermaid_content, base_dir)
+                        # Guarantee a blank line before the image so Pandoc treats
+                        # it as its own paragraph rather than joining it to prose.
                         if out_lines and out_lines[-1].strip() != "":
                             out_lines.append("")
                         out_lines.append(f"![]({img_name})\n")
@@ -296,7 +319,8 @@ def preprocess_markdown(
                     out_lines.append(line)
                 continue
 
-            # Inside a fenced block
+            # Inside a fenced block: buffer mermaid source for later rendering,
+            # but pass every other code line straight through untouched.
             if in_code_block:
                 if in_mermaid_block:
                     mermaid_lines.append(line)
@@ -353,6 +377,9 @@ def isolate_images_for_pptx(content: str) -> str:
     lines = content.split("\n")
     out: list[str] = []
 
+    # Per-slide bookkeeping: whether the current slide already holds a table or
+    # any other content. When a fresh image/table lands on a "dirty" slide we
+    # inject a ``##`` boundary to push it onto a clean slide of its own.
     section_has_table = False
     section_has_content = False
     in_table = False
@@ -391,6 +418,8 @@ def isolate_images_for_pptx(content: str) -> str:
         is_table_row = bool(PIPE_TABLE_ROW_RE.match(stripped))
 
         if is_table_row:
+            # Only isolate on the *first* row of a table (``not in_table``) so we
+            # don't wedge a ``##`` between the header and body of one table.
             if not in_table and (section_has_table or section_has_content):
                 # New table on a slide that already has stuff → isolate it.
                 out.append("")
@@ -406,6 +435,8 @@ def isolate_images_for_pptx(content: str) -> str:
         # Any non-table line ends an in-progress table block.
         in_table = False
 
+        # Standalone images get the same isolation treatment as tables: Pandoc
+        # silently drops an image sharing a slide with other content.
         if _STANDALONE_IMG_RE.match(stripped):
             if section_has_table or section_has_content:
                 out.append("")

@@ -6,6 +6,8 @@
 ![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)
 ![Status: beta](https://img.shields.io/badge/status-beta-orange.svg)
 
+> 🇫🇷 *Version française : **[LISEZMOI.md](LISEZMOI.md)**.*
+
 **Convert Markdown into professional DOCX, PPTX and PDF documents
 using Pandoc, branded templates, and practical automation.**
 
@@ -39,6 +41,10 @@ editing in Word before it's shareable.
 
 `md2star` sits between you and Pandoc. You write Markdown; you get a
 DOCX / PPTX / PDF that looks like a deliberate document.
+
+Curious how it stacks up against Pandoc alone, Quarto, Marp, Typora,
+Word itself, and other Markdown-to-document tools? See
+**[LANDSCAPE.md](LANDSCAPE.md)** for the honest competitive comparison.
 
 ## Quick start
 
@@ -129,6 +135,7 @@ A self-contained cookbook with more recipes lives at
   - Smart **Subtitle Injection** combining Author and localized Date.
   - **Language Detection** via `langdetect`: date formats ship for 10 languages (English, French, Spanish, German, Italian, Portuguese, Dutch, Russian, Japanese, Chinese), with translated weekday/month names in 7 (fr, es, de, it, pt, nl, ru).
 - **Scientific-Ready**: Native **BibTeX** integration via Pandoc's `citeproc`, for documents with managed reference libraries.
+- **Native Footnotes**: Markdown footnotes (`text[^1]` + `[^1]: …`) pass straight through Pandoc's `footnotes` extension to real Word footnotes — DOCX gets true bottom-of-page footnotes, PPTX collects them into per-slide notes. No special syntax, no preprocessing. See [EXAMPLES.md §10](EXAMPLES.md#10-footnotes).
 - **Automatic Cleanups** (quiet quality-of-life): remote `http(s)://` images downloaded for embedding (opt-in), HTML `<table>` blocks converted to Pandoc pipe-tables, and standalone images split off PPTX slides that contain a table (Pandoc otherwise drops them).
 - **Reversible by Design**: md2star's DOCX output is a *faithful, recoverable* rendering, not a one-way dead end. Read it straight back to Markdown with any DOCX reader (Pandoc, [kreuzberg](https://github.com/Goldziher/kreuzberg)) and your headings, `**bold**`/`*italic*`/`` `code` `` emphasis, tables, and lists come back intact — and repeated conversions converge to a **stable fixed point** rather than drifting. See [Round-trip fidelity](#round-trip-fidelity).
 - **Graceful Image Path Resolution**: URLs, absolute paths, and relative paths all "just work". Relative `![](images/foo.png)` references resolve against the input file's directory — so `md2docx subdir/file.md` from any cwd still finds the image. No need to `cd` into the source folder first.
@@ -160,6 +167,7 @@ is needed for Mermaid; Ollama is needed for `--lint`.
   pipx ensurepath          # one-time: add ~/.local/bin to PATH
   pipx install md2star
 
+  # (install `brew` itself via https://brew.sh/)
   # Optional: PDF output needs LibreOffice
   brew install --cask libreoffice
   # Optional: Mermaid diagrams need Node.js
@@ -198,6 +206,22 @@ is needed for Mermaid; Ollama is needed for `--lint`.
 git clone https://github.com/warith-harchaoui/md2star.git
 cd md2star
 make install            # checks deps, runs `pipx install .`
+```
+
+Prefer plain `pip` into a venv? Two requirement files at the repo root
+point straight at `pyproject.toml` (which stays the single source of
+truth for version pins):
+
+- `requirements.txt` — **runtime** (`-e .`: langdetect + Pillow), enough
+  to run `md2docx` / `md2pptx` / `md2pdf`.
+- `requirements-dev.txt` — **dev + test** (`-e .[dev]`: pytest, ruff,
+  pytest-cov, pypdf, the api/mcp deps, and kreuzberg).
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt        # runtime only
+# or
+pip install -r requirements-dev.txt    # runtime + test/lint stack
 ```
 
 ### Updating
@@ -286,7 +310,10 @@ is different in kind from md2star's deterministic core.
 
 ## Examples
 
-A self-contained cookbook lives at **[EXAMPLES.md](EXAMPLES.md)**.
+A self-contained cookbook lives at **[EXAMPLES.md](EXAMPLES.md)** —
+covering titles, Mermaid, lists, multi-column slides, LaTeX math,
+bibliographies, branded templates, language detection, page breaks, and
+[footnotes](EXAMPLES.md#10-footnotes).
 
 You can also find more complex examples inside the [`tests/examples/`](tests/examples) directory. To natively batch-compile all documents inside the folder, execute the bash runner:
 ```bash

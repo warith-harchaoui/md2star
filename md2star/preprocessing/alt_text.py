@@ -175,6 +175,26 @@ def fill_empty_alt_text(
     cache = cache_dir("alt-text")
 
     def _process(match: re.Match) -> str:
+        """Draft (or reuse a cached) alt-text for one empty-alt image.
+
+        Called once per :data:`_EMPTY_ALT_RE` match. Remote/data URIs,
+        missing files, unreadable files, and empty generations all early-return
+        the original ``![](src)`` so a single un-processable image never breaks
+        the document. Successful descriptions are cached under the image's
+        content hash so re-runs are free.
+
+        Parameters
+        ----------
+        match : re.Match
+            A match of :data:`_EMPTY_ALT_RE`; group 1 is the empty/whitespace
+            alt, group 2 is the ``src``.
+
+        Returns
+        -------
+        str
+            The image with a generated alt inserted, or the original match
+            unchanged when no description could be produced.
+        """
         # Called once per empty-alt image. Any early return keeps the original
         # ``![](src)`` so a single un-processable image never breaks the doc.
         src = match.group(2)

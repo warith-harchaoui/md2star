@@ -7,6 +7,7 @@ Check out our pre-rendered examples inside the [`tests/examples/`](tests/example
 - 📊 **PowerPoint Deck:** [`comprehensive_presentation.md`](tests/examples/comprehensive_presentation.md) ➡️ [`comprehensive_presentation.pptx`](tests/examples/comprehensive_presentation.pptx)
 - 🇫🇷 **French Document:** [`guide_complet_document_fr.md`](tests/examples/guide_complet_document_fr.md) ➡️ [`guide_complet_document_fr.docx`](tests/examples/guide_complet_document_fr.docx)
 - 🎨 **Branded Slides:** [`branded_slides.md`](tests/examples/branded_slides.md) + [`Presentation1.pptx`](tests/examples/Presentation1.pptx) ➡️ [`branded_slides.pptx`](tests/examples/branded_slides.pptx)
+- 🔖 **Footnotes:** [`footnotes_document.md`](tests/examples/footnotes_document.md) ➡️ [`footnotes_document.docx`](tests/examples/footnotes_document.docx)
 
 To compile all examples at once:
 ```bash
@@ -194,3 +195,43 @@ md2docx pagebreaks.md
 > No equivalent in PPTX. To force a slide break, start a new
 > `## Heading` — that's how Pandoc maps Markdown to PowerPoint
 > slides.
+
+---
+
+## 10. Footnotes
+
+Markdown footnotes pass straight through to **native Word footnotes**
+— they land in the DOCX's `word/footnotes.xml` part, so Word renders
+them at the bottom of the page with clickable superscript markers and
+automatic renumbering. `md2star` does no special pre-processing here;
+Pandoc's default Markdown reader has the `footnotes` extension on, so
+the standard `[^label]` syntax just works.
+
+```markdown
+Structured evaluation shows a 12% gain.[^bench] The gain holds even
+under adversarial inputs.[^adv]
+
+[^bench]: Measured on the internal benchmark suite, 2026-Q2 run.
+[^adv]: See the red-team appendix for the full protocol.
+```
+
+Labels are arbitrary identifiers (`[^1]`, `[^bench]`, `[^note-a]`) —
+Word reorders and renumbers the visible markers automatically, so the
+label you choose never leaks into the output. You can also inline the
+note directly with the `^[...]` form:
+
+```markdown
+The result reproduces across seeds.^[Ten seeds, variance under 1%.]
+```
+
+**Compilation:**
+```bash
+md2docx report.md
+```
+
+> [!TIP]
+> Footnotes work in DOCX and PPTX alike. DOCX gets true bottom-of-page
+> footnotes; PPTX collects each slide's notes into a small **"Notes"**
+> text block appended to that slide's body (endnote-style, on the
+> slide itself — not the speaker-notes pane). The marker-and-text
+> pairing is preserved either way.

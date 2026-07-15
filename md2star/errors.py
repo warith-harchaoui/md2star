@@ -37,6 +37,18 @@ class Md2starError(Exception):
     default_hint: str = ""
 
     def __init__(self, message: str, *, hint: str | None = None) -> None:
+        """Build the error with a headline *message* and an actionable *hint*.
+
+        Parameters
+        ----------
+        message : str
+            The headline error text passed to ``Exception.__init__`` and
+            shown to the user on the first line.
+        hint : str or None, optional
+            Actionable follow-up text. ``None`` (the default) falls back to
+            the subclass's ``default_hint``; an explicit ``""`` is respected
+            and deliberately suppresses the hint.
+        """
         super().__init__(message)
         # ``hint`` is keyword-only (the ``*``) so call sites read self-
         # documenting: ``raise InvalidInputError(msg, hint=...)``. An explicit

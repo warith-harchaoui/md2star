@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "md2star"
-version = "2.4.1"
+version = "2.4.2"
 description = "Markdown → DOCX/PPTX/PDF bridge built on Pandoc, with curated styling, Mermaid rendering, and bibliography support."
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -69,6 +69,11 @@ dev = [
     "python-multipart>=0.0.9",
     "httpx>=0.27",
     "fastapi-mcp>=0.3,<1",
+    # kreuzberg is the reverse reader for the OCR round-trip test
+    # (tests/test_roundtrip_ocr.py): md → docx → pdf → text extraction.
+    # It is a TEST-ONLY dependency — never imported by the md2star runtime —
+    # and that test skips cleanly when kreuzberg (or LibreOffice) is absent.
+    "kreuzberg>=4,<5",
 ]
 
 [project.scripts]
@@ -132,6 +137,12 @@ exclude = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+# Registered markers keep `--strict`-style runs warning-free and document the
+# opt-out. `slow` tags tests that shell out to LibreOffice / kreuzberg (the OCR
+# round-trip); skip them with `pytest -m "not slow"` for a millisecond suite.
+markers = [
+    "slow: end-to-end test that renders via LibreOffice and/or runs kreuzberg OCR",
+]
 
 # Coverage configuration — wired into the CI's `coverage` job (see
 # .github/workflows/ci.yml). The threshold is intentionally moderate;

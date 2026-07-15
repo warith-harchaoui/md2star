@@ -1,0 +1,25 @@
+# requirements-dev.txt — DEV + TEST dependencies for md2star
+# ===========================================================
+# Everything a contributor needs: the runtime set, plus the test/lint/coverage
+# stack and the OCR round-trip extras.
+#
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements-dev.txt
+#   pytest -q                 # full suite (needs pandoc; LibreOffice+kreuzberg for `slow`)
+#   pytest -q -m "not slow"   # fast suite only
+#   ruff check md2star tests  # PEP 8 / lint gate
+#
+# This installs the package with its [dev] extra, whose single source of truth
+# is pyproject.toml's [project.optional-dependencies].dev — pytest, pytest-cov,
+# ruff, pypdf, the api/mcp smoke-test deps, and kreuzberg (test-only, for the
+# md → docx → pdf → text OCR round-trip in tests/test_roundtrip_ocr.py).
+-e .[dev]
+
+# ---------------------------------------------------------------------------
+# System tools for the full/`slow` suite (not pip-installable — see the
+# requirements.txt header for the per-OS install commands):
+#   - pandoc       required by most tests
+#   - LibreOffice  (`soffice`) required by the PDF + OCR round-trip tests
+# The `slow` tests skip cleanly when these are absent, so `pytest -q` still
+# passes on a machine with only the pip deps installed.
+# ---------------------------------------------------------------------------

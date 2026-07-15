@@ -82,9 +82,40 @@ class Report:
     checks: list[Check] = field(default_factory=list)
 
     def add(self, name: str, status: str, detail: str = "", section: str = "Core") -> None:
+        """Append one :class:`Check` row to the report.
+
+        Parameters
+        ----------
+        name : str
+            Human label shown in the leftmost report column.
+        status : str
+            One of the ``STATUS_*`` tokens (``OK`` / ``WARNING`` / …).
+        detail : str, optional
+            Free-form right-column text (version, path, or install hint).
+        section : str, optional
+            Display group (``Core`` / ``Optional`` / ``Templates``).
+
+        Returns
+        -------
+        None
+        """
+        # Rows are stored in call order; render() re-groups them by section.
         self.checks.append(Check(name=name, status=status, detail=detail, section=section))
 
     def get(self, name: str) -> Check | None:
+        """Return the first check matching *name*, or ``None`` if absent.
+
+        Parameters
+        ----------
+        name : str
+            The :attr:`Check.name` to look up.
+
+        Returns
+        -------
+        Check | None
+            The matching row, or ``None`` when no check carries that name.
+        """
+        # Linear scan is fine: the report holds a dozen rows at most.
         for c in self.checks:
             if c.name == name:
                 return c
@@ -106,19 +137,40 @@ class Report:
         ``mermaid`` — needs node + (mermaid-cli or npx).
         """
         def ok(name: str) -> bool:
+            """Report whether the named check exists and passed.
+
+            Parameters
+            ----------
+            name : str
+                The :attr:`Check.name` whose status we probe.
+
+            Returns
+            -------
+            bool
+                ``True`` only when a check with that name is present *and*
+                its status is exactly ``STATUS_OK``.
+            """
+            # A missing check counts as "not ok" so absence and failure are
+            # treated identically when deciding feature readiness.
             c = self.get(name)
             return c is not None and c.status == STATUS_OK
 
+        # Office formats need only pandoc — a single binary gates both.
         if fmt == "docx" or fmt == "pptx":
             return STATUS_OK if ok("Pandoc") else "UNAVAILABLE"
+        # PDF is a two-stage pipeline (pandoc → soffice), hence three outcomes:
+        # both present is OK, pandoc-only is PARTIAL (docx works, PDF doesn't),
+        # neither is fully UNAVAILABLE.
         if fmt == "pdf":
             if ok("Pandoc") and ok("LibreOffice"):
                 return STATUS_OK
             if ok("Pandoc"):
                 return "PARTIAL"
             return "UNAVAILABLE"
+        # Mermaid keys off Node (npx pulls the CLI on demand), not a global mmdc.
         if fmt == "mermaid":
             return STATUS_OK if ok("Node.js") else "UNAVAILABLE"
+        # Unknown format name: fail closed rather than claim support.
         return "UNAVAILABLE"
 
 
@@ -131,13 +183,21 @@ def _run_version(cmd: list[str], timeout: float = 5.0,
                  runner: Callable[..., subprocess.CompletedProcess[str]] | None = None
                  ) -> str | None:
     """Return the first line of ``<cmd> --version`` stdout, or None on failure."""
+    # Default to the real subprocess.run; tests inject a fake to avoid shelling
+    # out and to simulate timeouts / missing binaries deterministically.
     runner = runner or (lambda *a, **kw: subprocess.run(*a, **kw))
     try:
+        # check=False: a non-zero exit is not an error here — some tools print
+        # their version to stderr and exit 1, and we still want that text.
         proc = runner(
             cmd, capture_output=True, text=True, timeout=timeout, check=False,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        # Any spawn/timeout failure means "no usable version" — caller
+        # substitutes a placeholder rather than propagating the exception.
         return None
+    # Prefer stdout, but fall back to stderr for tools that report there; only
+    # the first line is the version banner, so drop the rest (help/notices).
     out = (proc.stdout or proc.stderr or "").strip()
     return out.splitlines()[0] if out else None
 
@@ -201,11 +261,25 @@ def _check_node(report: Report, which: Callable[[str], str | None]) -> None:
 
 
 def _check_mermaid_cli(report: Report, which: Callable[[str], str | None]) -> None:
+    """Check for the Mermaid CLI — needed only for diagram rendering (Optional).
+
+    Parameters
+    ----------
+    report : Report
+        The report to append the ``Mermaid CLI`` row to.
+    which : Callable[[str], str | None]
+        PATH resolver (injected so tests can fake ``mmdc`` / ``npx`` presence).
+
+    Returns
+    -------
+    None
+    """
     # md2star uses `npx -y @mermaid-js/mermaid-cli` on demand, so the
     # absence of a globally-installed `mmdc` is fine when `npx` is
     # present. We report both states for transparency.
     mmdc = which("mmdc")
     npx = which("npx")
+    # Best case: a global mmdc is on PATH — record its version + path as OK.
     if mmdc is not None:
         version = _run_version([mmdc, "--version"]) or "(unknown)"
         report.add(
@@ -214,6 +288,8 @@ def _check_mermaid_cli(report: Report, which: Callable[[str], str | None]) -> No
             section="Optional",
         )
         return
+    # No global binary, but npx can fetch it lazily — INFO, not a warning,
+    # because diagrams will still render (just with a first-run download).
     if npx is not None:
         report.add(
             "Mermaid CLI", STATUS_INFO,
@@ -221,6 +297,8 @@ def _check_mermaid_cli(report: Report, which: Callable[[str], str | None]) -> No
             section="Optional",
         )
         return
+    # Neither mmdc nor npx: without Node the feature is unavailable, but mermaid
+    # blocks degrade gracefully to plain code fences, so this stays INFO.
     report.add(
         "Mermaid CLI", STATUS_INFO,
         "Optional — no Node.js, so mermaid blocks are skipped (kept as code fences).",
@@ -269,9 +347,21 @@ def _check_templates(report: Report) -> None:
 
 
 def _check_cache(report: Report) -> None:
+    """Confirm the on-disk cache directory exists and is writable (Templates).
+
+    Parameters
+    ----------
+    report : Report
+        The report to append the ``Cache directory`` row to.
+
+    Returns
+    -------
+    None
+    """
     try:
         root = cache_dir()
-        # Probe writability without actually leaving a file behind.
+        # Probe writability without actually leaving a file behind: touch then
+        # immediately unlink, so a read-only mount surfaces as an OSError below.
         probe = root / ".doctor-probe"
         probe.touch()
         probe.unlink()
@@ -279,6 +369,8 @@ def _check_cache(report: Report) -> None:
             "Cache directory", STATUS_OK, str(root), section="Templates",
         )
     except OSError as exc:
+        # Not fatal — md2star transparently falls back to /tmp — so WARNING,
+        # not ERROR; we just want the user to know caching is degraded.
         report.add(
             "Cache directory", STATUS_WARNING,
             f"Not writable ({exc}); md2star will fall back to /tmp.",
@@ -308,6 +400,19 @@ def _check_md2star(report: Report) -> None:
 
 
 def _check_platform(report: Report) -> None:
+    """Record the host OS / release / arch for context in bug reports (Optional).
+
+    Parameters
+    ----------
+    report : Report
+        The report to append the ``Platform`` row to.
+
+    Returns
+    -------
+    None
+    """
+    # Purely informational: never fails, but pins the exact OS/arch so
+    # architecture-specific issues are diagnosable from a pasted report.
     report.add(
         "Platform", STATUS_INFO,
         f"{platform.system()} {platform.release()} ({platform.machine()})",
@@ -370,6 +475,8 @@ def render(report: Report) -> str:
         width = max((len(r.name) for r in rows), default=10)
         for r in rows:
             label = r.name.ljust(width)
+            # Only append the detail dash when there is a detail to show, so
+            # bare rows don't end in a dangling separator.
             tail = f" — {r.detail}" if r.detail else ""
             out.append(f"  {label}  {r.status:7}{tail}")
         out.append("")
@@ -387,6 +494,8 @@ def render(report: Report) -> str:
     for name, status in targets:
         out.append(f"  {name.ljust(width)}  {status}")
 
+    # Only surface the loud failure banner when a Core check is broken; optional
+    # gaps already read as WARNING/INFO above and must not trigger it.
     if report.core_failing():
         out.append("")
         out.append(
@@ -407,9 +516,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    # Run the pure-logic layer once; both output modes render the same Report.
     report = run_checks()
 
     if args.json:
+        # json is imported lazily: the common text path never pays for it.
         import json
         payload = {
             "checks": [
@@ -427,6 +538,8 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(render(report))
 
+    # Exit non-zero only for Core breakage so scripts can gate on md2star being
+    # usable while tolerating missing optional tools.
     return 1 if report.core_failing() else 0
 
 

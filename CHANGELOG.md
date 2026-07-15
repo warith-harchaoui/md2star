@@ -6,6 +6,46 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.4.2] — 2026-07-15
+
+### Added
+- **Footnotes cookbook entry.** Markdown footnotes (`[^label]` and inline
+  `^[…]`) already pass straight through to native Word footnotes via Pandoc's
+  `footnotes` extension — no special preprocessing. Documented it end to end:
+  `EXAMPLES.md` §10 plus a rendered example source
+  `tests/examples/footnotes_document.md` (compiled by `tests/examples/run.sh`).
+- **OCR round-trip test** (`tests/test_roundtrip_ocr.py`). Proves the long arm
+  of idempotence — `md → docx → pdf → text` — by rendering through the real
+  `md2pdf` path (headless LibreOffice) and reading the PDF back with
+  `kreuzberg`. Asserts content survival (headings, list items, paragraph
+  nouns), not byte-level equality. Marked `slow`; skips cleanly when
+  LibreOffice/kreuzberg are absent. `kreuzberg` added to the `[dev]` extra —
+  **test-only, never imported by the runtime.**
+- **`requirements.txt` / `requirements-dev.txt`.** Thin, comment-rich pip entry
+  points that install `-e .` and `-e .[dev]` respectively; `pyproject.toml`
+  stays the single source of truth (no duplicated dep lists to drift).
+- **Registered `slow` pytest marker** in `pyproject.toml` — run the fast subset
+  with `pytest -m "not slow"`.
+
+### Maintenance
+- **Docstring pass (coding-standard rules 0/1).** Added NumPy-style docstrings
+  to the 32 remaining undocumented functions — all private/nested/dunder
+  (`doctor`, `tables`, `images`, `alt_text`, `math`, `cli`, `errors`,
+  `logging`). Source docstring coverage is now 100%, public *and* private.
+- **Comment-density pass (rule 4).** Raised the two below-target files —
+  `doctor.py` (16.3 % → 29.3 %) and `preprocessing/pipeline.py`
+  (18.8 % → 31.4 %) — with load-bearing *why* comments. Package-wide 29.2 %.
+- **Test-suite rationalization (rule 13).** Folded `test_preprocessing.py`'s
+  value-varying micro-tests into `@pytest.mark.parametrize` functions
+  (86 → 60 functions) with **zero** cases dropped and coverage unchanged
+  (79 %). Fewer, stronger tests; same protection.
+- **Documentation refresh.** Synced README + LISEZMOI (footnotes, requirements,
+  competitive-comparison link), de-staled ROADMAP (three shipped P1 items moved
+  to a "P1 — shipped" section) and LANDSCAPE (GUI reframed as the `[gui]` extra;
+  version references realigned), linked the previously-orphaned `LANDSCAPE.md`
+  from README/LISEZMOI, and clarified CONTRIBUTING (rule-0 wording, `make dev`
+  / `requirements-dev.txt`, fast-subset command). No behaviour change.
+
 ## [2.4.1] — 2026-07-13
 
 ### Maintenance

@@ -1,0 +1,33 @@
+# requirements.txt — RUNTIME dependencies for md2star
+# =====================================================
+# What you need to *run* the converters (md2docx / md2pptx / md2pdf).
+#
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements.txt
+#
+# Single source of truth is pyproject.toml's [project].dependencies. This file
+# installs the package itself in editable mode, so those version pins
+# (langdetect, Pillow) are always honored — no second list to drift out of sync.
+-e .
+
+# ---------------------------------------------------------------------------
+# System tools NOT installable via pip — install them with your OS package
+# manager (see the README "Installation" section for the full matrix):
+#
+#   pandoc      REQUIRED for every format (md → docx/pptx is Pandoc).
+#     macOS 🍎 : brew install pandoc   (install brew via https://brew.sh/)
+#     Ubuntu 🐧: sudo apt install pandoc
+#     Windows 🪟: winget install --id JohnMacFarlane.Pandoc
+#
+#   LibreOffice REQUIRED for md2pdf only (headless `soffice` renders DOCX → PDF;
+#               md2pdf errors out with an install hint if it is missing).
+#     macOS 🍎 : brew install --cask libreoffice   (brew via https://brew.sh/)
+#     Ubuntu 🐧: sudo apt install libreoffice
+#     Windows 🪟: winget install --id TheDocumentFoundation.LibreOffice
+#
+#   Node.js     OPTIONAL — only for rendering ```mermaid``` diagrams; the CLI is
+#               auto-fetched via npx on first use.
+#     macOS 🍎 : brew install node   (brew via https://brew.sh/)
+#     Ubuntu 🐧: sudo apt install nodejs npm
+#     Windows 🪟: winget install --id OpenJS.NodeJS
+# ---------------------------------------------------------------------------

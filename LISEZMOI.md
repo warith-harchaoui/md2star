@@ -122,6 +122,7 @@ Un livre de recettes complet vit dans **[EXAMPLES.md](EXAMPLES.md)**.
   - **Injection de sous-titre** combinant l'Auteur et la Date localisée.
   - **Détection de la langue** via `langdetect` : formats de date livrés pour 10 langues (anglais, français, espagnol, allemand, italien, portugais, néerlandais, russe, japonais, chinois), avec noms de jours/mois traduits pour 7 (fr, es, de, it, pt, nl, ru) — par exemple `dimanche 10 mai 2026` au lieu de `Sunday May 10, 2026`.
 - **Prêt pour la recherche** : Intégration **BibTeX** native via `citeproc` de Pandoc, pour des documents avec une bibliographie gérée.
+- **Notes de bas de page natives** : les footnotes Markdown (`texte[^1]` + `[^1]: …`) traversent directement l'extension `footnotes` de Pandoc et deviennent de vraies notes Word — le DOCX obtient de vraies notes en bas de page, le PPTX les regroupe en notes par diapositive. Aucune syntaxe spéciale, aucun prétraitement. Voir [EXAMPLES.md §10](EXAMPLES.md#10-footnotes).
 - **Nettoyages automatiques** (qualité de vie discrète) : téléchargement des images `http(s)://` pour l'embarquement (opt-in), conversion des `<table>` HTML en pipe-tables Pandoc, et isolation des images sur leur propre diapositive PPTX lorsqu'elles cohabiteraient avec un tableau (sinon Pandoc les supprime).
 - **Réversible par conception** : la sortie DOCX de md2star est un rendu *fidèle et récupérable*, pas une impasse à sens unique. Relisez-la vers du Markdown avec n'importe quel lecteur DOCX (Pandoc, [kreuzberg](https://github.com/Goldziher/kreuzberg)) et vos titres, votre emphase `**gras**`/`*italique*`/`` `code` ``, vos tableaux et vos listes reviennent intacts — et les conversions répétées convergent vers un **point fixe stable** au lieu de dériver. Voir [Fidélité de l'aller-retour](#fidélité-de-laller-retour).
 - **Résolution gracieuse des chemins d'images** : URLs, chemins absolus et chemins relatifs « marchent comme on s'y attend ». Une référence relative `![](images/foo.png)` est résolue par rapport au dossier du fichier source.
@@ -190,6 +191,24 @@ Node.js que pour Mermaid ; Ollama que pour `--lint`.
 git clone https://github.com/warith-harchaoui/md2star.git
 cd md2star
 make install            # vérifie les deps, lance `pipx install .`
+```
+
+Deux fichiers de dépendances pip vivent à la racine pour un chemin
+d'installation sans `make` (le `pyproject.toml` reste la source de
+vérité — ces fichiers installent le package en éditable et héritent
+donc de ses pins) :
+
+- `requirements.txt` — **runtime** : installe `-e .` (soit
+  `langdetect` + `Pillow`), le strict nécessaire pour lancer
+  `md2docx` / `md2pptx` / `md2pdf`.
+- `requirements-dev.txt` — **dev + test** : installe `-e .[dev]`
+  (pytest, ruff, pytest-cov, pypdf, les deps API/MCP, et `kreuzberg`
+  pour l'aller-retour OCR).
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt        # runtime seul
+pip install -r requirements-dev.txt    # + outils de test/lint
 ```
 
 ### Mise à jour
@@ -306,6 +325,10 @@ cd tests/examples
 - Formules mathématiques [assets/docx/math.docx](assets/docx/math.docx) *(depuis [math.md](assets/docx/math.md))*
   ```bash
   md2docx assets/docx/math.md
+  ```
+- Notes de bas de page [tests/examples/footnotes_document.docx](tests/examples/footnotes_document.docx) *(depuis [footnotes_document.md](tests/examples/footnotes_document.md))*
+  ```bash
+  md2docx tests/examples/footnotes_document.md
   ```
 
 **Exemples de Diapositives PowerPoint**
@@ -477,6 +500,8 @@ scripts. Modèle de sécurité complet : **[SECURITY.md](SECURITY.md)**.
 - Voir **[ROADMAP.md](ROADMAP.md)** pour ce qui arrive et ce qui n'est
   explicitement pas dans le périmètre.
 - Voir **[CHANGELOG.md](CHANGELOG.md)** pour le diff par version.
+- Voir **[LANDSCAPE.md](LANDSCAPE.md)** pour un comparatif de md2star
+  face aux outils voisins (en anglais).
 
 ## Contribuer
 

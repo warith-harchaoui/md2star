@@ -165,6 +165,19 @@ def fix_image_widths(content: str) -> str:
     page-wide cap inside a cell would still overflow the cell.
     """
     def _attach(match: re.Match) -> str:
+        """Append an A4-fitting attribute block to one matched bare image.
+
+        Parameters
+        ----------
+        match : re.Match
+            A match of :data:`_IMAGE_NO_ATTR_RE`; group 1 is the ``![alt]``
+            prefix, group 2 is the ``src`` between the parens.
+
+        Returns
+        -------
+        str
+            The image reference with :func:`image_size_attr` appended.
+        """
         prefix, src = match.group(1), match.group(2)
         return f"{prefix}({src}){image_size_attr(src)}"
 
@@ -190,6 +203,20 @@ def resize_images_in_markdown_tables(content: str, base_dir: str = ".") -> str:
         # normal (page-sized) image handling.
         if PIPE_TABLE_ROW_RE.match(line):
             def _resize_match(m: re.Match) -> str:
+                """Rewrite one in-cell image to point at a downscaled copy.
+
+                Parameters
+                ----------
+                m : re.Match
+                    A match of :data:`_CELL_IMG_RE`; group 1 is the alt text,
+                    group 2 is the ``src``.
+
+                Returns
+                -------
+                str
+                    The Markdown image referencing the resized (or original)
+                    file returned by :func:`resize_image_for_cell`.
+                """
                 alt = m.group(1)
                 src = m.group(2)
                 resized = resize_image_for_cell(src, base_dir)
@@ -212,6 +239,20 @@ def absolutize_image_paths(content: str, base_dir: str) -> str:
     abs_base = os.path.abspath(base_dir)
 
     def _rewrite(match: re.Match) -> str:
+        """Absolutize one relative ``![](path)`` reference against *base_dir*.
+
+        Parameters
+        ----------
+        match : re.Match
+            A match of :data:`_IMG_PATH_RE`; group 1 is the ``![alt](``
+            prefix, group 2 is the path, group 3 is the closing paren.
+
+        Returns
+        -------
+        str
+            The reference with the path made absolute, or the original match
+            unchanged for URLs and already-absolute paths.
+        """
         prefix, src, suffix = match.group(1), match.group(2), match.group(3)
         # Leave URLs and already-absolute paths alone; only relatives need work.
         if src.startswith(_URL_PREFIXES) or os.path.isabs(src):
@@ -298,6 +339,22 @@ def html_images_to_markdown(content: str) -> str:
     placeholders: dict[str, str] = {}
 
     def _stash(match: re.Match) -> str:
+        """Replace one fenced code block with a NUL-delimited placeholder token.
+
+        The matched block is stored in the enclosing ``placeholders`` dict so
+        it can be restored verbatim after the HTML-image rewrites run.
+
+        Parameters
+        ----------
+        match : re.Match
+            A match of the fenced-code-block pattern; group 0 is the whole
+            block.
+
+        Returns
+        -------
+        str
+            The placeholder token that now stands in for the block.
+        """
         token = f"\x00CODE_{len(placeholders)}\x00"
         placeholders[token] = match.group(0)
         return token
@@ -473,6 +530,20 @@ def process_image_assets(content: str, base_dir: str, max_px: int = 1600) -> str
     before Pandoc sees the document.
     """
     def _process_src(src: str) -> str:
+        """Normalise a single image ``src``: SVG → PNG, downscale oversized rasters.
+
+        Parameters
+        ----------
+        src : str
+            The image source (relative or absolute path, or a URL/data URI).
+
+        Returns
+        -------
+        str
+            The rewritten source pointing at the cached PNG or downscaled
+            copy, or the original ``src`` for URLs, data URIs, missing files,
+            and any conversion failure.
+        """
         # Only local files are normalised; remote/data refs and missing paths
         # are returned untouched (nothing safe to do without the bytes).
         if src.startswith(_URL_PREFIXES):
@@ -492,9 +563,33 @@ def process_image_assets(content: str, base_dir: str, max_px: int = 1600) -> str
     # Two rewriters share _process_src but reassemble their own match groups —
     # Markdown ``![](src)`` vs HTML ``<img src="...">``.
     def _md_rewrite(m: re.Match) -> str:
+        """Normalise the ``src`` of one Markdown ``![](src)`` reference.
+
+        Parameters
+        ----------
+        m : re.Match
+            A match of :data:`_IMG_PATH_RE`; group 2 is the ``src``.
+
+        Returns
+        -------
+        str
+            The reference reassembled with the :func:`_process_src` result.
+        """
         return f"{m.group(1)}{_process_src(m.group(2))}{m.group(3)}"
 
     def _html_rewrite(m: re.Match) -> str:
+        """Normalise the ``src`` of one HTML ``<img src="src">`` tag.
+
+        Parameters
+        ----------
+        m : re.Match
+            A match of :data:`_HTML_IMG_RE`; group 3 is the ``src`` value.
+
+        Returns
+        -------
+        str
+            The tag reassembled with the :func:`_process_src` result.
+        """
         new_src = _process_src(m.group(3))
         return f"{m.group(1)}{m.group(2)}{new_src}{m.group(4)}{m.group(5)}"
 
@@ -528,6 +623,24 @@ def download_remote_images(content: str, out_dir: str) -> str:  # noqa: ARG001
     remote_cache = cache_dir("remote")
 
     def _download_and_replace(match: re.Match) -> str:
+        """Fetch one remote image to the cache and rewrite its reference.
+
+        The URL is fetched at most once (keyed by an MD5 of the URL); a cache
+        hit skips the download. Any network or write failure returns the
+        original match so the remote reference stays in place.
+
+        Parameters
+        ----------
+        match : re.Match
+            A match of :data:`_REMOTE_IMG_RE`; group 1 is the ``![alt]``
+            prefix, group 2 is the URL, group 3 is the optional ``{attrs}``.
+
+        Returns
+        -------
+        str
+            The Markdown image pointing at the local cache copy, or the
+            original match unchanged when the download fails.
+        """
         prefix = match.group(1)        # ![alt]
         url = match.group(2)           # https://...
         attrs = match.group(3) or ""   # {width=85%} or empty

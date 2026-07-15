@@ -27,6 +27,11 @@ md2pptx guide_complet_document_fr.md --author "Richard Feynman" --bib "../../ass
 
 echo "✅ All examples compiled successfully by Richard Feynman!"
 
+# 3b. Footnotes Demonstration (native Word footnotes)
+echo "Compiling footnotes_document.md..."
+md2docx footnotes_document.md --author "Richard Feynman"
+md2pptx footnotes_document.md --author "Richard Feynman"
+
 # 4. Branded Slides (using a custom PPTX template)
 echo "Compiling branded_slides.md with Presentation1.pptx template..."
 md2pptx branded_slides.md --reference-doc Presentation1.pptx

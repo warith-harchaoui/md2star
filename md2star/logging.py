@@ -77,8 +77,13 @@ class _LiveStderrHandler(logging.StreamHandler):
     """
 
     def __init__(self) -> None:
-        # Let StreamHandler wire up formatter/lock machinery; the default
-        # ``stream`` it tries to store is discarded by our setter below.
+        """Initialise the handler without caching a stderr stream.
+
+        Delegates to ``StreamHandler.__init__`` so the formatter and lock
+        machinery are wired up; the stream it tries to store is silently
+        discarded by the no-op ``stream`` setter, keeping stderr resolution
+        live at emit time.
+        """
         super().__init__()
 
     @property
@@ -88,6 +93,15 @@ class _LiveStderrHandler(logging.StreamHandler):
 
     @stream.setter
     def stream(self, value: object) -> None:
+        """Ignore stream assignments so stderr stays resolved live.
+
+        Parameters
+        ----------
+        value : object
+            The stream ``StreamHandler`` (or a caller) tries to bind. It is
+            intentionally discarded — see the class docstring — because the
+            getter always recomputes ``sys.stderr``.
+        """
         # No-op on purpose — see the class docstring. We never cache a stream.
         pass
 

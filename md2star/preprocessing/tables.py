@@ -47,6 +47,7 @@ class _TableParser(HTMLParser):
     """
 
     def __init__(self) -> None:
+        """Initialize the parser with empty row/cell accumulators and stacks."""
         super().__init__()
         # Accumulated output: completed rows of already-rendered cell strings,
         # plus the indices of rows that came from <th>/<thead> (header rows).
@@ -62,6 +63,15 @@ class _TableParser(HTMLParser):
         self._inline_stack: list[str] = []
 
     def handle_starttag(self, tag: str, attrs: list) -> None:  # noqa: ARG002
+        """Open a row/cell, push an inline marker, or emit an in-cell image.
+
+        Parameters
+        ----------
+        tag : str
+            The HTML start-tag name (case-insensitive).
+        attrs : list
+            The tag's ``(name, value)`` attribute pairs, used for ``<img>``.
+        """
         tag = tag.lower()
         if tag == "tr":
             self._current_row = []
@@ -83,6 +93,13 @@ class _TableParser(HTMLParser):
                 self._current_cell.append(f"![{alt}]({src})")
 
     def handle_endtag(self, tag: str) -> None:
+        """Close a cell/row or pop an inline marker on the matching end tag.
+
+        Parameters
+        ----------
+        tag : str
+            The HTML end-tag name (case-insensitive).
+        """
         tag = tag.lower()
         if tag in ("td", "th"):
             if self._current_row is not None and self._current_cell is not None:
@@ -102,6 +119,13 @@ class _TableParser(HTMLParser):
                 self._inline_stack.pop()
 
     def handle_data(self, data: str) -> None:
+        """Append unescaped character data to the cell currently being built.
+
+        Parameters
+        ----------
+        data : str
+            The raw text node contents; HTML entities are unescaped before use.
+        """
         if self._in_cell and self._current_cell is not None:
             self._current_cell.append(html.unescape(data))
 
@@ -122,7 +146,31 @@ def html_table_to_markdown(table_html: str, base_dir: str = ".") -> str:
         return table_html
 
     def _fix_cell_images(cell: str) -> str:
+        """Resize every local image reference inside one Markdown cell.
+
+        Parameters
+        ----------
+        cell : str
+            The rendered Markdown for a single table cell.
+
+        Returns
+        -------
+        str
+            The cell with each ``![alt](src)`` rewritten to a cell-safe size.
+        """
         def _resize(m: re.Match) -> str:
+            """Rewrite one image match with a cell-resized ``src``.
+
+            Parameters
+            ----------
+            m : re.Match
+                A match of :data:`_CELL_IMG_RE`; group 1 is alt text, group 2 src.
+
+            Returns
+            -------
+            str
+                The ``![alt](src)`` Markdown with the resized source path.
+            """
             alt = m.group(1)
             src = m.group(2)
             resized = resize_image_for_cell(src, base_dir)
@@ -138,6 +186,18 @@ def html_table_to_markdown(table_html: str, base_dir: str = ".") -> str:
             col_widths[i] = max(col_widths[i], len(cell))
 
     def _format_row(cells: list[str]) -> str:
+        """Render one pipe-table row, padding each cell to its column width.
+
+        Parameters
+        ----------
+        cells : list of str
+            The cell strings for this row; missing trailing cells are blank-filled.
+
+        Returns
+        -------
+        str
+            The ``| a | b | c |`` pipe-table row string.
+        """
         padded = [
             cells[i].ljust(col_widths[i]) if i < len(cells) else " " * col_widths[i]
             for i in range(col_count)
@@ -145,6 +205,13 @@ def html_table_to_markdown(table_html: str, base_dir: str = ".") -> str:
         return "| " + " | ".join(padded) + " |"
 
     def _separator() -> str:
+        """Build the header/body separator row sized to the column widths.
+
+        Returns
+        -------
+        str
+            The ``|---|---|`` separator line with dashes matching each column.
+        """
         return "|" + "|".join("-" * (w + 2) for w in col_widths) + "|"
 
     md_lines: list[str] = []
@@ -166,6 +233,18 @@ _TABLE_RE = re.compile(
 def convert_html_tables(content: str, base_dir: str = ".") -> str:
     """Replace every ``<table>`` block in *content* with a pipe-table equivalent."""
     def _replace(match: re.Match) -> str:
+        """Convert one matched ``<table>`` block to a blank-line-padded pipe-table.
+
+        Parameters
+        ----------
+        match : re.Match
+            A match of :data:`_TABLE_RE`; group 1 is the full ``<table>`` block.
+
+        Returns
+        -------
+        str
+            The pipe-table string wrapped in surrounding blank lines.
+        """
         return "\n\n" + html_table_to_markdown(match.group(1), base_dir) + "\n\n"
 
     return _TABLE_RE.sub(_replace, content)
@@ -229,6 +308,19 @@ def _insert_soft_breaks(cell: str, min_run_len: int = 25) -> str:
             continue
 
         def _rewrite(match: re.Match) -> str:
+            """Inject zero-width spaces after ``/`` and ``_`` in one long run.
+
+            Parameters
+            ----------
+            match : re.Match
+                A match of :data:`_LONG_RUN_RE` (a single non-whitespace run).
+
+            Returns
+            -------
+            str
+                The run with ZWSPs added after each separator, or unchanged if it
+                is too short or holds no ``/`` or ``_`` separator.
+            """
             word = match.group(0)
             if len(word) < min_run_len or not re.search(r"[/_]", word):
                 return word
@@ -462,6 +554,18 @@ def normalize_pipe_tables(
         ncols = max(len(header), len(aligns), *(len(r) for r in body), 1)
 
         def _pad(row: list[str]) -> list[str]:
+            """Right-pad a row with empty cells up to ``ncols`` columns.
+
+            Parameters
+            ----------
+            row : list of str
+                The row's existing cell strings.
+
+            Returns
+            -------
+            list of str
+                The row extended with empty strings to length ``ncols``.
+            """
             # Defined fresh each iteration and used immediately below
             # (`all_rows = [_pad(header)] + [_pad(r) for r in body]`);
             # the loop-variable late-binding pattern ruff B023 warns
@@ -509,6 +613,18 @@ def normalize_pipe_tables(
         # Soft-break long unbreakable strings (file paths, snake_case ids) in
         # every cell so narrow columns don't fall back to character-per-line.
         def _emit_row(cells: list[str]) -> str:
+            """Render one output row, soft-breaking long runs in each cell.
+
+            Parameters
+            ----------
+            cells : list of str
+                The cell strings for this row.
+
+            Returns
+            -------
+            str
+                The ``| a | b |`` pipe-table row with ZWSPs inserted in long runs.
+            """
             return "| " + " | ".join(_insert_soft_breaks(c) for c in cells) + " |"
 
         out.append(_emit_row(header))

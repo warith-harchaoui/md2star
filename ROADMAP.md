@@ -29,6 +29,27 @@ detailed audit these priorities came from.
 - [x] **Coding-style enforcement** — NumPy docstrings, module
       headers with author link, full type annotations.
 
+## P1 — shipped
+
+- [x] **`md2star templates {list,path}`** (v2.1.0) — shows every
+      resolution candidate (per-project / cached / bundled) and
+      prints the absolute path of the active template for a given
+      format. `md2star templates --help`.
+- [x] **Typed exceptions wired into `cli.main`** (v2.1.0) — the
+      top-level `handle_known_error` / `_render_error` handler
+      pretty-prints any `Md2starError` as a headline plus an
+      indented `hint` line and exits on a per-subclass exit-code
+      map (e.g. `MissingDependencyError` → 127). Unknown exceptions
+      still surface a real traceback so genuine bugs get filed. See
+      `md2star/errors.py`.
+- [x] **Structured stdlib `logging` in the CLI core** (v2.4.0) — a
+      single named logger + stderr `StreamHandler` (`md2star/logging.py`,
+      `configure()`) replaces the ad-hoc `print(..., file=sys.stderr)`
+      calls, with `--verbose` / `--quiet` wired through it. Stdlib
+      only, no new runtime deps. Note: `--verbose` / `--quiet`
+      shipped; a granular `--log-level` flag did **not** and is
+      not currently planned.
+
 ## P1 — next release (v2.1)
 
 - [ ] **`md2star[gui]` PyPI extra.** Bring the Overleaf-style local
@@ -46,19 +67,9 @@ detailed audit these priorities came from.
       hand-rolled HTTP calls for a typed client (modest code
       cleanup, future-proof if AI deps grow heavier). Symmetric
       with the `[gui]` extra.
-- [ ] **`md2star templates {list,path}`** — show bundled / user
-      templates and the resolution path.
 - [ ] **User config file** — `$XDG_CONFIG_HOME/md2star/config.toml`
       via `platformdirs`. Precedence: CLI > config > defaults.
       `md2star config {path,show,init}`.
-- [ ] **Typed exceptions wired into `cli.main`** — pretty-print at
-      the top with a `hint` line and an exit-code map. No raw
-      tracebacks for known failures.
-- [ ] **Structured stdlib `logging` in the CLI core.** Replace
-      direct `print(..., file=sys.stderr)` calls with a single
-      named logger + `StreamHandler`, wire `--verbose` / `--quiet`
-      / `--log-level` through it. Stdlib only — no new runtime
-      deps.
 - [ ] **Optional `--watch` flag** on `md2docx` / `md2pptx` /
       `md2pdf` that rebuilds on file save (stdlib polling).
       Terminal alternative to the editor-loop iteration mode the
