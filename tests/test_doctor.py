@@ -1,8 +1,19 @@
 """Unit tests for md2star.doctor.
 
-The diagnostic logic is decoupled from terminal rendering, so we
-inject a fake ``which`` to simulate any combination of dependencies
-being present or missing without touching the real PATH.
+The diagnostic logic is decoupled from terminal rendering, so we inject
+a fake ``which`` to simulate any combination of dependencies being
+present or missing without touching the real PATH.
+
+The suite is organised by behaviour:
+
+* :class:`TestDiagnosis` drives ``run_checks`` over realistic dependency
+  environments — a fully healthy machine and one with only pandoc — and
+  a parametrised sweep of the "which optional tool is missing?" matrix,
+  asserting per-check status *and* the derived feature availability.
+* :class:`TestCli` covers the ``main``/``render`` surface: the JSON
+  shape, the human-readable render, and the exit-code contract. The
+  "pandoc missing → exit 1" contract is kept standalone because it is
+  the load-bearing regression the CLI exists to guarantee.
 """
 
 from __future__ import annotations
@@ -17,29 +28,46 @@ from md2star import doctor
 
 # Helper: a ``which`` substitute that returns a fixed mapping.
 def fake_which(present: dict[str, str | None]):
-    """Return a ``which``-like callable that maps a binary name to its path."""
+    """Return a ``which``-like callable over a fixed name→path mapping.
+
+    Parameters
+    ----------
+    present : dict[str, str | None]
+        Binary name → resolved path (or ``None`` for absent).
+
+    Returns
+    -------
+    Callable[[str], str | None]
+        A drop-in replacement for :func:`shutil.which`.
+    """
     def _which(name: str) -> str | None:
         return present.get(name)
     return _which
 
 
-# Patch _run_version everywhere so the tests don't actually shell out
-# to whatever ``pandoc`` / ``soffice`` happens to be on the test
-# machine (which would make assertions flaky). Also neutralise the
-# macOS ``/Applications/LibreOffice.app`` filesystem fallback in
-# _check_libreoffice — on a dev machine that *has* LibreOffice
-# installed, the fallback would beat the injected ``which`` and break
-# the "missing dependency" assertions.
+# Patch _run_version everywhere so the tests don't actually shell out to
+# whatever ``pandoc`` / ``soffice`` happens to be on the test machine
+# (which would make assertions flaky). Also neutralise the macOS
+# ``/Applications/LibreOffice.app`` filesystem fallback in
+# _check_libreoffice — on a dev machine that *has* LibreOffice installed,
+# the fallback would beat the injected ``which`` and break the "missing
+# dependency" assertions.
 @pytest.fixture(autouse=True)
 def _no_version_shellout(monkeypatch):
+    """Stub version probing and the macOS LibreOffice.app path fallback.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        Used to replace ``doctor._run_version`` and ``Path.exists``.
+    """
     monkeypatch.setattr(
         doctor, "_run_version",
         lambda cmd, **kw: f"{cmd[0]} fake-version-for-tests",
     )
     # Force Path.exists to return False for the macOS LibreOffice.app
-    # fallback so test_soffice_missing_pdf_is_partial holds regardless
-    # of the host environment. Other Path.exists calls are passed
-    # through unchanged.
+    # fallback so the "soffice missing" assertions hold regardless of the
+    # host environment. Other Path.exists calls are passed through.
     from pathlib import Path
     real_exists = Path.exists
     def _patched_exists(self):
@@ -49,87 +77,129 @@ def _no_version_shellout(monkeypatch):
     monkeypatch.setattr(Path, "exists", _patched_exists)
 
 
-class TestCorePresent:
-    """The healthy baseline: pandoc + everything optional."""
+# A machine where every dependency, core and optional, resolves.
+_ALL_PRESENT = {
+    "pandoc": "/usr/bin/pandoc",
+    "soffice": "/usr/bin/soffice",
+    "node": "/usr/bin/node",
+    "npx": "/usr/bin/npx",
+    "mmdc": "/usr/local/bin/mmdc",
+    "ollama": "/usr/bin/ollama",
+}
 
-    def test_all_dependencies_present(self):
-        present = {
-            "pandoc": "/usr/bin/pandoc",
-            "soffice": "/usr/bin/soffice",
-            "node": "/usr/bin/node",
-            "npx": "/usr/bin/npx",
-            "mmdc": "/usr/local/bin/mmdc",
-            "ollama": "/usr/bin/ollama",
-        }
-        report = doctor.run_checks(which=fake_which(present))
+
+class TestDiagnosis:
+    """``run_checks`` maps a dependency environment to check + feature status."""
+
+    def test_all_dependencies_present_is_fully_ok(self):
+        """A complete toolchain reports every check OK and no core failure."""
+        report = doctor.run_checks(which=fake_which(_ALL_PRESENT))
+        # Every named check is green.
         assert report.get("Pandoc").status == doctor.STATUS_OK
         assert report.get("LibreOffice").status == doctor.STATUS_OK
         assert report.get("Node.js").status == doctor.STATUS_OK
         assert report.get("Mermaid CLI").status == doctor.STATUS_OK
         assert report.get("Ollama").status == doctor.STATUS_OK
+        # Core is healthy and every feature is fully available.
         assert report.core_failing() is False
         assert report.feature_status("pdf") == doctor.STATUS_OK
         assert report.feature_status("mermaid") == doctor.STATUS_OK
 
+    @pytest.mark.parametrize(
+        "present, check, expected_status, feature, feature_status, note",
+        [
+            # Pandoc absent → core failure; every conversion target dies.
+            (
+                {}, "Pandoc", doctor.STATUS_MISSING,
+                "docx", "UNAVAILABLE",
+                "pandoc is core; without it docx/pptx/pdf all go UNAVAILABLE",
+            ),
+            # Soffice absent → PDF degrades to PARTIAL, docx still fine.
+            (
+                {"pandoc": "/usr/bin/pandoc"}, "LibreOffice", doctor.STATUS_MISSING,
+                "pdf", "PARTIAL",
+                "no LibreOffice → PDF partial, but pandoc alone covers docx",
+            ),
+            # Node absent → mermaid rendering is impossible.
+            (
+                {"pandoc": "/usr/bin/pandoc"}, "Node.js", doctor.STATUS_INFO,
+                "mermaid", "UNAVAILABLE",
+                "no Node → mermaid UNAVAILABLE (Node is optional, so INFO)",
+            ),
+            # npx present without a global mmdc is acceptable (npx -y mmdc).
+            (
+                {"pandoc": "/p", "node": "/n", "npx": "/x"}, "Mermaid CLI", doctor.STATUS_INFO,
+                "mermaid", None,
+                "npx alone is fine; md2star runs `npx -y mmdc` lazily",
+            ),
+        ],
+    )
+    def test_missing_dependency_matrix(
+        self, present, check, expected_status, feature, feature_status, note,
+    ):
+        """Each missing tool drives the right check status and feature fallout.
 
-class TestPandocMissing:
-    """Pandoc missing is a Core failure — exit code 1."""
-
-    def test_pandoc_missing_marks_core_failing(self):
-        report = doctor.run_checks(which=fake_which({}))
-        assert report.get("Pandoc").status == doctor.STATUS_MISSING
-        assert report.core_failing() is True
-        # Every conversion target degrades.
-        assert report.feature_status("docx") == "UNAVAILABLE"
-        assert report.feature_status("pptx") == "UNAVAILABLE"
-        assert report.feature_status("pdf")  == "UNAVAILABLE"
-
-    def test_pandoc_missing_returns_exit_1(self, capsys):
-        with patch.object(doctor, "run_checks", return_value=_make_report_missing_pandoc()):
-            rc = doctor.main([])
-        assert rc == 1
-        out = capsys.readouterr().out
-        assert "Pandoc" in out and "MISSING" in out
-
-
-class TestOptionalMissing:
-    """Soffice / Node / Ollama missing → degraded but not failing."""
-
-    def test_soffice_missing_pdf_is_partial(self):
-        report = doctor.run_checks(which=fake_which({"pandoc": "/usr/bin/pandoc"}))
-        assert report.get("LibreOffice").status == doctor.STATUS_MISSING
-        assert report.core_failing() is False
-        assert report.feature_status("pdf") == "PARTIAL"
-        assert report.feature_status("docx") == doctor.STATUS_OK   # pandoc alone is enough
-
-    def test_node_missing_mermaid_unavailable(self):
-        report = doctor.run_checks(which=fake_which({"pandoc": "/usr/bin/pandoc"}))
-        assert report.get("Node.js").status == doctor.STATUS_INFO
-        assert report.feature_status("mermaid") == "UNAVAILABLE"
-
-    def test_npx_alone_is_acceptable_for_mermaid(self):
-        # Real-world: Node installed via brew/apt comes with npx but
-        # mmdc isn't globally installed; md2star uses `npx -y mmdc` lazily.
-        present = {"pandoc": "/p", "node": "/n", "npx": "/x"}
+        Parameters
+        ----------
+        present : dict[str, str]
+            The dependency environment fed to ``fake_which``.
+        check : str
+            Name of the check whose status is asserted.
+        expected_status : str
+            Expected status constant for ``check``.
+        feature : str
+            Feature whose availability is asserted (``mermaid``/``pdf``/...).
+        feature_status : str or None
+            Expected ``feature_status`` value, or ``None`` to skip that
+            assertion (used when only the check status matters).
+        note : str
+            Rationale surfaced in assertion messages.
+        """
         report = doctor.run_checks(which=fake_which(present))
-        assert report.get("Mermaid CLI").status == doctor.STATUS_INFO
-        assert "npx" in report.get("Mermaid CLI").detail
+        # The named check lands on its expected status.
+        assert report.get(check).status == expected_status, note
+        if feature_status is not None:
+            # ...and the derived feature availability matches.
+            assert report.feature_status(feature) == feature_status, note
+
+        # Case-specific extra guarantees that don't fit the shared columns.
+        if check == "Pandoc":
+            # Missing pandoc is a hard core failure across every target.
+            assert report.core_failing() is True
+            assert report.feature_status("pptx") == "UNAVAILABLE"
+            assert report.feature_status("pdf") == "UNAVAILABLE"
+        else:
+            # Any optional tool missing leaves core intact.
+            assert report.core_failing() is False
+        if check == "LibreOffice":
+            # pandoc alone still exports docx even without LibreOffice.
+            assert report.feature_status("docx") == doctor.STATUS_OK
+        if check == "Mermaid CLI":
+            # The detail explains the npx fallback so users aren't confused.
+            assert "npx" in report.get("Mermaid CLI").detail
 
 
-class TestExitCode:
-    """The CLI returns 0 unless Core is broken."""
+class TestCli:
+    """The ``main``/``render`` surface: JSON, human output, exit codes."""
 
-    def test_returns_0_when_only_optional_missing(self):
-        with patch.object(doctor, "run_checks",
-                          return_value=_make_report_only_pandoc()):
-            assert doctor.main([]) == 0
+    def test_core_only_install_json_and_exit(self, capsys):
+        """A core-only install exits 0 in both plain and ``--json`` modes.
 
+        Folds the "optional-missing → exit 0" contract together with the
+        stable JSON shape, since both describe the same healthy-core report.
 
-class TestJsonOutput:
-    """--json emits a stable shape downstream tools can parse."""
-
-    def test_json_shape(self, capsys):
+        Parameters
+        ----------
+        capsys : pytest.CaptureFixture
+            Captures the JSON payload for shape assertions.
+        """
         report = _make_report_only_pandoc()
+        # Plain mode: optional gaps never fail the command.
+        with patch.object(doctor, "run_checks", return_value=report):
+            assert doctor.main([]) == 0
+        capsys.readouterr()  # drop the plain-mode output before re-running
+
+        # --json mode: same rc, plus a well-formed, documented payload shape.
         with patch.object(doctor, "run_checks", return_value=report):
             rc = doctor.main(["--json"])
         assert rc == 0
@@ -138,18 +208,34 @@ class TestJsonOutput:
         assert "features" in payload and "pdf" in payload["features"]
         assert any(c["name"] == "Pandoc" for c in payload["checks"])
 
-
-class TestRenderedOutput:
-    """Human-readable output is scannable + includes a Result footer."""
-
-    def test_render_includes_result_section(self):
+    def test_render_is_scannable_with_result_footer(self):
+        """Human-readable output groups checks and ends with a Result footer."""
         report = doctor.run_checks(which=fake_which({"pandoc": "/p"}))
         text = doctor.render(report)
+        # The rendered report carries every section header plus a summary.
         assert "Core:" in text
         assert "Optional:" in text
         assert "Templates:" in text
         assert "Result:" in text
         assert "DOCX export" in text and "PDF export" in text
+
+    def test_pandoc_missing_returns_exit_1(self, capsys):
+        """Core failure is the load-bearing contract: exit 1 and a loud MISSING.
+
+        Kept standalone as the regression the CLI exists to guarantee — a
+        broken core must be a non-zero exit so CI/scripts can gate on it.
+
+        Parameters
+        ----------
+        capsys : pytest.CaptureFixture
+            Captures the rendered report for the MISSING assertion.
+        """
+        with patch.object(doctor, "run_checks", return_value=_make_report_missing_pandoc()):
+            rc = doctor.main([])
+        # Non-zero exit + a visible MISSING marker for Pandoc.
+        assert rc == 1
+        out = capsys.readouterr().out
+        assert "Pandoc" in out and "MISSING" in out
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -158,12 +244,26 @@ class TestRenderedOutput:
 
 
 def _make_report_missing_pandoc() -> doctor.Report:
+    """Build a minimal report whose only check is a missing Pandoc.
+
+    Returns
+    -------
+    doctor.Report
+        Report with a single ``STATUS_MISSING`` Pandoc entry.
+    """
     r = doctor.Report()
     r.add("Pandoc", doctor.STATUS_MISSING, "fake — install pandoc")
     return r
 
 
 def _make_report_only_pandoc() -> doctor.Report:
+    """Build a report where core is healthy but LibreOffice is missing.
+
+    Returns
+    -------
+    doctor.Report
+        Report modelling a core-only install (optional deps absent).
+    """
     r = doctor.Report()
     r.add("Python", doctor.STATUS_OK, "3.12.0")
     r.add("md2star", doctor.STATUS_OK, "test")

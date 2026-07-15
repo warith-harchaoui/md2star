@@ -3,11 +3,16 @@
 These pin the contracts PR-A relies on:
 
 * :func:`get_logger` returns dotted children of the ``"md2star"`` root.
-* :func:`configure` maps ``--verbose`` / ``--quiet`` to the right levels.
-* :func:`configure` is idempotent — repeated calls never stack handlers.
+* :func:`configure` maps ``--verbose`` / ``--quiet`` to the right levels and
+  is idempotent — repeated calls never stack handlers.
 * The handler follows the *live* ``sys.stderr`` (so ``capsys`` sees output
   and stderr redirection works), which is why the CLI's diagnostics remain
-  capturable after the print → logging migration.
+  capturable after the print → logging migration, and prints the bare
+  message (no level / logger decoration).
+
+The ten original cases collapse into four functional scenarios: naming,
+handler lifecycle (attach + idempotency), the parametrized level mapping,
+and the stderr-routing / format contract exercised end-to-end.
 """
 
 from __future__ import annotations
@@ -48,23 +53,22 @@ def _owned_handlers() -> list[logging.Handler]:
 
 def test_get_logger_is_dotted_child() -> None:
     """A module logger is namespaced under the "md2star" root."""
+    # An explicit dotted name is returned verbatim.
     assert get_logger("md2star.cli").name == "md2star.cli"
-    # The default is the root name itself.
+    # The default (no argument) is the root name itself.
     assert get_logger().name == "md2star"
 
 
-def test_configure_attaches_exactly_one_handler() -> None:
-    """The first configure() installs our single stderr handler."""
+def test_configure_installs_single_handler_and_is_idempotent() -> None:
+    """The first configure() attaches one handler; repeats never stack more."""
+    # First call installs exactly our single stderr handler.
     configure()
     assert len(_owned_handlers()) == 1
 
-
-def test_configure_is_idempotent() -> None:
-    """Repeated configure() calls must not stack duplicate handlers."""
-    configure()
+    # Two further calls with different flags must not duplicate the handler —
+    # this is the idempotency guarantee the CLI relies on across sub-commands.
     configure(verbose=True)
     configure(quiet=True)
-    # Still exactly one owned handler despite three calls.
     assert len(_owned_handlers()) == 1
 
 
@@ -80,33 +84,28 @@ def test_configure_is_idempotent() -> None:
 def test_configure_level_mapping(kwargs: dict[str, bool], expected: int) -> None:
     """Verbosity flags map to the documented thresholds; quiet outranks verbose."""
     configure(**kwargs)
+    # The root level is what gates every child logger's records.
     assert logging.getLogger("md2star").level == expected
 
 
-def test_handler_follows_live_stderr(capsys) -> None:
-    """A warning reaches the *current* stderr, so capsys captures it."""
-    configure()
-    get_logger("md2star.test").warning("hello from the logging surface")
-    # capsys swapped sys.stderr after import; the live-stderr handler still
-    # writes to the right place because it re-reads sys.stderr on each emit.
-    assert "hello from the logging surface" in capsys.readouterr().err
+def test_output_routes_to_live_stderr_bare_and_level_gated(capsys) -> None:
+    """Records reach the *current* stderr, unadorned, and obey the level gate.
 
+    This exercises three intertwined contracts in one realistic run:
 
-def test_quiet_suppresses_warnings_but_keeps_errors(capsys) -> None:
-    """--quiet hides warnings/info yet still surfaces errors."""
+    * The handler re-reads ``sys.stderr`` on each emit, so ``capsys`` (which
+      swapped stderr after import) still captures the output.
+    * The format is message-only — no ``"ERROR md2star.test:"`` decoration —
+      preserving the pre-migration on-screen UX.
+    * ``--quiet`` suppresses warnings/info yet still surfaces errors.
+    """
+    # Under --quiet, INFO/WARNING are dropped but ERROR survives.
     configure(quiet=True)
     log = get_logger("md2star.test")
     log.warning("this warning should be hidden")
-    log.error("this error must show")
+    log.error("md2star: bare message")
     err = capsys.readouterr().err
+    # The warning was gated out by the ERROR threshold.
     assert "this warning should be hidden" not in err
-    assert "this error must show" in err
-
-
-def test_format_is_message_only(capsys) -> None:
-    """The handler prints the bare message (no level/logger prefix)."""
-    configure()
-    get_logger("md2star.test").error("md2star: bare message")
-    # Exactly the message + newline — no "ERROR md2star.test:" decoration,
-    # which is what keeps the pre-migration on-screen UX identical.
-    assert capsys.readouterr().err == "md2star: bare message\n"
+    # The error reached live stderr, printed verbatim with no prefix/suffix.
+    assert err == "md2star: bare message\n"

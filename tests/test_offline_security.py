@@ -1,17 +1,21 @@
-"""Tests for the v1.2.0 offline / remote-resource security policy.
+"""Functional tests for the v1.2.0 offline / remote-resource security policy.
 
-The contract:
+The contract these tests defend:
 
-* By default, md2star does NOT reach the network.
+* By default md2star does NOT reach the network. Remote images are left
+  in place and a warning points at the opt-in flag.
 * ``--allow-remote-images`` opts in to ``download_remote_images``.
-* ``--allow-remote-templates`` opts in to the deraison.ai template
+* ``--allow-remote-templates`` opts in to the deraison.ai reference-doc
   fallback in ``_resolve_reference_doc``.
-* ``--offline`` forces both off (and silences the lint pass) even
-  when the opt-in flags are also present.
+* ``--offline`` is the hard kill-switch: it forces every network / LLM
+  side-effect off (images, templates, lint, alt-text) and silences the
+  soft-refuse warning — even when the ``allow_*`` flags are also present.
 
-These tests assert the behaviour at the API level (``preprocess_markdown``
-+ ``_resolve_reference_doc``) so they're independent of the CLI's
-argparse layer.
+Each *security gate* keeps its own test so a regression names the exact
+gate it broke. Value-families (allowed vs. default, etc.) are folded as
+in-body loops rather than dropped. Assertions run at the API level
+(``preprocess_markdown`` + ``_resolve_reference_doc``) so they're
+independent of the CLI's argparse layer.
 """
 
 from __future__ import annotations
@@ -38,44 +42,61 @@ MD_WITH_LOCAL_IMG = (
 # ─────────────────────────────────────────────────────────────────────
 
 
-class TestRemoteImagesDefaultDeny:
-    """By default, remote images are NOT downloaded and a warning fires."""
+def test_default_deny_leaves_remote_image_and_warns_at_opt_in_flag(caplog):
+    """Default: the remote URL is untouched and a warning names the opt-in.
 
-    def test_remote_image_is_left_in_place(self, capsys):
-        result = preprocess_markdown(
-            MD_WITH_REMOTE_IMG, inject_metadata=False, lint_enabled=False,
-        )
-        # The URL is preserved verbatim — pandoc will see it as a
-        # remote ref. (DOCX writers drop it, but that's the honest
-        # consequence of "no network was permitted".)
-        assert "https://example.invalid/banner.png" in result
-
-    def test_warning_mentions_the_opt_in_flag(self, caplog):
-        # The skip warning now flows through the md2star logger, so assert on
-        # captured records rather than stderr.
-        caplog.set_level(logging.WARNING, logger="md2star")
-        preprocess_markdown(
-            MD_WITH_REMOTE_IMG, inject_metadata=False, lint_enabled=False,
-        )
-        assert "--allow-remote-images" in caplog.text
-        assert "https://example.invalid/banner.png" in caplog.text
-
-    def test_no_warning_when_no_remote_images(self, caplog):
-        # No remote image → no skip warning should be logged at all.
-        caplog.set_level(logging.WARNING, logger="md2star")
-        preprocess_markdown(
-            MD_WITH_LOCAL_IMG, inject_metadata=False, lint_enabled=False,
-        )
-        assert "--allow-remote-images" not in caplog.text
+    Notes
+    -----
+    Covers two facets of the *default-deny* gate in one realistic run:
+    (1) no network happened, so the URL survives verbatim for pandoc to
+    see; (2) the soft-refuse warning flows through the ``md2star`` logger
+    and tells the user both *which* URL was skipped and *how* to allow it.
+    """
+    caplog.set_level(logging.WARNING, logger="md2star")
+    result = preprocess_markdown(
+        MD_WITH_REMOTE_IMG, inject_metadata=False, lint_enabled=False,
+    )
+    # No download was permitted → the URL is preserved exactly as written.
+    assert "https://example.invalid/banner.png" in result
+    # The warning must be actionable: name the URL and the opt-in flag.
+    assert "--allow-remote-images" in caplog.text
+    assert "https://example.invalid/banner.png" in caplog.text
 
 
-class TestRemoteImagesOptIn:
-    """``allow_remote_images=True`` lets the download phase run."""
+def test_no_remote_image_produces_no_skip_warning(caplog):
+    """A document with only local images logs no remote-skip warning.
 
-    def test_download_called_when_allowed(self):
-        # Patch download_remote_images to confirm it's invoked. We
-        # don't care about its return value — the test is just that
-        # the gating works.
+    Notes
+    -----
+    Guards the warning against false positives: the soft-refuse surface
+    must stay silent when there is nothing remote to refuse.
+    """
+    caplog.set_level(logging.WARNING, logger="md2star")
+    preprocess_markdown(
+        MD_WITH_LOCAL_IMG, inject_metadata=False, lint_enabled=False,
+    )
+    # Nothing remote → the opt-in hint must not appear in the log.
+    assert "--allow-remote-images" not in caplog.text
+
+
+def test_remote_image_download_gate_across_flag_combos():
+    """``download_remote_images`` runs only when allowed AND not offline.
+
+    Notes
+    -----
+    Spans three gates from one table so the precedence rule (offline beats
+    allow) lives beside the gates it overrides:
+    * ``allow_remote_images=True`` alone → downloader runs (opt-in gate);
+    * no flags → downloader skipped (default-deny gate);
+    * allow + ``offline=True`` → downloader skipped (kill-switch override).
+    """
+    # (extra kwargs to preprocess_markdown, expected downloader invocation).
+    cases = [
+        ({"allow_remote_images": True}, True),
+        ({}, False),
+        ({"allow_remote_images": True, "offline": True}, False),
+    ]
+    for kwargs, should_download in cases:
         with patch(
             "md2star.preprocessing.pipeline.download_remote_images",
             side_effect=lambda content, base_dir: content,
@@ -83,75 +104,56 @@ class TestRemoteImagesOptIn:
             preprocess_markdown(
                 MD_WITH_REMOTE_IMG,
                 inject_metadata=False, lint_enabled=False,
-                allow_remote_images=True,
+                **kwargs,
             )
-            assert mock_dl.called
-
-    def test_download_not_called_by_default(self):
-        with patch(
-            "md2star.preprocessing.pipeline.download_remote_images",
-            side_effect=lambda content, base_dir: content,
-        ) as mock_dl:
-            preprocess_markdown(
-                MD_WITH_REMOTE_IMG,
-                inject_metadata=False, lint_enabled=False,
-            )
-            assert not mock_dl.called
+            # Gate: downloader invoked iff explicitly allowed and online.
+            assert mock_dl.called is should_download, kwargs
 
 
-class TestOfflineMode:
-    """``offline=True`` is the hard kill-switch — even allow_* is ignored."""
+def test_offline_blocks_every_lint_side_effect_even_when_lint_enabled():
+    """``offline=True`` vetoes lint AND alt-text drafting despite ``--lint``.
 
-    def test_offline_blocks_remote_images_even_when_allowed(self):
-        with patch(
-            "md2star.preprocessing.pipeline.download_remote_images",
-            side_effect=lambda content, base_dir: content,
-        ) as mock_dl:
-            preprocess_markdown(
-                MD_WITH_REMOTE_IMG,
-                inject_metadata=False, lint_enabled=False,
-                allow_remote_images=True,
-                offline=True,
-            )
-            assert not mock_dl.called
-
-    def test_offline_blocks_lint_even_when_enabled(self):
-        with patch(
-            "md2star.preprocessing.pipeline.lint_with_llm",
-            side_effect=lambda content: content,
-        ) as mock_lint:
+    Notes
+    -----
+    Both the LLM lint pass and alt-text drafting hang off the same
+    ``--lint`` switch and both leave the machine. With ``lint_enabled=True``
+    the kill-switch must reach *past* the image gate and disable each of
+    them; a loop asserts one gate per side-effect so a break names it.
+    """
+    # Every lint-triggered side-effect --offline must suppress.
+    targets = [
+        "md2star.preprocessing.pipeline.lint_with_llm",
+        "md2star.preprocessing.pipeline.fill_empty_alt_text",
+    ]
+    for target in targets:
+        with patch(target, side_effect=lambda *a, **k: a[0]) as mock_fn:
             preprocess_markdown(
                 MD_WITH_LOCAL_IMG,
                 inject_metadata=False,
                 lint_enabled=True,
                 offline=True,
             )
-            assert not mock_lint.called
+            # Offline is the hard kill-switch: this side-effect never fires.
+            assert not mock_fn.called, target
 
-    def test_offline_blocks_alt_text_drafting_even_when_lint_enabled(self):
-        """Alt-text drafting piggy-backs on ``--lint`` — ``--offline`` blocks it."""
-        with patch(
-            "md2star.preprocessing.pipeline.fill_empty_alt_text",
-            side_effect=lambda content, base_dir: content,
-        ) as mock_alt:
-            preprocess_markdown(
-                MD_WITH_LOCAL_IMG,
-                inject_metadata=False,
-                lint_enabled=True,
-                offline=True,
-            )
-            assert not mock_alt.called
 
-    def test_offline_silences_remote_image_warning(self, capsys):
-        # The warning is the "soft refuse" surface; in offline mode the
-        # refusal is explicit and the warning is noise.
-        preprocess_markdown(
-            MD_WITH_REMOTE_IMG, inject_metadata=False, lint_enabled=False,
-            offline=True,
-        )
-        # We still don't download AND we don't print the warning
-        # (because the user already declared --offline; they know).
-        assert "--allow-remote-images" not in capsys.readouterr().err
+def test_offline_silences_the_remote_image_warning(caplog):
+    """In offline mode the soft-refuse warning is suppressed as noise.
+
+    Notes
+    -----
+    The default-deny warning exists to nudge users toward the opt-in flag.
+    Once the user has declared ``--offline`` the refusal is explicit and
+    intentional, so re-emitting the nudge would be pure noise — it must be
+    silenced.
+    """
+    caplog.set_level(logging.WARNING, logger="md2star")
+    preprocess_markdown(
+        MD_WITH_REMOTE_IMG, inject_metadata=False, lint_enabled=False,
+        offline=True,
+    )
+    # Explicit --offline → no soft-refuse hint should be logged.
+    assert "--allow-remote-images" not in caplog.text
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -159,62 +161,94 @@ class TestOfflineMode:
 # ─────────────────────────────────────────────────────────────────────
 
 
-class TestResolveReferenceDoc:
-    """The deraison.ai template fallback is gated behind --allow-remote-templates."""
+def test_reference_doc_uses_bundled_template_without_network(tmp_path):
+    """Reference-doc resolution stays local unless remote is explicitly on.
 
-    def test_falls_back_to_bundled_when_remote_not_allowed(self, tmp_path):
-        from md2star.cli import _resolve_reference_doc
-        input_path = tmp_path / "foo.md"
-        input_path.write_text("# hi")
-        # Wipe the XDG cache so we're sure no previously-downloaded
-        # template short-circuits the test.
-        from md2star.cache import cache_dir
-        for f in cache_dir("templates").glob("*"):
-            f.unlink()
-        with patch("urllib.request.urlopen") as mock_urlopen:
-            resolved = _resolve_reference_doc(input_path, "docx")
-            # The bundled template should be returned; urlopen never called.
-            assert resolved is not None
-            assert resolved.name == "template.docx"
-            assert not mock_urlopen.called
+    Parameters
+    ----------
+    tmp_path : pathlib.Path
+        Pytest-provided temp dir holding a throwaway input file.
 
-    def test_downloads_when_explicitly_allowed(self, tmp_path):
-        from md2star.cache import cache_dir
-        from md2star.cli import _resolve_reference_doc
-        input_path = tmp_path / "foo.md"
-        input_path.write_text("# hi")
-        for f in cache_dir("templates").glob("*"):
-            f.unlink()
-        # Mock the urlopen response so the test doesn't actually hit
-        # the network.
-        fake_bytes = b"PK\x03\x04fake-docx-content"
-        class _FakeResp:
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
-            def read(self): return fake_bytes
-        with patch("urllib.request.urlopen", return_value=_FakeResp()) as mock_urlopen:
-            resolved = _resolve_reference_doc(
-                input_path, "docx",
-                allow_remote_templates=True,
-            )
-            assert mock_urlopen.called
-            assert resolved is not None
-            assert resolved.read_bytes() == fake_bytes
+    Notes
+    -----
+    Folds two template gates that share an outcome, one per loop row:
+    * default (no ``allow_remote_templates``) → bundled template, network
+      untouched (default-deny gate);
+    * allow + ``offline=True`` → bundled template, network untouched
+      (kill-switch override: offline beats allow).
+    Both must return the bundled ``template.docx`` and never call urlopen.
+    """
+    from md2star.cache import cache_dir
+    from md2star.cli import _resolve_reference_doc
 
-    def test_offline_blocks_download_even_when_allowed(self, tmp_path):
-        from md2star.cache import cache_dir
-        from md2star.cli import _resolve_reference_doc
-        input_path = tmp_path / "foo.md"
-        input_path.write_text("# hi")
+    input_path = tmp_path / "foo.md"
+    input_path.write_text("# hi")
+    # (kwargs to _resolve_reference_doc for each no-network scenario).
+    scenarios = [
+        {},
+        {"allow_remote_templates": True, "offline": True},
+    ]
+    for resolve_kwargs in scenarios:
+        # Wipe the XDG cache so a previously-downloaded template can't
+        # short-circuit the resolver and mask the gate under test.
         for f in cache_dir("templates").glob("*"):
             f.unlink()
         with patch("urllib.request.urlopen") as mock_urlopen:
             resolved = _resolve_reference_doc(
-                input_path, "docx",
-                allow_remote_templates=True,
-                offline=True,
+                input_path, "docx", **resolve_kwargs,
             )
-            assert not mock_urlopen.called
+            # Network must not be reached, and the bundled template wins.
+            assert not mock_urlopen.called, resolve_kwargs
             assert resolved is not None
-            # Bundled fallback wins.
             assert resolved.name == "template.docx"
+
+
+def test_reference_doc_downloads_when_remote_explicitly_allowed(tmp_path):
+    """``allow_remote_templates=True`` (and online) fetches the remote doc.
+
+    Parameters
+    ----------
+    tmp_path : pathlib.Path
+        Pytest-provided temp dir holding a throwaway input file.
+
+    Notes
+    -----
+    The positive half of the template gate: with the opt-in flag set and
+    no ``--offline``, ``urlopen`` is called and its bytes are written to
+    the resolved reference doc. ``urlopen`` is mocked so the test never
+    touches the real network.
+    """
+    from md2star.cache import cache_dir
+    from md2star.cli import _resolve_reference_doc
+
+    input_path = tmp_path / "foo.md"
+    input_path.write_text("# hi")
+    for f in cache_dir("templates").glob("*"):
+        f.unlink()
+
+    fake_bytes = b"PK\x03\x04fake-docx-content"
+
+    class _FakeResp:
+        """Minimal context-manager stand-in for a urlopen response."""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def read(self):
+            """Return the canned docx bytes the resolver should persist."""
+            return fake_bytes
+
+    with patch(
+        "urllib.request.urlopen", return_value=_FakeResp(),
+    ) as mock_urlopen:
+        resolved = _resolve_reference_doc(
+            input_path, "docx",
+            allow_remote_templates=True,
+        )
+        # Opt-in + online → network fetched and its bytes were persisted.
+        assert mock_urlopen.called
+        assert resolved is not None
+        assert resolved.read_bytes() == fake_bytes

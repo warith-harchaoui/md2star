@@ -6,6 +6,12 @@ The Lua filter handles five concerns the Python preprocessor cannot touch
 (title extraction, subtitle injection, date localisation, heading-ID strip,
 DOCX page break from horizontal rules) so each gets at least one assertion.
 
+The eight original cases collapse into five functional scenarios: title +
+subtitle + the no-metadata survival path share one class; date localisation
+folds its French / unknown-lang variants into one parametrised case; the
+heading-ID strip stands alone; and the horizontal-rule behaviour (DOCX page
+break vs. untouched HTML rule) becomes one FORMAT-gate scenario.
+
 The whole module is skipped when ``pandoc`` is not on ``PATH`` — the unit
 tests must still pass on machines that have only installed Python deps.
 """
@@ -14,6 +20,7 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import zipfile
 from importlib import resources
 
 import pytest
@@ -57,43 +64,46 @@ def _run_pandoc(markdown: str, to_fmt: str, *extra: str) -> str:
 
 
 # ──────────────────────────────────────────────────────────────────
-# Title extraction + subtitle injection
+# Title extraction + subtitle injection + the no-metadata survival path
 # ──────────────────────────────────────────────────────────────────
 
 
 class TestTitleAndSubtitle:
-    """The first H1 becomes the document title; author + date land in subtitle."""
+    """The first H1 becomes the document title; author lands in the subtitle."""
 
-    def test_first_h1_becomes_title(self) -> None:
-        """A standalone H1 is promoted to ``meta.title`` and stripped from the body."""
-        # Markdown output is the simplest medium to inspect because pandoc's
-        # Markdown writer preserves YAML metadata explicitly.
-        out = _run_pandoc("# Hello World\n\nBody text.", "markdown", "--standalone")
-        # The H1 should appear in the YAML metadata block, not as a body heading.
-        assert "title: Hello World" in out
-        # The body should still contain the prose but not the H1 line.
-        assert "Body text." in out
-        # We accept either "# Hello World" entirely absent OR present only as
-        # part of the metadata serialization — check the body specifically.
-        body_start = out.find("---\n", out.find("---\n") + 1)  # end of front-matter
-        body = out[body_start:] if body_start != -1 else out
-        assert "# Hello World" not in body
+    def test_first_h1_becomes_title_with_author_subtitle(self) -> None:
+        """The H1 is promoted to ``meta.title`` (and stripped) while author flows in.
 
-    def test_subtitle_holds_author_when_provided(self) -> None:
-        """``--metadata author=...`` flows into the subtitle div."""
+        Markdown is the simplest medium to inspect because pandoc's Markdown
+        writer preserves YAML metadata explicitly. One standalone render
+        exercises both the title-promotion and subtitle-injection branches.
+        """
         out = _run_pandoc(
-            "# Doc\n\nBody.\n",
+            "# Hello World\n\nBody text.",
             "markdown",
             "--standalone",
             "--metadata", "author=Alice",
         )
-        # The Lua filter wraps the author into a Div with custom-style="Subtitle".
-        # In the Markdown writer that surfaces as the literal author string.
+        # The H1 should appear in the YAML metadata block as the title.
+        assert "title: Hello World" in out
+        # The body still contains the prose.
+        assert "Body text." in out
+        # The H1 is stripped from the body (only survives in the front-matter).
+        body_start = out.find("---\n", out.find("---\n") + 1)  # end of front-matter
+        body = out[body_start:] if body_start != -1 else out
+        assert "# Hello World" not in body
+        # The author is wrapped into the Subtitle div; the Markdown writer
+        # surfaces that as the literal author string somewhere in the output.
         assert "Alice" in out
 
-    def test_no_author_no_h1_only_id_strip(self) -> None:
-        """A document without an H1 or author still survives the filter."""
+    def test_no_h1_no_author_survives_id_strip_path(self) -> None:
+        """A document without an H1 or author still passes through the filter intact.
+
+        This drives the heading-ID-strip branch on a non-H1 heading while
+        confirming the title/subtitle logic degrades gracefully to a no-op.
+        """
         out = _run_pandoc("## Just a Level-2\n\nText.\n", "markdown")
+        # Nothing was promoted or dropped — the level-2 heading and prose remain.
         assert "Just a Level-2" in out
         assert "Text." in out
 
@@ -103,42 +113,46 @@ class TestTitleAndSubtitle:
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestDateLocalisation:
-    """``date_format`` + ``lang`` produce localised month / weekday names."""
+@pytest.mark.parametrize(
+    ("lang", "must_contain_french", "must_not_contain"),
+    [
+        # A supported language substitutes a localised month name from the dict.
+        ("fr-FR", True, ()),
+        # An unsupported language falls back to os.date()'s raw %B — never a
+        # French / German dictionary month.
+        ("xx-YY", False, ("février", "februar")),
+    ],
+    ids=["french-dict", "unknown-lang-fallback"],
+)
+def test_date_localisation(
+    lang: str, must_contain_french: bool, must_not_contain: tuple[str, ...]
+) -> None:
+    """``date_format`` + ``lang`` localise month names for supported languages only.
 
-    def test_french_month_name_injected(self) -> None:
-        """``lang: fr-FR`` + ``%B`` substitutes a French month name."""
-        # %B alone keeps the output deterministic across runs (the year
-        # changes daily but the month name does not).
-        out = _run_pandoc(
-            "# Titre\n\nCorps.\n",
-            "markdown",
-            "--standalone",
-            "--metadata", "lang=fr-FR",
-            "--metadata", "date_format=%B",
-        )
-        french_months = (
-            "janvier", "février", "mars", "avril", "mai", "juin",
-            "juillet", "août", "septembre", "octobre", "novembre", "décembre",
-        )
-        assert any(m.lower() in out.lower() for m in french_months), (
+    ``%B`` alone keeps the output deterministic across runs (the year changes
+    daily but the month name does not). The filter carries dictionaries for a
+    handful of languages; anything else drops through to the system locale.
+    """
+    out = _run_pandoc(
+        "# Titre\n\nCorps.\n",
+        "markdown",
+        "--standalone",
+        "--metadata", f"lang={lang}",
+        "--metadata", "date_format=%B",
+    ).lower()
+
+    french_months = (
+        "janvier", "février", "mars", "avril", "mai", "juin",
+        "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+    )
+    if must_contain_french:
+        # A supported language must surface at least one French month name.
+        assert any(m in out for m in french_months), (
             f"expected a French month name in: {out!r}"
         )
-
-    def test_english_fallback_when_lang_unknown(self) -> None:
-        """An unknown ``lang`` falls back to the system locale (English-ish)."""
-        # The filter only carries dictionaries for 7 languages; anything else
-        # gets the raw ``%B`` from os.date(), which on en_* locales is English.
-        out = _run_pandoc(
-            "# Doc\n\nBody.\n",
-            "markdown",
-            "--standalone",
-            "--metadata", "lang=xx-YY",
-            "--metadata", "date_format=%B",
-        )
-        # Should not contain a French / German month name from the dict.
-        assert "février" not in out.lower()
-        assert "februar" not in out.lower()
+    # An unknown language must not pull French/German names out of the dict.
+    for forbidden in must_not_contain:
+        assert forbidden not in out
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -146,58 +160,49 @@ class TestDateLocalisation:
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestHeadingIdStrip:
+def test_h2_auto_id_is_stripped() -> None:
     """Auto-generated heading IDs are stripped (meaningless in DOCX)."""
-
-    def test_h2_id_removed(self) -> None:
-        """``## My Heading {#my-heading}`` loses the identifier."""
-        out = _run_pandoc("## Section A\n\nBody.\n", "markdown")
-        # Pandoc's Markdown writer would emit ``{#section-a}`` after the
-        # heading text if the identifier were present. The filter strips it.
-        assert "{#section-a}" not in out
-        assert "Section A" in out
+    out = _run_pandoc("## Section A\n\nBody.\n", "markdown")
+    # Pandoc's Markdown writer would emit ``{#section-a}`` after the heading
+    # text if the identifier survived; the filter removes it.
+    assert "{#section-a}" not in out
+    assert "Section A" in out
 
 
 # ──────────────────────────────────────────────────────────────────
-# Horizontal rule → page break (DOCX only)
+# Horizontal rule → page break, gated on the output FORMAT
 # ──────────────────────────────────────────────────────────────────
 
 
-class TestPageBreak:
-    """``---`` becomes a hard page break in DOCX output."""
+def test_horizontal_rule_is_page_break_in_docx_only(tmp_path) -> None:
+    """``---`` becomes a DOCX page break but stays a plain rule elsewhere.
 
-    def test_hr_emits_page_break_in_docx(self, tmp_path) -> None:
-        """The DOCX path should contain a ``<w:br w:type="page"/>`` element."""
-        import zipfile
+    The filter's HR branch is FORMAT-gated: in DOCX it emits raw
+    ``<w:br w:type="page"/>`` OOXML; in every other format the default
+    horizontal rule renders untouched. HTML stands in for "not DOCX"
+    because it is trivial to introspect and shares the same gate as PPTX.
+    """
+    # --- DOCX path: HR must become a hard page break. ---
+    out_docx = tmp_path / "page-break.docx"
+    # Use file output because pandoc cannot write DOCX to stdout.
+    subprocess.run(
+        [
+            "pandoc",
+            "--from", "markdown",
+            "--to", "docx",
+            "--lua-filter", _filter_path(),
+            "-o", str(out_docx),
+        ],
+        input="Before page break.\n\n---\n\nAfter page break.\n".encode("utf-8"),
+        check=True,
+        timeout=20,
+    )
+    with zipfile.ZipFile(out_docx) as z:
+        doc_xml = z.read("word/document.xml").decode("utf-8")
+    # The raw OOXML the filter emits on HR in a Word target.
+    assert '<w:br w:type="page"' in doc_xml
 
-        out_docx = tmp_path / "page-break.docx"
-        # Use the file-output path because pandoc cannot write DOCX to stdout.
-        subprocess.run(
-            [
-                "pandoc",
-                "--from", "markdown",
-                "--to", "docx",
-                "--lua-filter", _filter_path(),
-                "-o", str(out_docx),
-            ],
-            input="Before page break.\n\n---\n\nAfter page break.\n".encode("utf-8"),
-            check=True,
-            timeout=20,
-        )
-        with zipfile.ZipFile(out_docx) as z:
-            doc_xml = z.read("word/document.xml").decode("utf-8")
-        # The raw OOXML emitted by the filter on HR.
-        assert '<w:br w:type="page"' in doc_xml
-
-    def test_hr_preserved_in_pptx_path(self, tmp_path) -> None:
-        """Other output formats keep the default horizontal-rule rendering."""
-        # We use HTML rather than PPTX because PPTX is harder to introspect
-        # and the filter's HR branch is FORMAT-gated identically for both.
-        out = _run_pandoc(
-            "Before.\n\n---\n\nAfter.\n",
-            "html",
-        )
-        # HTML emits a literal <hr>; the filter must not have replaced it.
-        assert "<hr" in out
-        # And critically, no Word page-break XML leaked into HTML output.
-        assert '<w:br' not in out
+    # --- HTML path: HR must be left as a literal rule, no Word XML leakage. ---
+    html = _run_pandoc("Before.\n\n---\n\nAfter.\n", "html")
+    assert "<hr" in html
+    assert "<w:br" not in html

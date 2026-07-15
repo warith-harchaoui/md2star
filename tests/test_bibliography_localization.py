@@ -1,9 +1,15 @@
-"""Tests for the v1.2.0 localized --bibliography-name default.
+"""Functional tests for the v1.2.0 localized ``--bibliography-name`` default.
 
-When the user passes --bib without --bibliography-name, md2star uses
-the per-language default (Bibliographie in French, Bibliografía in
-Spanish, etc.). Explicit --lang wins over detection; explicit
---bibliography-name wins over both.
+When the user passes ``--bib`` without ``--bibliography-name``, md2star
+picks the per-language default heading (Bibliographie in French,
+Bibliografía in Spanish, …). The resolution order is:
+
+    explicit ``--bibliography-name``  >  explicit ``--lang``  >  langdetect
+    on the body  >  English fallback.
+
+These tests exercise ``_localized_bibliography_heading`` (the resolver)
+and ``_BIBLIOGRAPHY_HEADING_BY_LANG`` (the localization table) grouped by
+workflow, rather than one micro-assertion per language.
 """
 
 from __future__ import annotations
@@ -11,70 +17,87 @@ from __future__ import annotations
 from md2star.cli import _BIBLIOGRAPHY_HEADING_BY_LANG, _localized_bibliography_heading
 
 
-class TestExplicitLang:
-    """``--lang fr-FR`` → "Bibliographie", regardless of body content."""
+def test_explicit_lang_overrides_body_across_all_locales():
+    """Explicit ``--lang`` wins over body content for every shipped locale.
 
-    def test_french_explicit(self):
-        assert _localized_bibliography_heading("body in English", "fr-FR") == "Bibliographie"
-
-    def test_spanish_explicit(self):
-        assert _localized_bibliography_heading("body in English", "es-ES") == "Bibliografía"
-
-    def test_german_explicit(self):
-        assert _localized_bibliography_heading("body in English", "de-DE") == "Literatur"
-
-    def test_italian_explicit(self):
-        assert _localized_bibliography_heading("body in English", "it") == "Bibliografia"
-
-    def test_portuguese_explicit(self):
-        assert _localized_bibliography_heading("body in English", "pt-BR") == "Bibliografia"
-
-    def test_dutch_explicit(self):
-        assert _localized_bibliography_heading("body in English", "nl") == "Bibliografie"
-
-    def test_russian_explicit(self):
-        assert _localized_bibliography_heading("body in English", "ru") == "Библиография"
-
-    def test_english_explicit(self):
-        assert _localized_bibliography_heading("body in English", "en-US") == "Bibliography"
-
-    def test_unknown_lang_falls_back_to_english(self):
-        assert _localized_bibliography_heading("body", "xx-YY") == "Bibliography"
+    Notes
+    -----
+    One assertion per shipped locale, all driven from a single table. The
+    body is deliberately English so a French/Spanish/… result can only
+    come from honouring the tag — never from detection — proving the
+    ``--lang`` > detection precedence. Region subtags (``fr-FR``) confirm
+    only the primary subtag is consulted.
+    """
+    # (tag-as-passed-to--lang, heading the resolver must return).
+    cases = {
+        "fr-FR": "Bibliographie",
+        "es-ES": "Bibliografía",
+        "de-DE": "Literatur",
+        "it": "Bibliografia",
+        "pt-BR": "Bibliografia",
+        "nl": "Bibliografie",
+        "ru": "Библиография",
+        "en-US": "Bibliography",
+    }
+    # Explicit lang beats detection: English prose must not sway the result.
+    for lang, expected in cases.items():
+        assert _localized_bibliography_heading("body in English", lang) == expected
 
 
-class TestDetectionFallback:
-    """No --lang → langdetect on the body; English fallback if undetectable."""
+def test_english_fallback_for_unknown_lang_and_undetectable_bodies():
+    """Unknown tags and no-signal bodies all degrade to English.
 
-    def test_french_body_detected(self):
-        # Long enough that langdetect lands on French.
-        body = (
-            "Voici un texte en français avec suffisamment de mots pour "
-            "que la détection automatique de la langue donne fr. Nous "
-            "écrivons en français, et la bibliographie devrait porter "
-            "le titre Bibliographie."
-        )
-        result = _localized_bibliography_heading(body, None)
-        # langdetect can be noisy on short text; accept either the
-        # detected French OR the English fallback, but the test
-        # confirms the function doesn't crash and returns a sensible
-        # value.
-        assert result in ("Bibliographie", "Bibliography")
-
-    def test_empty_body_falls_back_to_english(self):
-        assert _localized_bibliography_heading("", None) == "Bibliography"
-
-    def test_no_meaningful_text_falls_back_to_english(self):
-        # Single character — langdetect can't pick a language.
-        assert _localized_bibliography_heading("a", None) == "Bibliography"
+    Notes
+    -----
+    Covers the two tails of the resolution chain in one place:
+    * an unrecognised ``--lang`` tag is not an error — it → English;
+    * with no ``--lang`` and nothing detectable (empty body, or a single
+      char langdetect can't classify) the resolver must not raise and must
+      return the English default.
+    """
+    # Unknown explicit tag → English (not an error).
+    assert _localized_bibliography_heading("body", "xx-YY") == "Bibliography"
+    # No lang + no detectable signal → deterministic English fallback.
+    assert _localized_bibliography_heading("", None) == "Bibliography"
+    assert _localized_bibliography_heading("a", None) == "Bibliography"
 
 
-class TestHeadingMappingIntegrity:
-    """The localization dict has the eight languages we ship for date formatting."""
+def test_detection_from_body_is_sensible_and_never_crashes():
+    """A French body with no ``--lang`` detects French (or safely falls back).
 
-    def test_all_locale_filter_languages_have_a_heading(self):
-        expected_keys = {"en", "fr", "es", "de", "it", "pt", "nl", "ru"}
-        assert expected_keys.issubset(set(_BIBLIOGRAPHY_HEADING_BY_LANG.keys()))
+    Notes
+    -----
+    langdetect is stochastic on short input, so we pin the *contract*
+    rather than a single value: the result is either the correctly
+    detected French heading or the English fallback — and, critically,
+    the resolver returns without raising. This is the only test that
+    exercises the langdetect branch end-to-end.
+    """
+    body = (
+        "Voici un texte en français avec suffisamment de mots pour "
+        "que la détection automatique de la langue donne fr. Nous "
+        "écrivons en français, et la bibliographie devrait porter "
+        "le titre Bibliographie."
+    )
+    # Detection path is exercised (lang=None) and must yield a sane value.
+    result = _localized_bibliography_heading(body, None)
+    assert result in ("Bibliographie", "Bibliography")
 
-    def test_every_value_is_non_empty(self):
-        for lang, heading in _BIBLIOGRAPHY_HEADING_BY_LANG.items():
-            assert heading and isinstance(heading, str), lang
+
+def test_localization_table_is_complete_and_well_formed():
+    """The heading table covers every date locale with non-empty strings.
+
+    Notes
+    -----
+    Two integrity guards on the shared table:
+    * it stays in lock-step with the date-localization filter — a heading
+      exists for each of the eight locales md2star can localize dates for;
+    * no locale maps to a blank / non-string heading, which would inject
+      an empty ``## `` into the output document.
+    """
+    # Every date-formatting locale must have a bibliography heading too.
+    expected_keys = {"en", "fr", "es", "de", "it", "pt", "nl", "ru"}
+    assert expected_keys.issubset(set(_BIBLIOGRAPHY_HEADING_BY_LANG.keys()))
+    # A blank heading would emit an empty "## " into the output document.
+    for lang, heading in _BIBLIOGRAPHY_HEADING_BY_LANG.items():
+        assert heading and isinstance(heading, str), lang
