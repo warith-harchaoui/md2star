@@ -126,7 +126,7 @@ Un livre de recettes complet vit dans **[EXAMPLES.md](EXAMPLES.md)**.
 - **Nettoyages automatiques** (qualité de vie discrète) : téléchargement des images `http(s)://` pour l'embarquement (opt-in), conversion des `<table>` HTML en pipe-tables Pandoc, et isolation des images sur leur propre diapositive PPTX lorsqu'elles cohabiteraient avec un tableau (sinon Pandoc les supprime).
 - **Réversible par conception** : la sortie DOCX de md2star est un rendu *fidèle et récupérable*, pas une impasse à sens unique. Relisez-la vers du Markdown avec n'importe quel lecteur DOCX (Pandoc, [kreuzberg](https://github.com/Goldziher/kreuzberg)) et vos titres, votre emphase `**gras**`/`*italique*`/`` `code` ``, vos tableaux et vos listes reviennent intacts — et les conversions répétées convergent vers un **point fixe stable** au lieu de dériver. Voir [Fidélité de l'aller-retour](#fidélité-de-laller-retour).
 - **Résolution gracieuse des chemins d'images** : URLs, chemins absolus et chemins relatifs « marchent comme on s'y attend ». Une référence relative `![](images/foo.png)` est résolue par rapport au dossier du fichier source.
-- **Identité visuelle zéro-config** : déposez un `template.docx` / `template.pptx` à côté de votre Markdown, md2star le détecte automatiquement comme `--reference-doc`. Si aucun n'existe, le template embarqué dans le wheel est utilisé (offline-safe). Passez `--allow-remote-templates` pour activer un téléchargement unique depuis `deraison.ai`.
+- **Identité visuelle zéro-config** : déposez un `template.docx` / `template.pptx` à côté de votre Markdown, md2star le détecte automatiquement comme `--reference-doc`. Si aucun n'existe, md2star télécharge par défaut (depuis v2.5.0) le template `deraison.ai` et le met en cache ; passez `--no-remote-templates` / `--offline` pour utiliser le template embarqué à la place.
 - **CLI auto-documentée** : chaque wrapper supporte `--help` / `-h` et affiche d'abord les options spécifiques à md2star puis `pandoc --help`. Essayez `md2docx --help`, `md2pptx --help` ou `md2star --help`.
 - **Linter LLM opt-in** : une passe locale Ollama corrige les erreurs de syntaxe (liens d'images cassés, fences non fermées, pipes mal formés) **avant** que Pandoc lise le fichier. **Désactivé par défaut** ; ajoutez `--lint` pour l'activer. Le wrapper lance alors `ollama serve` et `ollama pull` le modèle par défaut à la demande — `gemma4:e2b-mlx` sur macOS (build MLX optimisé Apple Silicon) ou `gemma4:e2b` sur Linux/Windows.
 - **Texte alternatif rédigé par IA** : avec `--lint`, chaque `![](src)` au texte alternatif vide reçoit une description générée par modèle de vision (même modèle `gemma4:e2b`, cache par image). Surchargez le modèle via `MD2STAR_ALT_TEXT_MODEL`.
@@ -444,14 +444,19 @@ vos sources pour que collaborateurs et CI produisent rigoureusement
 le même rendu.
 
 Si ni `template.docx` (préféré) ni l'ancien `.pandoc-reference.docx`
-n'existent, md2star utilise le template embarqué dans le wheel.
-Passez `--allow-remote-templates` pour activer un téléchargement
-unique depuis `deraison.ai` :
+n'existent, md2star télécharge **par défaut** (depuis v2.5.0) le
+template `deraison.ai` et le met en cache (XDG) :
 
 ```
 https://deraison.ai/template.docx
 https://deraison.ai/template.pptx
 ```
+
+Passez `--no-remote-templates` (ou le commutateur `--offline`) pour
+sauter ce téléchargement et utiliser le template embarqué dans le
+wheel. Un échec de téléchargement (pas de réseau, 404, timeout)
+retombe aussi sur le template embarqué : une conversion n'échoue
+jamais parce que `deraison.ai` est injoignable.
 
 **Global** (modifie le défaut embarqué) : modifiez les modèles dans
 `md2star/data/` pour changer polices, marges ou logos. Relancez
@@ -489,11 +494,15 @@ https://deraison.ai/template.pptx
 
 ## Sécurité & mode hors-ligne
 
-`md2star` est **hors-ligne par défaut**. Aucun `.md` que vous traitez
-ne peut faire d'appel réseau de son propre chef. Les flags
-`--allow-remote-images` / `--allow-remote-templates` activent des
-cas réseau précis ; `--offline` rend le refus explicite dans les
-scripts. Modèle de sécurité complet : **[SECURITY.md](SECURITY.md)**.
+Aucun `.md` que vous traitez ne peut faire d'appel réseau de son
+propre chef. Les images distantes restent opt-in via
+`--allow-remote-images`. Depuis v2.5.0, le template de référence
+`deraison.ai` est téléchargé par défaut quand aucun
+`template.{docx,pptx}` local n'existe (mis en cache XDG, repli sur le
+template embarqué en cas d'échec) ; `--no-remote-templates` le saute.
+Le commutateur `--offline` est le coupe-circuit dur qui interdit tout
+accès réseau et rend le refus explicite dans les scripts. Modèle de
+sécurité complet : **[SECURITY.md](SECURITY.md)**.
 
 ## Feuille de route
 

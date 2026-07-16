@@ -64,9 +64,19 @@ needs_node = pytest.mark.skipif(
 
 
 def _convert(fmt: str, in_path: Path, out_path: Path, *extra: str) -> int:
-    """Tiny shim around md2star.cli._convert. Returns exit code."""
+    """Tiny shim around md2star.cli._convert. Returns exit code.
+
+    Injects ``--no-remote-templates`` by default so these tests never
+    reach deraison.ai (the v2.5.0 remote-template default): the fixtures
+    ship no local ``template.<fmt>``, so without this every conversion
+    here would attempt a network fetch. A test that deliberately
+    exercises the network can still pass ``--offline`` /
+    ``--no-remote-templates`` itself — we don't double it up.
+    """
     from md2star.cli import _convert as cli_convert
-    argv = [str(in_path), "-o", str(out_path), *extra]
+    net_neutral = {"--offline", "--no-remote-templates"}
+    prefix = () if net_neutral & set(extra) else ("--no-remote-templates",)
+    argv = [str(in_path), "-o", str(out_path), *prefix, *extra]
     return cli_convert(fmt, argv)
 
 

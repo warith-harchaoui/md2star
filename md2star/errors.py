@@ -95,17 +95,19 @@ class TemplateNotFoundError(Md2starError):
 
 
 class RemoteResourceDisabledError(Md2starError):
-    """An online fetch was needed but blocked by --offline or the default policy.
+    """An online fetch was needed but blocked by --offline.
 
-    By default md2star refuses to reach the network. The CLI surfaces
-    this with a hint that names the relevant opt-in flag
-    (``--allow-remote-images`` / ``--allow-remote-templates``).
+    Remote *images* stay opt-in (``--allow-remote-images``). Remote
+    *templates* are fetched by default (v2.5.0+); ``--offline`` is the
+    hard kill-switch that blocks every network touch, and the CLI
+    surfaces that here.
     """
 
     default_hint = (
-        "md2star runs offline by default. Use --allow-remote-images "
-        "or --allow-remote-templates to opt in, OR --offline to make "
-        "the rejection explicit in scripts."
+        "md2star fetches remote resources it needs, but --offline is on. "
+        "Drop --offline (and use --allow-remote-images for remote images) "
+        "to allow the fetch, or keep --offline to make the rejection "
+        "explicit in scripts."
     )
 
 

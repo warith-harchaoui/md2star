@@ -20,8 +20,9 @@ everything else verbatim to pandoc, and orchestrates the four-step pipeline:
 1. **Preprocess** the input Markdown via :func:`md2star.preprocess_markdown`.
 2. **Resolve the reference template**: prefer ``template.{docx,pptx}`` next
    to the input file, then the legacy ``.pandoc-reference.{docx,pptx}``,
-   then a one-shot fetch from ``deraison.ai`` (cached next to the .md so
-   future runs do not hit the network).
+   then the XDG cache, then (the default since v2.5.0) a one-shot fetch
+   from ``deraison.ai`` cached under XDG, and finally the bundled template.
+   ``--no-remote-templates`` / ``--offline`` skip the fetch.
 3. **Invoke pandoc** with the bundled Lua filter, metadata defaults, and
    resolved reference doc.
 4. **Postprocess** (DOCX only) — re-inject the ``MyTable`` / ``MyTableSmall``
@@ -113,7 +114,7 @@ def _resolve_reference_doc(
     input_path: Path,
     fmt: str,
     *,
-    allow_remote_templates: bool = False,
+    allow_remote_templates: bool = True,
     offline: bool = False,
 ) -> Path | None:
     """Resolve the per-project reference template for *input_path*.
@@ -126,12 +127,14 @@ def _resolve_reference_doc(
        still honoured with a deprecation notice).
     3. ``$XDG_CACHE_HOME/md2star/templates/template.<fmt>`` — silently
        reused once cached.
-    4. **(opt-in only)** Download from
-       ``https://deraison.ai/template.<fmt>`` into the XDG cache. From
-       v1.2.0 onwards this step is gated behind
-       ``--allow-remote-templates``; without the flag the resolver
-       skips straight to the bundled default. ``--offline`` makes the
-       refusal hard (no download even if the flag is passed).
+    4. **(default)** Download from ``https://deraison.ai/template.<fmt>``
+       into the XDG cache. Since v2.5.0 this is the *default* branding
+       whenever no local template (steps 1-3) is found: the deraison.ai
+       template wins over the bundled fallback. Turn it off with
+       ``--no-remote-templates`` (or the hard ``--offline`` kill-switch),
+       which drops straight to the bundled default. A failed download
+       (no network, 404, timeout) also falls back to bundled, so a
+       conversion never breaks just because deraison.ai is unreachable.
     5. Bundled package template (``md2star/data/template.<fmt>``) — the
        always-available offline fallback. Conversion always succeeds.
 
@@ -167,7 +170,7 @@ def _resolve_reference_doc(
             )
             with urllib.request.urlopen(req, timeout=15) as resp:
                 cached.write_bytes(resp.read())
-            # Informational: confirm the (opt-in) network fetch happened.
+            # Informational: confirm the (default) network fetch happened.
             # INFO so it stays visible by default but --quiet can hide it.
             logger.info(
                 f"md2star: cached default template from {url} → {cached}"
@@ -375,11 +378,19 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
               "make the refusal explicit in scripts."),
     )
     parser.add_argument(
+        "--no-remote-templates", action="store_true",
+        help=("Opt OUT of the deraison.ai default template. Since "
+              "v2.5.0 md2star fetches https://deraison.ai/template."
+              "{docx,pptx} whenever no local template.{docx,pptx} is "
+              "found, caching it under XDG. Pass this (or --offline) "
+              "to skip the fetch and use the bundled template."),
+    )
+    parser.add_argument(
+        # Back-compat no-op: remote templates are now the default, so the
+        # old opt-in flag has nothing left to enable. Accepted silently so
+        # existing scripts/CI that still pass it don't error out.
         "--allow-remote-templates", action="store_true",
-        help=("Opt in to fetching the deraison.ai default template "
-              "when no template.{docx,pptx} is found locally. Off "
-              "by default — md2star ships its own bundled template "
-              "as the offline-safe fallback."),
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--allow-remote-images", action="store_true",
@@ -476,9 +487,11 @@ def _convert(fmt: str, argv: list[str]) -> int:
     if args.reference_doc:
         reference_doc = Path(args.reference_doc).expanduser().resolve()
     else:
+        # Remote templates are the default since v2.5.0; --no-remote-templates
+        # (and the hard --offline switch, handled inside the resolver) opt out.
         reference_doc = _resolve_reference_doc(
             in_path, docx_fmt,
-            allow_remote_templates=args.allow_remote_templates,
+            allow_remote_templates=not args.no_remote_templates,
             offline=args.offline,
         )
 

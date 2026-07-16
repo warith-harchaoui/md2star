@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-07-16
+
+### Changed
+- **Remote reference template is now the default.** When no local
+  `template.{docx,pptx}` (nor the legacy `.pandoc-reference.{docx,pptx}`,
+  nor an XDG-cached copy) is found, md2star now fetches
+  `https://deraison.ai/template.{docx,pptx}` **by default** and caches it
+  under XDG — previously this required the opt-in `--allow-remote-templates`
+  flag. This applies everywhere the converter runs: the `md2docx` / `md2pptx`
+  / `md2pdf` CLIs, the HTTP API, and the MCP server (all route through
+  `_convert`). A failed download (no network, 404, timeout) falls back to the
+  bundled template, so a conversion never breaks because deraison.ai is
+  unreachable.
+
+### Added
+- **`--no-remote-templates`** — opt OUT of the default deraison.ai fetch and
+  use the bundled template instead. The hard `--offline` switch also skips it
+  (and forbids every other network touch).
+
+### Deprecated
+- **`--allow-remote-templates`** is now a silent no-op (accepted so existing
+  scripts/CI don't error). Remote templates being the default, it has nothing
+  left to enable.
+
 ## [2.4.2] — 2026-07-15
 
 ### Added

@@ -2,11 +2,12 @@
 
 The contract these tests defend:
 
-* By default md2star does NOT reach the network. Remote images are left
-  in place and a warning points at the opt-in flag.
+* By default md2star does NOT download remote *images*. Remote images
+  are left in place and a warning points at the opt-in flag.
 * ``--allow-remote-images`` opts in to ``download_remote_images``.
-* ``--allow-remote-templates`` opts in to the deraison.ai reference-doc
-  fallback in ``_resolve_reference_doc``.
+* Since v2.5.0 the deraison.ai reference *template* is fetched by
+  DEFAULT when no local ``template.{docx,pptx}`` exists; the opt-out is
+  ``--no-remote-templates`` (``allow_remote_templates=False``).
 * ``--offline`` is the hard kill-switch: it forces every network / LLM
   side-effect off (images, templates, lint, alt-text) and silences the
   soft-refuse warning — even when the ``allow_*`` flags are also present.
@@ -162,7 +163,7 @@ def test_offline_silences_the_remote_image_warning(caplog):
 
 
 def test_reference_doc_uses_bundled_template_without_network(tmp_path):
-    """Reference-doc resolution stays local unless remote is explicitly on.
+    """Reference-doc resolution stays local when remote is opted out.
 
     Parameters
     ----------
@@ -172,10 +173,10 @@ def test_reference_doc_uses_bundled_template_without_network(tmp_path):
     Notes
     -----
     Folds two template gates that share an outcome, one per loop row:
-    * default (no ``allow_remote_templates``) → bundled template, network
-      untouched (default-deny gate);
-    * allow + ``offline=True`` → bundled template, network untouched
-      (kill-switch override: offline beats allow).
+    * explicit opt-out (``allow_remote_templates=False``) → bundled
+      template, network untouched;
+    * ``offline=True`` → bundled template, network untouched
+      (kill-switch override: offline beats the v2.5.0 remote default).
     Both must return the bundled ``template.docx`` and never call urlopen.
     """
     from md2star.cache import cache_dir
@@ -185,8 +186,8 @@ def test_reference_doc_uses_bundled_template_without_network(tmp_path):
     input_path.write_text("# hi")
     # (kwargs to _resolve_reference_doc for each no-network scenario).
     scenarios = [
-        {},
-        {"allow_remote_templates": True, "offline": True},
+        {"allow_remote_templates": False},
+        {"offline": True},
     ]
     for resolve_kwargs in scenarios:
         # Wipe the XDG cache so a previously-downloaded template can't
@@ -249,6 +250,56 @@ def test_reference_doc_downloads_when_remote_explicitly_allowed(tmp_path):
             allow_remote_templates=True,
         )
         # Opt-in + online → network fetched and its bytes were persisted.
+        assert mock_urlopen.called
+        assert resolved is not None
+        assert resolved.read_bytes() == fake_bytes
+
+
+def test_reference_doc_downloads_by_default(tmp_path):
+    """Since v2.5.0 the deraison.ai template is fetched with NO opt-in flag.
+
+    Parameters
+    ----------
+    tmp_path : pathlib.Path
+        Pytest-provided temp dir holding a throwaway input file.
+
+    Notes
+    -----
+    This pins the v2.5.0 behaviour change: calling
+    ``_resolve_reference_doc`` with default kwargs (no
+    ``allow_remote_templates``, no ``offline``) must reach the network
+    and persist the fetched bytes — the remote template is now the
+    default branding, not an opt-in. ``urlopen`` is mocked so the test
+    never touches the real deraison.ai host.
+    """
+    from md2star.cache import cache_dir
+    from md2star.cli import _resolve_reference_doc
+
+    input_path = tmp_path / "foo.md"
+    input_path.write_text("# hi")
+    for f in cache_dir("templates").glob("*"):
+        f.unlink()
+
+    fake_bytes = b"PK\x03\x04default-remote-docx"
+
+    class _FakeResp:
+        """Minimal context-manager stand-in for a urlopen response."""
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+
+        def read(self):
+            """Return the canned docx bytes the resolver should persist."""
+            return fake_bytes
+
+    with patch(
+        "urllib.request.urlopen", return_value=_FakeResp(),
+    ) as mock_urlopen:
+        # No kwargs at all — the v2.5.0 default must still fetch.
+        resolved = _resolve_reference_doc(input_path, "docx")
         assert mock_urlopen.called
         assert resolved is not None
         assert resolved.read_bytes() == fake_bytes

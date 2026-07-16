@@ -139,7 +139,7 @@ A self-contained cookbook with more recipes lives at
 - **Automatic Cleanups** (quiet quality-of-life): remote `http(s)://` images downloaded for embedding (opt-in), HTML `<table>` blocks converted to Pandoc pipe-tables, and standalone images split off PPTX slides that contain a table (Pandoc otherwise drops them).
 - **Reversible by Design**: md2star's DOCX output is a *faithful, recoverable* rendering, not a one-way dead end. Read it straight back to Markdown with any DOCX reader (Pandoc, [kreuzberg](https://github.com/Goldziher/kreuzberg)) and your headings, `**bold**`/`*italic*`/`` `code` `` emphasis, tables, and lists come back intact — and repeated conversions converge to a **stable fixed point** rather than drifting. See [Round-trip fidelity](#round-trip-fidelity).
 - **Graceful Image Path Resolution**: URLs, absolute paths, and relative paths all "just work". Relative `![](images/foo.png)` references resolve against the input file's directory — so `md2docx subdir/file.md` from any cwd still finds the image. No need to `cd` into the source folder first.
-- **Zero-Config Branding**: drop a `template.docx` / `template.pptx` next to your Markdown and md2star will pick it up automatically as `--reference-doc`. If neither exists, the bundled default is used (offline-safe). Pass `--allow-remote-templates` to opt into the one-time `deraison.ai` fetch.
+- **Zero-Config Branding**: drop a `template.docx` / `template.pptx` next to your Markdown and md2star will pick it up automatically as `--reference-doc`. If neither exists, md2star fetches the `deraison.ai` default template by default (since v2.5.0) and caches it; pass `--no-remote-templates` / `--offline` to use the bundled template instead.
 - **Discoverable CLI**: every wrapper supports `--help` / `-h` and prints the md2star-specific flags followed by `pandoc --help`, so the full conversion surface is one command away. Try `md2docx --help`, `md2pptx --help`, or `md2star --help`.
 - **Opt-in LLM Linter**: a local Ollama pass fixes syntax-level mistakes (broken image links, unclosed fences, malformed pipes) **before** Pandoc parses the file. **Off by default** so conversions stay deterministic; pass `--lint` to opt in. The wrapper then spawns `ollama serve` and `ollama pull`s the default model on demand — `gemma4:e2b-mlx` on macOS (Apple-Silicon-optimized MLX build) or `gemma4:e2b` on Linux/Windows.
 - **AI-Drafted Alt-Text**: with `--lint`, every empty `![](src)` reference gets a vision-model-drafted alt text (same `gemma4:e2b` model, cached per image). Override the model with `MD2STAR_ALT_TEXT_MODEL`.
@@ -455,14 +455,14 @@ Two levels of customization, from project-local to global:
 
 **Per-project** (recommended): drop a `template.docx` or `template.pptx` next to your Markdown file. Every md2star wrapper auto-detects it and passes it as `--reference-doc`. Commit it alongside your source so collaborators and CI produce identical branded output.
 
-If neither `template.docx` (preferred) nor the legacy `.pandoc-reference.docx` (still honored with a deprecation notice) exists, md2star falls back to the bundled default shipped inside the wheel. Pass `--allow-remote-templates` to opt into a one-time download from `deraison.ai`:
+If neither `template.docx` (preferred) nor the legacy `.pandoc-reference.docx` (still honored with a deprecation notice) exists, md2star fetches the default `deraison.ai` template **by default** (since v2.5.0) and caches it under XDG:
 
 ```
 https://deraison.ai/template.docx
 https://deraison.ai/template.pptx
 ```
 
-You then edit that local copy in Word / PowerPoint / LibreOffice and commit it whenever you're happy with the styling.
+Pass `--no-remote-templates` (or the hard `--offline` switch) to skip that fetch and use the bundled template shipped inside the wheel. A failed download (no network, 404, timeout) also falls back to the bundled template, so a conversion never breaks just because `deraison.ai` is unreachable. You then edit the local/cached copy in Word / PowerPoint / LibreOffice and commit it whenever you're happy with the styling.
 
 **Global** (changes the bundled default for every project that hasn't pinned its own): modify the master templates in `md2star/data/` to change fonts, margins, or logos:
 - `md2star/data/template.docx`
@@ -507,11 +507,14 @@ For contributors and advanced users interested in the inner workings of our Pyth
 
 ## Security model & offline mode
 
-`md2star` is **offline by default**. No `.md` file you process can
-make a network call on its own. The `--allow-remote-images` /
-`--allow-remote-templates` flags opt in to specific network use
-cases; `--offline` makes the refusal explicit in scripts. Full
-security model: **[SECURITY.md](SECURITY.md)**.
+No `.md` file you process can make a network call on its own. Remote
+images stay opt-in via `--allow-remote-images`. Since v2.5.0 the
+`deraison.ai` reference template is fetched by default when no local
+`template.{docx,pptx}` exists (cached under XDG, bundled fallback on
+failure); use `--no-remote-templates` to skip it. The `--offline`
+switch is the hard kill-switch that forbids every network touch and
+makes the refusal explicit in scripts. Full security model:
+**[SECURITY.md](SECURITY.md)**.
 
 ## Roadmap & status
 

@@ -16,19 +16,26 @@ public issue.
 
 ## Network behavior
 
-md2star's default behavior is **offline-equivalent**: no markdown
-file you process can cause a network call on its own.
+No markdown file you process can cause a network call on its own. The
+one phase md2star itself may reach the network for — with no markdown
+involvement — is the reference-template fetch, on by default since
+v2.5.0.
 
-| Phase                          | Default | Opt-in flag                  |
+| Phase                          | Default | Opt-out / opt-in flag        |
 |--------------------------------|---------|------------------------------|
 | Download `![](https://…)` imgs | DENY    | `--allow-remote-images`      |
-| Fetch deraison.ai template     | DENY    | `--allow-remote-templates`   |
+| Fetch deraison.ai template     | ALLOW   | `--no-remote-templates`      |
 | Hit Ollama for `--lint`        | DENY    | `--lint`                     |
 | Render mermaid via `npx`       | local   | (uses local `npx`; no flag)  |
 
-`--offline` (a top-level flag) forces every network-touching phase
-off, including the opt-ins above. Use it in scripts and CI to make
-the refusal explicit.
+The template fetch happens only when no local `template.{docx,pptx}`
+exists, targets the fixed `deraison.ai` host (never a markdown-supplied
+URL), caches the result under XDG, and falls back to the bundled
+template if the download fails — so it never breaks a conversion.
+
+`--offline` (a top-level flag) is the hard kill-switch: it forces every
+network-touching phase off, including the template fetch and the
+opt-ins above. Use it in scripts and CI to make the refusal explicit.
 
 When a remote image reference is encountered without the
 opt-in flag, md2star logs **one** stderr warning per document

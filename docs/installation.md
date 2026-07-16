@@ -35,10 +35,12 @@ Pick the features you actually need; install only those dependencies.
 | `--lint` LLM auto-fix   | + Ollama + a small Gemma model                    | Off by default; opt-in via the `--lint` flag.                      |
 | AI-drafted alt text     | + Ollama + a vision model (default: gemma4:e2b)   | Same `--lint` flag; `MD2STAR_ALT_TEXT_MODEL` overrides the model.  |
 
-**Network policy:** md2star is **offline by default**. The
-deraison.ai template fallback and remote image downloads require
-explicit `--allow-remote-templates` / `--allow-remote-images` flags;
-pass `--offline` to make the refusal explicit.
+**Network policy:** since v2.5.0 the deraison.ai reference template is
+fetched **by default** when no local `template.{docx,pptx}` exists
+(cached under XDG, bundled fallback on failure); opt out with
+`--no-remote-templates`. Remote image downloads still require the
+explicit `--allow-remote-images` flag. Pass `--offline` as the hard
+kill-switch that forbids every network touch.
 
 ## Per-OS installation
 

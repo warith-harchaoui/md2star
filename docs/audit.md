@@ -24,7 +24,10 @@ surface area. The four things that took it from *personal tool* to
    (`md2star/cli.py`) and `download_remote_images`
    (`md2star/preprocessing/images.py`) are gated behind explicit
    `--allow-remote-templates` / `--allow-remote-images` flags;
-   `--offline` makes the refusal explicit.
+   `--offline` makes the refusal explicit. *(Update, v2.5.0: the
+   reference-template fetch is now on by default — see SECURITY.md —
+   with `--no-remote-templates` / `--offline` as the opt-outs. Remote
+   images stay opt-in.)*
 3. **Conservative installer.** `scripts/install.sh` no longer
    auto-installs LibreOffice without consent — `--install-system-deps`
    is the opt-in.

@@ -20,9 +20,17 @@ set -euo pipefail
 #     language overrides go through the CLI (`--lang fr-FR` plus pandoc's
 #     own `--metadata date_format=...`) so an interrupted run leaves the
 #     repo clean.
+#   - We pass `--no-remote-templates` on every conversion. Since v2.5.0 the
+#     converter fetches the deraison.ai template by default when no local
+#     one exists; forcing the bundled template keeps this suite offline and
+#     deterministic (no network dependency, no flakes when deraison.ai is
+#     slow/unreachable).
 
 MD2DOCX=${MD2DOCX:-md2docx}
 MD2PPTX=${MD2PPTX:-md2pptx}
+# Appended to every conversion so the suite uses the bundled template
+# instead of the v2.5.0 default deraison.ai fetch — keeps it offline.
+NET_FLAGS="--no-remote-templates"
 DOCX_DIR="assets/docx"
 PPTX_DIR="assets/pptx"
 
@@ -88,24 +96,24 @@ assert_contains_pptx() {
 # Verify that the first H1 heading becomes the document title.
 echo ""
 echo "--- Basic DOCX ---"
-$MD2DOCX "$DOCX_DIR/basic.md" > /dev/null
+$MD2DOCX $NET_FLAGS "$DOCX_DIR/basic.md" > /dev/null
 assert_contains_docx "$DOCX_DIR/basic.docx" "Basic Title" "Title extracted to DOCX"
 
 # ── TEST 2: Author injection ───────────────────────────────────────
 echo ""
 echo "--- Author DOCX ---"
-$MD2DOCX "$DOCX_DIR/with_author.md" --author "Tester" > /dev/null
+$MD2DOCX $NET_FLAGS "$DOCX_DIR/with_author.md" --author "Tester" > /dev/null
 assert_contains_docx "$DOCX_DIR/with_author.docx" "Tester" "Author injected to DOCX"
 
 # ── TEST 3: Bibliography ───────────────────────────────────────────
 echo ""
 echo "--- Bibliography DOCX & PPTX ---"
-$MD2DOCX "$DOCX_DIR/with_bib.md" --bib "assets/references.bib" \
+$MD2DOCX $NET_FLAGS "$DOCX_DIR/with_bib.md" --bib "assets/references.bib" \
     --bibliography-name "References" > /dev/null
 assert_contains_docx "$DOCX_DIR/with_bib.docx" "Pearl" "Bibliography rendered in DOCX"
 assert_contains_docx "$DOCX_DIR/with_bib.docx" "References" "Custom bibliography heading in DOCX"
 
-$MD2PPTX "$DOCX_DIR/with_bib.md" --bib "assets/references.bib" \
+$MD2PPTX $NET_FLAGS "$DOCX_DIR/with_bib.md" --bib "assets/references.bib" \
     --bibliography-name "References" > /dev/null
 assert_contains_pptx "$DOCX_DIR/with_bib.pptx" "Pearl" "Bibliography rendered in PPTX"
 assert_contains_pptx "$DOCX_DIR/with_bib.pptx" "References" "Custom bibliography heading in PPTX"
@@ -116,7 +124,7 @@ assert_contains_pptx "$DOCX_DIR/with_bib.pptx" "References" "Custom bibliography
 # is forwarded verbatim to pandoc.
 echo ""
 echo "--- Language/Date DOCX (fr-FR) ---"
-$MD2DOCX "$DOCX_DIR/with_lang.md" --author "User" \
+$MD2DOCX $NET_FLAGS "$DOCX_DIR/with_lang.md" --author "User" \
     --lang "fr-FR" \
     --metadata "date_format=%d %B %Y" > /dev/null
 assert_contains_docx "$DOCX_DIR/with_lang.docx" "$(date +%Y)" \
@@ -125,13 +133,13 @@ assert_contains_docx "$DOCX_DIR/with_lang.docx" "$(date +%Y)" \
 # ── TEST 5: Math ───────────────────────────────────────────────────
 echo ""
 echo "--- Math DOCX ---"
-$MD2DOCX "$DOCX_DIR/math.md" > /dev/null
+$MD2DOCX $NET_FLAGS "$DOCX_DIR/math.md" > /dev/null
 assert_contains_docx "$DOCX_DIR/math.docx" "math" "Math rendered in DOCX"
 
 # ── TEST 6: Extensive PPTX example ─────────────────────────────────
 echo ""
 echo "--- Extensive PPTX ---"
-$MD2PPTX "$PPTX_DIR/example.md" > /dev/null
+$MD2PPTX $NET_FLAGS "$PPTX_DIR/example.md" > /dev/null
 assert_contains_pptx "$PPTX_DIR/example.pptx" "Slides can have videos" \
     "Extensive PPTX example parsed"
 

@@ -68,8 +68,16 @@ def test_convert_rejects_unknown_format(client: TestClient) -> None:
 
 
 @pytest.mark.skipif(shutil.which("pandoc") is None, reason="pandoc not installed")
-def test_convert_markdown_to_docx(client: TestClient) -> None:
+def test_convert_markdown_to_docx(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """A real /convert round-trip returns a non-empty DOCX (ZIP-based) file."""
+    # Keep the test hermetic: the API defaults to fetching the deraison.ai
+    # template (v2.5.0+) since the staged upload has no local template. Empty
+    # the URL map so the resolver skips the network and uses the bundled
+    # template — we're asserting the round-trip works, not the fetch path
+    # (that lives in tests/test_offline_security.py with a mocked urlopen).
+    monkeypatch.setattr("md2star.cli._TEMPLATE_URLS", {}, raising=True)
     md = "# Title\n\nA short paragraph with **bold** text.\n"
     r = client.post(
         "/convert?fmt=docx",

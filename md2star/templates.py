@@ -79,6 +79,12 @@ def _candidates(input_dir: Path, fmt: str) -> list[tuple[str, Path]]:
     # Highest priority first: a template committed next to the source, then the
     # legacy dotfile name, then the XDG cache, then the always-present bundled
     # copy. _first_existing() walks this list top-down to pick the winner.
+    #
+    # Note: between "cached" and "bundled" the real resolver
+    # (`_resolve_reference_doc`) fetches https://deraison.ai/template.<fmt> by
+    # default (v2.5.0+) and writes it into the "cached" slot. This diagnostic is
+    # a filesystem-only view, so it cannot show that network step directly — it
+    # surfaces as a populated "cached" row after the first online run.
     return [
         ("per-project (template)", input_dir / f"template.{fmt}"),
         ("per-project (legacy)",   input_dir / f".pandoc-reference.{fmt}"),
