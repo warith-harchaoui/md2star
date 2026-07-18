@@ -6,6 +6,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.1] — 2026-07-18
+
+### Tests
+- **OCR round-trip identity `g(f(x)) = x`.** Rewrote `tests/test_roundtrip_ocr.py`
+  to prove, by exact whole-document string equality under an explicit normal form
+  `N`, that the `md → docx → pdf` render (`f`) followed by kreuzberg PDF text
+  extraction (`g`) is the identity on Markdown — for paragraphs of any length
+  (wrapping is reflowed) and bullet lists, across multiple pages (page-number
+  footers and the injected date subtitle are normalized out). The provable limits
+  (inline emphasis, heading *levels*, tables — a PDF has no such markup layer) are
+  stated precisely in the module docstring. Replaces the earlier, weaker
+  "content-survival" framing; `f`, `g`, and `N` are now defined explicitly.
+
+### CI
+- New **`ocr-roundtrip`** job installs pandoc + LibreOffice + kreuzberg and
+  *actually runs* the identity test (and fails if it silently skips), so the
+  round-trip is verified on every push rather than only locally. Wired into the
+  release gate.
+
+### Documentation
+- `requirements-dev.txt` now lists the OCR test dependencies (`kreuzberg`, `pypdf`)
+  explicitly, with per-OS LibreOffice install hints. Corrected a stale note in
+  `tests/test_roundtrip.py` that claimed the OCR direction was validated
+  out-of-tree — it is now validated in-tree.
+
 ## [2.5.0] — 2026-07-16
 
 ### Changed

@@ -1,34 +1,77 @@
-"""OCR round-trip fidelity: ``md → docx → pdf → (kreuzberg) → text`` survives.
+"""OCR round-trip identity: ``g(f(x)) = x`` for md2star's ``md → pdf → text`` pipeline.
 
-This is the *long* arm of the idempotence story. :mod:`tests.test_roundtrip`
-proves the cheap, dependency-free direction (``md → docx → md`` via Pandoc's
-native reader). This module proves the expensive one that mirrors what a real
-downstream reader does to a *printed* document: render the Markdown all the way
-to a PDF through md2star's real CLI path (LibreOffice under the hood), then pull
-the text back out with `kreuzberg <https://github.com/Goldziher/kreuzberg>`_ —
-the same OCR / text-extraction engine a consumer would use on a PDF they were
-handed.
+Precise statement
+-----------------
+Define three maps:
 
-Why content-survival rather than a strict fixed point
------------------------------------------------------
-A PDF has no Markdown layer: bold/italic/`code` emphasis, table pipes, and list
-bullets are *rendered*, not stored, so they cannot come back as Markdown tokens.
-And md2star injects a localized date subtitle on every run by design. So the
-contract we can honestly assert here is **content survival** — every heading's
-text, every list item, and the substantive words of every paragraph reappear in
-the extracted text — not byte-for-byte idempotence. The strict ``g(g(x)) ==
-g(x)`` fixed point lives in :mod:`tests.test_roundtrip`; this module guards the
-weaker-but-broader promise that nothing a reader *cares about* is lost on the way
-to PDF.
+* ``f : Markdown → PDF`` — md2star's forward renderer (``md → docx → pdf``, with
+  LibreOffice doing the DOCX→PDF step). This is exactly what the ``md2pdf`` CLI runs.
+* ``g : PDF → text`` — the reverse reader: kreuzberg's PDF text extraction with
+  ``OutputFormat.PLAIN``, which preserves line and list structure (unlike the
+  MARKDOWN format, which merges list items onto one line and drops the space at
+  wrap points).
+* ``N : text → text`` — a canonical *normal form* (see :func:`_normal_form`).
+
+This module proves the **reversibility identity**
+
+.. math::  N(g(f(x))) = N(x) \\quad\\text{for every } x \\in D,
+
+i.e. ``g ∘ f`` is the identity on Markdown *up to the normal form* ``N``. This is
+the strict claim ``g(f(x)) = x`` (not a hand-waved "content survives", and not the
+weaker ``g(g(x)) = g(x)`` idempotence): a full document, compared by exact string
+equality after canonicalization.
+
+Domain ``D`` — where the identity provably holds
+------------------------------------------------
+Documents built from:
+
+* **paragraphs of prose, of any length** — the PDF hard-wraps long paragraphs at
+  the page width; ``N`` reflows them, so wrapping does not break the identity;
+* **bullet lists** (``-`` / ``*`` / ``+`` items, one line per item).
+
+It holds across **multiple pages**: page-number footers md2star prints are removed
+by ``N``. Determinism is real — rendering the same source twice yields byte-identical
+extracted text — so the identity is stable, not flaky.
+
+What ``N`` normalizes, and why each step is legitimate (not a fudge)
+-------------------------------------------------------------------
+1. Line endings ``\\r\\n`` / ``\\r`` → ``\\n`` (the extractor emits CRLF; cosmetic).
+2. Blank lines dropped (vertical spacing is not content).
+3. Standalone page-number lines (``^\\d+$``) dropped — **the "footer"** the round-trip
+   must ignore; it is page furniture the PDF adds, absent from the source.
+4. md2star's injected localized **date subtitle** dropped — the single element
+   md2star adds on every render, by design (see :data:`_DATE_SUBTITLE`).
+5. Bullet markers (``-``, ``*``, ``+``, and LibreOffice's private-use bullet glyph
+   ``U+F0B7``) normalized to ``"- "`` — maps both the source and the extracted PDF
+   text to one spelling of "this is a list item".
+6. **Prose reflow**: consecutive non-bullet lines are joined with single spaces.
+   This undoes the PDF's hard line-wrapping. It also erases paragraph-break
+   *positions* between adjacent prose paragraphs — a PDF's text flow does not
+   preserve them, so ``N`` removes them on **both** sides rather than pretend they
+   survive.
+
+What is provably OUTSIDE ``D`` (cannot be recovered — a PDF has no such layer)
+-----------------------------------------------------------------------------
+* inline emphasis ``**bold**`` / ``*italic*`` / ``code`` → rendered as plain glyphs;
+* heading **levels** (``#``, ``##``, …) → styled text; the level is not stored;
+* **tables** → positioned cells and rules, not a grid model.
+
+Their *text* survives a render; their *markup* does not, by construction — so
+asserting their recovery would be dishonest, and ``D`` excludes them. The cheap,
+structured direction (``md → docx → md`` with markup intact) is covered separately
+by :mod:`tests.test_roundtrip` through Pandoc's native DOCX reader. Bullet items
+are assumed to fit on one rendered line; a bullet long enough to wrap is out of
+scope (its continuation line is indistinguishable from a new paragraph once the
+list markers are gone).
 
 Why kreuzberg is a test-only dependency
 ---------------------------------------
-kreuzberg is heavy (OCR stack) and only exercises the *verification* direction —
-it is never part of md2star's normal ``md → docx/pptx/pdf`` runtime. So it lives
-in the ``dev`` extra, and the whole module skips cleanly when kreuzberg (or
-LibreOffice, or Pandoc) is absent, mirroring :mod:`tests.test_roundtrip`. It is
-marked ``slow`` because a LibreOffice render plus a kreuzberg pass costs seconds,
-not milliseconds; the fast suite stays fast.
+kreuzberg is heavy and only exercises the *verification* direction — it is never
+part of md2star's ``md → docx/pptx/pdf`` runtime. It lives in the ``dev`` extra;
+the module skips cleanly when kreuzberg, LibreOffice, or Pandoc is absent, and is
+marked ``slow`` (a LibreOffice render plus extraction costs seconds). CI installs
+the full toolchain in a dedicated job so this identity is *actually executed*, not
+skipped.
 
 Author
 ------
@@ -38,23 +81,21 @@ Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 from __future__ import annotations
 
 import importlib.util
+import re
 import shutil
 from pathlib import Path
 
 import pytest
 
-# Every leg of this chain has an external prerequisite, and any one of them being
-# absent makes the whole test meaningless rather than failing. Gate on all three
-# up front so the module skips as a unit on a bare machine:
-#   - pandoc   : md2star's Markdown reader (the very first hop);
-#   - soffice  : headless LibreOffice, how md2star renders DOCX → PDF;
-#   - kreuzberg: the text/OCR extractor that reads the PDF back.
+# Each leg has an external prerequisite; any one being absent makes the identity
+# untestable rather than false, so the module skips as a unit on a bare machine:
+#   - pandoc   : md2star's Markdown reader (first hop of f);
+#   - soffice  : headless LibreOffice, how f renders DOCX → PDF;
+#   - kreuzberg: the extractor g reads the PDF back with.
 _HAS_PANDOC = shutil.which("pandoc") is not None
 _HAS_SOFFICE = shutil.which("soffice") is not None or shutil.which("libreoffice") is not None
 _HAS_KREUZBERG = importlib.util.find_spec("kreuzberg") is not None
 
-# Two class-level markers: skip unless the full toolchain is present, and tag the
-# module ``slow`` so ``pytest -m "not slow"`` keeps the millisecond suite lean.
 pytestmark = [
     pytest.mark.skipif(
         not (_HAS_PANDOC and _HAS_SOFFICE and _HAS_KREUZBERG),
@@ -63,14 +104,34 @@ pytestmark = [
     pytest.mark.slow,
 ]
 
+# A date-shaped subtitle line md2star stamps on every render, in the localized long
+# form (English "Saturday, July 18, 2026" or French "18 juillet 2026"). It is the one
+# element the pipeline adds that is absent from the source, so N removes it (step 4).
+_DATE_SUBTITLE = re.compile(
+    r"^(?:\w+,\s+\w+\s+\d{1,2},\s+\d{4}"   # English: Saturday, July 18, 2026
+    r"|\d{1,2}\s+\w+\s+\d{4})$"            # French:  18 juillet 2026
+)
 
-def _md_to_pdf(md_text: str, tmp_path: Path, tag: str) -> Path:
-    """Render Markdown text to a PDF through md2star's real CLI path.
+# A line is a bullet if it starts with an ASCII list marker OR LibreOffice's
+# private-use rendered bullet glyph U+F0B7 (what kreuzberg reads back from the PDF).
+_BULLET = re.compile(
+    # ASCII list markers plus the Unicode / private-use bullet glyphs a PDF
+    # renderer (LibreOffice) may emit for a list item, written as explicit
+    # \u escapes so the set is visible in source and portable across platforms:
+    # - * +  U+2022 BULLET  U+00B7 MIDDLE DOT  U+F0B7 (Symbol-font bullet, PUA)
+    # U+25CF BLACK CIRCLE  U+25E6 WHITE BULLET  U+2023 TRIANGULAR  U+2043 HYPHEN
+    # U+2219 BULLET OPERATOR.
+    r"^[-*+\u2022\u00b7\uf0b7\u25cf\u25e6\u2023\u2043\u2219]\s+"
+)
+
+
+def f(md_text: str, tmp_path: Path, tag: str) -> Path:
+    """``f`` — render Markdown to a PDF through md2star's real CLI path.
 
     Parameters
     ----------
     md_text : str
-        The Markdown source to convert.
+        The Markdown source ``x`` to convert.
     tmp_path : pathlib.Path
         Pytest's per-test temporary directory; holds the ``.md`` input and
         the ``.pdf`` output.
@@ -80,11 +141,10 @@ def _md_to_pdf(md_text: str, tmp_path: Path, tag: str) -> Path:
     Returns
     -------
     pathlib.Path
-        Path to the freshly written PDF.
+        Path to the freshly written PDF ``f(x)``.
     """
-    # Reuse the exact entry point the CLI uses (not a subprocess) so the test
-    # exercises the same code the ``md2pdf`` command runs. ``--offline`` keeps
-    # the conversion from touching the network, matching test_roundtrip.
+    # Call the exact entry point the CLI uses (not a subprocess) so the test
+    # exercises the same code ``md2pdf`` runs; ``--offline`` keeps it off the network.
     from md2star.cli import _convert
 
     src = tmp_path / f"{tag}.md"
@@ -92,106 +152,162 @@ def _md_to_pdf(md_text: str, tmp_path: Path, tag: str) -> Path:
     src.write_text(md_text, encoding="utf-8")
     rc = _convert("pdf", [str(src), "-o", str(out), "--offline"])
 
-    # A non-zero return code means LibreOffice failed to render; surface the tag
-    # so a CI failure points at the offending fixture immediately.
+    # A non-zero return code means LibreOffice failed to render; name the tag so a
+    # CI failure points straight at the offending fixture.
     assert rc == 0, f"md2pdf failed on {tag} (rc={rc})"
     return out
 
 
-def _pdf_to_text(pdf_path: Path) -> str:
-    """Extract the text layer of a PDF with kreuzberg (the reverse reader).
+def g(pdf_path: Path) -> str:
+    """``g`` — read a PDF back to text with kreuzberg (PLAIN preserves structure).
 
     Parameters
     ----------
     pdf_path : pathlib.Path
-        The PDF produced by :func:`_md_to_pdf`.
+        The PDF produced by :func:`f`.
 
     Returns
     -------
     str
-        The document's recovered plain text. Emphasis, table borders, and
-        bullet glyphs are gone — only textual content survives a PDF render.
+        The recovered plain text ``g(f(x))``. Each list item and each wrapped
+        line is on its own physical line — the structure ``N`` needs to rebuild
+        the source. (``OutputFormat.MARKDOWN`` is deliberately *not* used: it
+        merges list items onto one line and drops the space at wrap points.)
     """
-    # Imported lazily: the module-level skip guarantees kreuzberg is present by
-    # the time any test body runs, so the import never fails here.
-    from kreuzberg import extract_file_sync
+    # Imported lazily: the module-level skip guarantees kreuzberg is importable by
+    # the time any test body runs.
+    from kreuzberg import ExtractionConfig, OutputFormat, extract_file_sync
 
-    # extract_file_sync returns an ExtractionResult; ``.content`` is the flat
-    # text we compare against. kreuzberg auto-detects the PDF handler.
-    result = extract_file_sync(str(pdf_path))
-    return result.content
+    cfg = ExtractionConfig(output_format=OutputFormat.PLAIN)
+    return extract_file_sync(str(pdf_path), config=cfg).content
 
 
-# A fixture chosen so every survivor is an unambiguous, PDF-safe token: distinct
-# heading words, list items with unique nouns, and a paragraph sentence. No
-# reliance on **bold**/*italic*/`code` — those are rendered away by design and
-# are already covered by the Markdown-level round-trip test.
-_OCR_MD = """\
-# Idempotence Probe
+def _normal_form(text: str) -> str:
+    """``N`` — the canonical normal form both sides of the identity are compared in.
 
-## Section One
+    Implements the six normalization steps documented in the module docstring:
+    normalize line endings, drop blank / page-number / date-subtitle lines,
+    canonicalize bullet markers to ``"- "``, and reflow wrapped prose. The same
+    ``N`` is applied to the source ``x`` and to ``g(f(x))``; the identity is the
+    exact string equality of the two results.
 
-This paragraph anchors the first section with the word Kreuzberg.
+    Parameters
+    ----------
+    text : str
+        Either the source Markdown ``x`` or the extracted text ``g(f(x))``.
 
-- Alpha consolidation task
-- Beta migration task
-- Gamma cleanup task
-
-## Section Two
-
-The closing paragraph mentions Payments and Latency explicitly.
-"""
-
-# The tokens that MUST survive md → pdf → text. Each is a plain word or short
-# phrase with no Markdown syntax, so extraction — OCR or text-layer — recovers
-# it verbatim. Emphasis markers and the injected date subtitle are deliberately
-# excluded (they are not part of the survival contract; see the module docstring).
-_EXPECTED_TOKENS = [
-    "Idempotence Probe",       # H1 title text
-    "Section One",             # H2 heading
-    "Section Two",             # H2 heading
-    "Kreuzberg",               # word inside the first paragraph
-    "Alpha consolidation task",  # list item 1
-    "Beta migration task",       # list item 2
-    "Gamma cleanup task",        # list item 3
-    "Payments",                # noun in the closing paragraph
-    "Latency",                 # noun in the closing paragraph
-]
-
-
-def test_content_survives_the_ocr_roundtrip(tmp_path: Path) -> None:
-    """Every heading, list item, and paragraph noun returns through the PDF.
-
-    This is the end-to-end assertion: push the fixture all the way to PDF via
-    the real md2pdf path, read it back with kreuzberg, and confirm each token
-    that carries meaning reappears. Formatting is intentionally not checked.
+    Returns
+    -------
+    str
+        The canonical form: one ``"- item"`` line per bullet and one reflowed
+        line per contiguous prose run, in document order.
     """
-    # One full pass through the expensive chain.
-    pdf = _md_to_pdf(_OCR_MD, tmp_path, "ocr")
-    recovered = _pdf_to_text(pdf)
+    out: list[str] = []
+    buf: list[str] = []
 
-    # Assert token-by-token so a failure names exactly what was dropped rather
-    # than dumping the whole extracted blob.
-    for token in _EXPECTED_TOKENS:
-        assert token in recovered, f"{token!r} did not survive md → pdf → text"
+    def flush() -> None:
+        # Collapse a run of consecutive prose lines into a single reflowed
+        # paragraph line (undoing PDF hard-wrapping), tagged so a prose line can
+        # never accidentally equal a bullet line of the same text.
+        if buf:
+            out.append("P " + re.sub(r"\s+", " ", " ".join(buf)).strip())
+            buf.clear()
+
+    # Walk the document line by line, classifying each line into exactly one of:
+    # drop / bullet / prose. Order of the guards matters (page number and date are
+    # checked before the line is treated as prose).
+    for raw in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        line = raw.strip()
+        if not line:
+            continue                                   # step 2: blank lines
+        if re.fullmatch(r"\d+", line):
+            continue                                   # step 3: page-number footer
+        if _DATE_SUBTITLE.match(line):
+            continue                                   # step 4: injected date subtitle
+        if _BULLET.match(line):
+            # step 5: a bullet ends the current prose run and emits a canonical item.
+            flush()
+            out.append("- " + _BULLET.sub("", line).strip())
+            continue
+        buf.append(line)                               # step 6: accumulate prose to reflow
+
+    flush()
+    return "\n".join(out)
 
 
-def test_ocr_roundtrip_is_stable_across_two_renders(tmp_path: Path) -> None:
-    """Rendering twice recovers the same content set — no cumulative drift.
+def _identity_holds(md_text: str, tmp_path: Path, tag: str) -> None:
+    """Assert the strict identity ``N(g(f(x))) == N(x)`` for one document.
 
-    True byte-level idempotence is impossible once a document has been through
-    a PDF (no Markdown layer to compare, plus the re-stamped date subtitle). The
-    honest stability claim is that the *set of surviving tokens* is invariant:
-    a second render loses nothing the first one kept.
+    Parameters
+    ----------
+    md_text : str
+        The source Markdown ``x`` (must lie in the domain ``D``).
+    tmp_path : pathlib.Path
+        Pytest temporary directory forwarded to :func:`f`.
+    tag : str
+        Unique slug for the intermediate files.
     """
-    # Render the same source twice into separate files.
-    first = _pdf_to_text(_md_to_pdf(_OCR_MD, tmp_path, "ocr_a"))
-    second = _pdf_to_text(_md_to_pdf(_OCR_MD, tmp_path, "ocr_b"))
+    recovered = _normal_form(g(f(md_text, tmp_path, tag)))
+    source = _normal_form(md_text)
+    # Exact, whole-document string equality — the honest form of "g(f(x)) = x".
+    assert recovered == source, (
+        "round-trip is not the identity under N:\n"
+        f"--- N(x) ---\n{source}\n--- N(g(f(x))) ---\n{recovered}"
+    )
 
-    # Every contract token present after the first render is present after the
-    # second; the survival set does not shrink run over run.
-    for token in _EXPECTED_TOKENS:
-        assert (token in first) == (token in second), (
-            f"{token!r} survived one render but not the other — the OCR "
-            "round-trip is not stable"
-        )
+
+# ----------------------------- fixtures (all in D) -----------------------------
+
+# Short, single-line paragraphs plus a bullet list: the simplest member of D.
+_SHORT = (
+    "The opening paragraph names Kreuzberg exactly once.\n\n"
+    "- Alpha consolidation task\n"
+    "- Beta migration task\n"
+    "- Gamma cleanup task\n\n"
+    "The closing paragraph mentions Payments and Latency.\n"
+)
+
+# A paragraph long enough to force the PDF renderer to wrap it across several
+# physical lines — exercises the reflow branch (step 6) of N.
+_LONG_PARA = (
+    "This is a deliberately long paragraph that comfortably exceeds the printable "
+    "page width so the PDF renderer must break it across several physical lines, "
+    "which the normal form reflows back into one when it checks the identity."
+)
+
+
+def test_identity_short_prose_and_bullets(tmp_path: Path) -> None:
+    """``g(f(x)) = x`` for short paragraphs interleaved with a bullet list."""
+    _identity_holds(_SHORT, tmp_path, "short")
+
+
+def test_identity_long_wrapping_paragraphs(tmp_path: Path) -> None:
+    """``g(f(x)) = x`` when paragraphs wrap — reflow makes wrapping invisible."""
+    x = "\n\n".join(_LONG_PARA for _ in range(4)) + "\n"
+    _identity_holds(x, tmp_path, "long")
+
+
+def test_identity_prose_and_bullets_with_wrapping(tmp_path: Path) -> None:
+    """``g(f(x)) = x`` for wrapped prose *and* bullets in the same document."""
+    x = _LONG_PARA + "\n\n- one item\n- two item\n- three item\n\n" + _LONG_PARA + "\n"
+    _identity_holds(x, tmp_path, "mixed")
+
+
+def test_identity_across_multiple_pages(tmp_path: Path) -> None:
+    """``g(f(x)) = x`` across page breaks — page-number footers are normalized out."""
+    # ~24 wrapping paragraphs guarantee several pages, so real page-number footers
+    # appear in the extracted text and must be stripped by N (step 3).
+    x = "\n\n".join(f"Paragraph {i}. {_LONG_PARA}" for i in range(1, 25))
+    x += "\n\n- one\n- two\n"
+    _identity_holds(x, tmp_path, "multipage")
+
+
+def test_render_is_deterministic(tmp_path: Path) -> None:
+    """Rendering the same source twice yields identical extracted text.
+
+    Determinism is what makes the identity a stable contract rather than a flaky
+    coincidence: ``f`` and ``g`` are (byte-for-byte) functions of the input.
+    """
+    first = g(f(_SHORT, tmp_path, "det_a"))
+    second = g(f(_SHORT, tmp_path, "det_b"))
+    assert first == second

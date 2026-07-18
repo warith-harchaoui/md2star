@@ -17,9 +17,10 @@ it straight back with Pandoc's native DOCX reader, then checking two things:
 
 Pandoc is the reverse reader because it is already a hard md2star dependency
 (no new package), reads DOCX natively, and preserves inline code spans. The
-same property holds with third-party extractors such as ``kreuzberg`` (which
-additionally covers the ``pdf → md`` OCR direction); those are validated
-out-of-tree to keep the test dependency-free.
+harder ``pdf → text`` OCR direction — the strict ``g(f(x)) = x`` identity through
+a *printed* PDF read back with ``kreuzberg`` — is validated **in-tree** by
+:mod:`tests.test_roundtrip_ocr` (marked ``slow``; it runs whenever LibreOffice
+and kreuzberg are installed, and CI installs them so it actually executes).
 
 The whole module skips when ``pandoc`` is not on ``PATH`` — mirroring
 ``tests/test_lua_filter.py`` so the pure-Python test set still passes on a
