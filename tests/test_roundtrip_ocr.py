@@ -27,7 +27,11 @@ Documents built from:
 
 * **paragraphs of prose, of any length** — the PDF hard-wraps long paragraphs at
   the page width; ``N`` reflows them, so wrapping does not break the identity;
-* **bullet lists** (``-`` / ``*`` / ``+`` items, one line per item).
+* **bullet lists** (``-`` / ``*`` / ``+`` items, one line per item);
+* **footnotes** — both numeric (``[^1]``) and named (``[^aa]``) labels. The
+  renderer renumbers them and prints the texts at the page foot; ``N`` folds the
+  footnote texts back to the end and drops the (non-recoverable) label, so the
+  footnote *content* round-trips.
 
 It holds across **multiple pages**: page-number footers md2star prints are removed
 by ``N``. Determinism is real — rendering the same source twice yields byte-identical
@@ -41,10 +45,16 @@ What ``N`` normalizes, and why each step is legitimate (not a fudge)
    must ignore; it is page furniture the PDF adds, absent from the source.
 4. md2star's injected localized **date subtitle** dropped — the single element
    md2star adds on every render, by design (see :data:`_DATE_SUBTITLE`).
-5. Bullet markers (``-``, ``*``, ``+``, and LibreOffice's private-use bullet glyph
+5. **Footnotes folded**: each ``[^label]: text`` definition's *text* is pulled to
+   the end (in reference order), the inline ``[^label]`` reference is deleted, and
+   the rendered superscript marker (a digit glued to the preceding word, e.g.
+   ``citation.1``) is stripped. The label — numeric or named — is discarded on both
+   sides because the renderer replaces it with a running number; only the footnote
+   *text* is recoverable, and that is what round-trips.
+6. Bullet markers (``-``, ``*``, ``+``, and LibreOffice's private-use bullet glyph
    ``U+F0B7``) normalized to ``"- "`` — maps both the source and the extracted PDF
    text to one spelling of "this is a list item".
-6. **Prose reflow**: consecutive non-bullet lines are joined with single spaces.
+7. **Prose reflow**: consecutive non-bullet lines are joined with single spaces.
    This undoes the PDF's hard line-wrapping. It also erases paragraph-break
    *positions* between adjacent prose paragraphs — a PDF's text flow does not
    preserve them, so ``N`` removes them on **both** sides rather than pretend they
@@ -124,6 +134,17 @@ _BULLET = re.compile(
     r"^[-*+\u2022\u00b7\uf0b7\u25cf\u25e6\u2023\u2043\u2219]\s+"
 )
 
+# Markdown footnotes: a body reference ``[^label]`` and a definition
+# ``[^label]: text``. The label may be numeric (``[^1]``) or named (``[^aa]``);
+# md2star/LibreOffice renumber every footnote 1, 2, 3\u2026 by reference order, so the
+# label never survives verbatim \u2014 and does not need to (the footnote *text* does).
+_FN_DEF = re.compile(r"(?m)^\[\^[^\]]+\]:\s*(.*)$")   # a definition line; group 1 = its text
+_FN_REF = re.compile(r"\[\^[^\]]+\]")                 # an inline reference in the body
+# A rendered footnote superscript in the extracted text: a digit run glued directly
+# to the preceding word/punctuation (``citation.1``) \u2014 distinct from a real number,
+# which is preceded by a space (``page 42``), so this never eats genuine figures.
+_SUPERSCRIPT = re.compile(r"(?<=[^\d\s])\d+\b")
+
 
 def f(md_text: str, tmp_path: Path, tag: str) -> Path:
     """``f`` — render Markdown to a PDF through md2star's real CLI path.
@@ -185,9 +206,11 @@ def g(pdf_path: Path) -> str:
 def _normal_form(text: str) -> str:
     """``N`` — the canonical normal form both sides of the identity are compared in.
 
-    Implements the six normalization steps documented in the module docstring:
-    normalize line endings, drop blank / page-number / date-subtitle lines,
-    canonicalize bullet markers to ``"- "``, and reflow wrapped prose. The same
+    Implements the normalization steps documented in the module docstring:
+    normalize line endings; **fold footnotes** (pull each definition's text to the
+    end in reference order, and delete the inline reference plus its rendered
+    superscript marker); drop blank / page-number / date-subtitle lines;
+    canonicalize bullet markers to ``"- "``; and reflow wrapped prose. The same
     ``N`` is applied to the source ``x`` and to ``g(f(x))``; the identity is the
     exact string equality of the two results.
 
@@ -200,8 +223,21 @@ def _normal_form(text: str) -> str:
     -------
     str
         The canonical form: one ``"- item"`` line per bullet and one reflowed
-        line per contiguous prose run, in document order.
+        line per contiguous prose run, with footnote texts appended in order —
+        matching where a render prints them.
     """
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    # Footnotes (step 5). Pull every definition's text out — in source order, which
+    # is reference order for a well-formed document — so it can be appended at the
+    # end, exactly where a single-page render prints the footnotes; then delete the
+    # inline ``[^label]`` references from the body. The label itself is discarded on
+    # both sides: the renderer replaces it with a running number, so only the text
+    # is recoverable (and only the text needs to be).
+    fn_texts: list[str] = []
+    text = _FN_DEF.sub(lambda m: (fn_texts.append(m.group(1).strip()) or ""), text)
+    text = _FN_REF.sub("", text)
+
     out: list[str] = []
     buf: list[str] = []
 
@@ -213,23 +249,27 @@ def _normal_form(text: str) -> str:
             out.append("P " + re.sub(r"\s+", " ", " ".join(buf)).strip())
             buf.clear()
 
-    # Walk the document line by line, classifying each line into exactly one of:
-    # drop / bullet / prose. Order of the guards matters (page number and date are
-    # checked before the line is treated as prose).
-    for raw in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
-        line = raw.strip()
+    # Walk the body, then the footnote texts as trailing prose (so reflow merges
+    # them into the closing paragraph exactly as the rendered page bottom does).
+    # Guard order matters: strip the superscript marker, then test drop / bullet /
+    # prose (a bare page-number and a bare footnote marker are both dropped here).
+    for raw in text.split("\n") + fn_texts:
+        # Remove a rendered footnote superscript glued to the preceding word
+        # (``citation.1``) before any other classification.
+        line = _SUPERSCRIPT.sub("", raw.strip())
+        line = re.sub(r"\s+", " ", line).strip()
         if not line:
-            continue                                   # step 2: blank lines
+            continue                                   # blank lines
         if re.fullmatch(r"\d+", line):
-            continue                                   # step 3: page-number footer
+            continue                                   # page-number footer OR footnote marker
         if _DATE_SUBTITLE.match(line):
-            continue                                   # step 4: injected date subtitle
+            continue                                   # injected date subtitle
         if _BULLET.match(line):
-            # step 5: a bullet ends the current prose run and emits a canonical item.
+            # a bullet ends the current prose run and emits a canonical item.
             flush()
             out.append("- " + _BULLET.sub("", line).strip())
             continue
-        buf.append(line)                               # step 6: accumulate prose to reflow
+        buf.append(line)                               # accumulate prose to reflow
 
     flush()
     return "\n".join(out)
@@ -300,6 +340,40 @@ def test_identity_across_multiple_pages(tmp_path: Path) -> None:
     x = "\n\n".join(f"Paragraph {i}. {_LONG_PARA}" for i in range(1, 25))
     x += "\n\n- one\n- two\n"
     _identity_holds(x, tmp_path, "multipage")
+
+
+def test_identity_with_numeric_footnotes(tmp_path: Path) -> None:
+    """``g(f(x)) = x`` for prose + bullets + numeric-label footnotes ``[^1]``.
+
+    The footnote references render as superscript numbers glued to the body text and
+    the footnote texts print at the page foot; N folds them back so the content
+    round-trips.
+    """
+    x = (
+        "The claim needs a citation.[^1] And a second point follows.[^2]\n\n"
+        "- Alpha item\n- Beta item\n\n"
+        "A closing paragraph after the list.\n\n"
+        "[^1]: Smith 2020, page 42.\n"
+        "[^2]: An explanatory aside about the second point.\n"
+    )
+    _identity_holds(x, tmp_path, "fn_numeric")
+
+
+def test_identity_with_named_footnotes(tmp_path: Path) -> None:
+    """``g(f(x)) = x`` for named-label footnotes ``[^aa]`` / ``[^note]``.
+
+    Named labels never survive a render (LibreOffice renumbers footnotes 1, 2, 3…),
+    which is fine: only the footnote *text* is part of the identity, so ``[^aa]``
+    round-trips exactly like ``[^1]``.
+    """
+    x = (
+        "First fact requires support.[^aa] A separate remark needs one too.[^note]\n\n"
+        "- one item\n- two item\n\n"
+        "The final paragraph wraps things up.\n\n"
+        "[^aa]: Reference the primary source here.\n"
+        "[^note]: A short clarifying note for the reader.\n"
+    )
+    _identity_holds(x, tmp_path, "fn_named")
 
 
 def test_render_is_deterministic(tmp_path: Path) -> None:

@@ -6,6 +6,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.5.2] — 2026-07-18
+
+### Tests
+- **OCR round-trip identity now covers footnotes.** Extended the normal form `N`
+  in `tests/test_roundtrip_ocr.py` to fold Markdown footnotes — both numeric
+  (`[^1]`) and named (`[^aa]`) labels — so `g(f(x)) = x` holds for documents with
+  footnotes: the definition texts are recovered (appended in reference order), and
+  the rendered superscript markers / running numbers (which a PDF assigns and a
+  label never survives) are normalized out on both sides. Added
+  `test_identity_with_numeric_footnotes` and `test_identity_with_named_footnotes`.
+
+### CI
+- The `ocr-roundtrip` job's guard is now count-agnostic (`set -o pipefail` +
+  skip-detection) instead of hard-coding the passing-test count, so adding round-trip
+  cases no longer requires editing the workflow.
+
 ## [2.5.1] — 2026-07-18
 
 ### Tests

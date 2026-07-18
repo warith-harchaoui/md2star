@@ -115,13 +115,14 @@ jobs:
           python -c "import kreuzberg; print('kreuzberg', kreuzberg.__version__)"
       - name: Run the g(f(x)) = x identity test and require it to execute
         run: |
+          # pipefail so a pytest failure (not just tee's exit) fails the step.
+          set -o pipefail
           python -m pytest tests/test_roundtrip_ocr.py -v | tee /tmp/ocr.txt
           # Fail loudly if the toolchain guard skipped the module: the whole
           # point is that this runs for real, not that it is "mentioned and avoided".
           if grep -qiE "skipped" /tmp/ocr.txt; then
             echo "::error::OCR round-trip skipped — toolchain missing, identity not verified"; exit 1
           fi
-          grep -qE "5 passed" /tmp/ocr.txt
 
   # ──────────────────────────────────────────────────────────────────
   # CLI smoke — minimal sanity that the four console scripts plus
