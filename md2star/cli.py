@@ -676,6 +676,14 @@ def _run_format(fmt: str, argv: list[str] | None) -> int:
     """
     try:
         return _convert(fmt, list(sys.argv[1:] if argv is None else argv))
+    except KeyboardInterrupt:
+        # Ctrl-C during a long conversion (Pandoc, a Mermaid render, a
+        # LibreOffice PDF pass) should read as a clean stop, not a scary
+        # traceback. 130 = shell 128 + SIGINT(2), the conventional exit
+        # code so callers/scripts can distinguish an interrupt from a
+        # real failure.
+        logger.warning("md2star: interrupted.")
+        return 130
     except Md2starError as exc:
         _render_error(exc)
         # Exit code conventions: 127 for missing system deps (mirrors
@@ -714,6 +722,7 @@ def main(argv: list[str] | None = None) -> int:
 
     * ``docx`` / ``pptx`` / ``pdf`` — convert (same flags as the standalone
       aliases ``md2docx`` / ``md2pptx`` / ``md2pdf``).
+    * ``gui`` — launch the local Overleaf-style Markdown → PDF editor.
     * ``doctor`` — print an environment diagnostic.
     * ``cache-dir`` — print the resolved cache directory path.
     * ``clear-cache`` — wipe the cache directory.
@@ -754,6 +763,12 @@ def main(argv: list[str] | None = None) -> int:
     if sub == "templates":
         from .templates import main as templates_main
         return templates_main(rest)
+    if sub == "gui":
+        # The GUI ships its ~4 MB vendored frontend (PDF.js, CodeMirror,
+        # Tailwind, fonts) inside md2star/data/gui/. Import is lazy so a
+        # plain md2docx run never pays for the http.server machinery.
+        from .gui_server import main as gui_main
+        return gui_main(rest)
     # cache-dir / clear-cache both emit their result to stdout (script-friendly).
     if sub == "cache-dir":
         print(cache_dir())
@@ -785,6 +800,7 @@ def _print_top_level_help(file=sys.stdout) -> None:
         "  md2star docx <input.md> [options...]\n"
         "  md2star pptx <input.md> [options...]\n"
         "  md2star pdf  <input.md> [options...]\n"
+        "  md2star gui  [--port N] [--no-browser] [--bind ADDR]\n"
         "  md2star doctor [--json]\n"
         "  md2star templates {list,path} [...]\n"
         "  md2star cache-dir\n"

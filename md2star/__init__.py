@@ -20,7 +20,12 @@ Author
 
 from __future__ import annotations
 
-__version__: str = "2.5.0"
+# Single source of truth for the package version. Hatchling reads this
+# string at build time (see ``[tool.hatch.version]`` in pyproject.toml),
+# so the wheel metadata, ``md2star --version``, the HTTP/MCP surfaces and
+# the GUI banner can never drift apart again — bump it here and nowhere
+# else. (v2.5.1/v2.5.2 drifted precisely because two copies existed.)
+__version__: str = "2.6.0"
 
 from .preprocessing import (
     DEFAULT_ALT_TEXT_MODEL,

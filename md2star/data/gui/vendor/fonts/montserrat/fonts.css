@@ -1,0 +1,62 @@
+/* Montserrat — variable + italic variable.
+   Source: https://github.com/JulietaUla/Montserrat
+   License: SIL Open Font License (OFL) — see OFL.txt in this folder.
+   Self-hosted; do NOT load from a third-party CDN. */
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./Montserrat-Variable.woff2') format('woff2-variations'),
+       url('./Montserrat-Variable.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: italic;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('./Montserrat-Italic-Variable.woff2') format('woff2-variations'),
+       url('./Montserrat-Italic-Variable.woff2') format('woff2');
+}
+
+/* Static fallbacks for browsers without variable-font support. Optional —
+   the variable file alone covers >99% of modern browsers. */
+
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Montserrat-Regular.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./Montserrat-Medium.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./Montserrat-SemiBold.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Montserrat';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Montserrat-Bold.woff2') format('woff2');
+}
+
+:root {
+  --font-sans: 'Montserrat', sans-serif;
+  --font-mono: ui-monospace, monospace;
+}
+
+html { font-family: var(--font-sans); }
+code, pre, kbd, samp { font-family: var(--font-mono); }

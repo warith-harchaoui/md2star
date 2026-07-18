@@ -52,13 +52,20 @@ detailed audit these priorities came from.
 
 ## P1 — next release (v2.1)
 
-- [ ] **`md2star[gui]` PyPI extra.** Bring the Overleaf-style local
-      web editor back, this time as an opt-in extra so the core
-      wheel stays small. `pipx install 'md2star[gui]'` pulls the
-      ~3 MB vendor tree (Tailwind, CodeMirror, PDF.js, Roboto
-      Serif) and registers the `md2star gui` subcommand. The
-      historical code lives in git — restore + adapt rather than
-      rewrite.
+- [x] **Local GUI restored — `md2star gui`** (v2.6.0). The
+      Overleaf-style web editor is back with live PDF preview
+      (PDF.js), a root-confined folder browser, in-session template
+      upload, and draft auto-save. Shipped **bundled in the core
+      package** (Option A) rather than as a separate `md2star[gui]`
+      wheel (Option B): the ~4 MB vendor tree (Tailwind, CodeMirror,
+      PDF.js, Montserrat + Roboto Serif) lives under
+      `md2star/data/gui/` and the whole thing is pure stdlib
+      `http.server` — zero extra Python deps. This trades the lean
+      ~200 KB wheel (now ~2.3 MB) for a one-command GUI that needs no
+      extra install; splitting it back into an opt-in wheel (Option B,
+      to reclaim the small core) stays available as a later
+      optimization. Path confinement covered by
+      `tests/test_gui_security.py`.
 - [ ] **`md2star[ai]` PyPI extra.** Today the `--lint` /
       AI-alt-text passes shell out to the local `ollama` binary
       via stdlib `urllib.request` — zero Python deps. The

@@ -34,6 +34,7 @@ Pick the features you actually need; install only those dependencies.
 | Mermaid diagrams        | + Node.js ≥ 16 (provides `npx`)                   | `npx -y @mermaid-js/mermaid-cli` downloaded on first use.          |
 | `--lint` LLM auto-fix   | + Ollama + a small Gemma model                    | Off by default; opt-in via the `--lint` flag.                      |
 | AI-drafted alt text     | + Ollama + a vision model (default: gemma4:e2b)   | Same `--lint` flag; `MD2STAR_ALT_TEXT_MODEL` overrides the model.  |
+| `md2star gui` (editor)  | nothing extra                                     | Offline localhost-only web editor, bundled in core since v2.6.0.   |
 
 **Network policy:** since v2.5.0 the deraison.ai reference template is
 fetched **by default** when no local `template.{docx,pptx}` exists
@@ -118,6 +119,7 @@ After installation, run:
 ```bash
 md2star doctor          # full environment report
 md2star --help          # subcommand list
+md2star gui             # launch the offline localhost web editor (Ctrl-C to stop)
 md2docx --help          # per-format flags
 ```
 

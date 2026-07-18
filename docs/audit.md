@@ -1,7 +1,8 @@
 # md2star — engineering audit
 
 _Snapshot: 2026-06-29, against `main @ v2.0.0` (CLI-only release;
-~3,800 LOC of Python after the GUI removal)._
+~3,800 LOC of Python after the GUI removal — the GUI was later
+restored in v2.6.0, bundled in the core wheel)._
 
 This audit is the working document for the PyPI debut and the
 v2.x trajectory. Every recommendation pins to a file or a specific
@@ -37,8 +38,9 @@ surface area. The four things that took it from *personal tool* to
 The GUI shipped in v1.x as a localhost-only Overleaf-style editor.
 It was removed for the PyPI debut to keep the wheel under 250 KB
 (the vendored Tailwind / CodeMirror / PDF.js / Roboto Serif tree
-was ~3 MB). It's slated to come back as the `md2star[gui]` extra
-in v2.1; see [ROADMAP.md](../ROADMAP.md).
+was ~3 MB). It was **restored in v2.6.0 bundled in the core wheel**
+(invoked via `md2star gui`; no `md2star[gui]` extra needed), which
+grew the wheel back to ~2.3 MB.
 
 ---
 
@@ -147,6 +149,10 @@ links into the docs tree.
 
 v2.0.0 wheel is ~200 KB after GUI removal (was ~2.3 MB in v1.x).
 Document the size delta in `CHANGELOG.md` so users notice the win.
+*(Update, v2.6.0: the GUI was restored bundled in the core wheel —
+"Option A" — so the wheel is back to ~2.3 MB. "Option B", a separate
+`md2star[gui]` extra to reclaim a lean core wheel, remains a possible
+future optimization.)*
 
 ---
 
@@ -185,8 +191,8 @@ short "EXAMPLES" section at the bottom of the help text.
 ### P0 — shipped (v2.0.0 PyPI debut)
 
 1. **BSD 3-Clause license**, replacing the Unlicense.
-2. **GUI removed** for a lean wheel; restoration planned via
-   `md2star[gui]` extra in v2.1.
+2. **GUI removed** for a lean wheel (restored in v2.6.0, bundled in
+   the core wheel rather than a separate `md2star[gui]` extra).
 3. **NumPy-style docstrings + module Author block** on every
    `md2star/*.py`.
 4. **Templates rebuilt** from a Pandoc-clean baseline — fixes the
@@ -199,7 +205,9 @@ short "EXAMPLES" section at the bottom of the help text.
 
 ### P1 — next sprint (v2.1)
 
-1. **`md2star[gui]` PyPI extra** restoring the local web editor.
+1. **Local web editor restored** — done in v2.6.0, bundled in the
+   core wheel (via `md2star gui`) rather than a separate
+   `md2star[gui]` PyPI extra.
 2. **`md2star[ai]` PyPI extra** introducing the `ollama` Python
    client and a thin typed wrapper around the existing `--lint`
    / alt-text code.

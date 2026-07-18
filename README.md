@@ -31,6 +31,13 @@ you stay in Markdown and never open Word to fix layout.
 |---|---|
 | ![md2star PPTX — light](assets/pptx-light.png) | ![md2star PPTX — dark](assets/pptx-dark.png) |
 
+*GUI mode — the local Overleaf-style editor with live PDF preview
+(`md2star gui`):*
+
+| Light | Dark |
+|---|---|
+| ![md2star GUI — light](assets/gui-light.png) | ![md2star GUI — dark](assets/gui-dark.png) |
+
 
 ## Why md2star?
 
@@ -49,12 +56,18 @@ Word itself, and other Markdown-to-document tools? See
 ## Quick start
 
 ```bash
-pipx install md2star          # one line, gets you the four CLIs
+pipx install md2star          # one line, gets you the four CLIs + GUI
 md2star doctor                # confirm the environment is healthy
 md2docx report.md             # markdown → DOCX
 md2pptx slides.md             # markdown → PPTX
 md2pdf  paper.md              # markdown → PDF (needs LibreOffice)
+md2star gui                   # local browser editor with live PDF preview
 ```
+
+Prefer plain `pip`? Two `requirements` files mirror the install profiles:
+`pip install -r requirements.txt` for the CLI, `pip install -r
+requirements-gui.txt` for the CLI + GUI (same wheel — the GUI adds no
+extra Python dependencies).
 
 Prefer HTTP or MCP? md2star also ships a FastAPI surface and an MCP server:
 
@@ -125,9 +138,42 @@ A self-contained cookbook with more recipes lives at
 
 ---
 
+## Local GUI (`md2star gui`)
+
+Prefer a browser to a terminal? `md2star gui` launches an
+Overleaf-style local editor: Markdown on the left, a **live PDF
+preview** on the right, and one-click DOCX / PPTX / PDF downloads.
+
+```bash
+md2star gui                   # opens http://127.0.0.1:8765 in your browser
+md2star gui --port 9000       # pick a port (auto-falls-back if taken)
+md2star gui --no-browser      # just print the URL, don't auto-open
+```
+
+What it gives you:
+
+- **Live PDF preview** rendered in-page with PDF.js — no round trip
+  through Word or a PDF viewer.
+- **Folder browser** confined to a single folder you open, so you can
+  edit a whole project's `.md` files (open / read / save / create /
+  delete) without leaving the page.
+- **In-session reference template** — drag a `template.docx` /
+  `template.pptx` in and this session brands its output with it.
+- **Draft auto-save** to the cache dir, so a browser crash or a
+  restart never loses your text.
+
+It is **local-first and offline**: the server binds to `127.0.0.1`
+only, the entire frontend (PDF.js, CodeMirror, Tailwind, fonts) is
+vendored inside the package, and it fronts the exact same converter as
+the CLI — no data ever leaves your machine. Since v2.6.0 the GUI ships
+in the core wheel; there is nothing extra to install.
+
+---
+
 ## Features
 
 - **Frictionless Conversion**: Write in Markdown with your favorite editor (`emacs`, `vim`, `Sublime Text`, `Obsidian`, …) and produce styled `.docx`, `.pptx`, and `.pdf` files.
+- **Local GUI** (`md2star gui`): an offline, localhost-only browser editor with a live PDF preview, a root-confined folder browser, in-session template upload, and draft auto-save. Bundled in the core wheel — nothing extra to install. See [Local GUI](#local-gui-md2star-gui).
 - **LaTeX Math Support**: Robust rendering of complex formulas in both documents and slides.
 - **Mermaid Diagrams**: ` ```mermaid ` blocks are rendered locally to PNG via the official Mermaid CLI and embedded automatically (requires Node.js ≥16).
 - **Intelligent Metadata**:

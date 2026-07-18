@@ -1,0 +1,590 @@
+<!doctype html>
+<html lang="en" class="h-full">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>md2star — Markdown → DOCX / PPTX / PDF</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <!--
+      Tailwind Play CDN, self-hosted under /vendor/tailwind.js so the
+      editor works fully offline. Prototype-grade per the front-ui stack
+      rules — swap to Tailwind CLI / Vite before bundling md2star into
+      a desktop app or shipping the GUI to non-localhost surfaces. The
+      token shape stays identical, so class names continue to work.
+
+      Refresh this file with:  make vendor
+    -->
+    <script src="/vendor/tailwind.js?v={{CACHE_BUST}}"></script>
+
+    <!--
+      Color tokens lifted from https://harchaoui.org/warith/colors/.
+      Every named color carries a light variant so we can do hover /
+      disabled / surface backgrounds without re-inventing shades.
+
+      The semantic aliases (primary/success/warning/danger/neutral) are
+      what the rest of the UI actually consumes — the raw hex is named
+      once here and never repeated in markup. (Tailwind `safelist` is
+      omitted because we are not running PurgeCSS.)
+    -->
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          // Uniform 10 px corner radius across every container, button,
+          // input, drawer, pill (except `rounded-full` which stays
+          // circular — that's the segmented format pill and the
+          // primary CTA). All other rounded-* utilities collapse to
+          // the same 10 px so the UI reads as one consistent
+          // language. Override sits inside theme (not theme.extend)
+          // so we replace Tailwind's defaults wholesale for these
+          // tokens.
+          borderRadius: {
+            none:  "0",
+            sm:    "10px",
+            DEFAULT: "10px",
+            md:    "10px",
+            lg:    "10px",
+            xl:    "10px",
+            "2xl": "10px",
+            "3xl": "10px",
+            full:  "9999px",
+          },
+          extend: {
+            fontFamily: {
+              // Two self-hosted web fonts:
+              //   - Montserrat (sans, geometric) for UI chrome.
+              //   - Roboto Serif (serif, neutral) for body / long-form
+              //     prose (use class="font-serif" inside the editor or
+              //     any rendered preview).
+              // Mono is the OS's system stack — `ui-monospace` covers
+              // modern macOS / iOS, then SFMono / Menlo / Consolas on
+              // older Apple / Linux / Windows. No third web font ships.
+              sans:  ['Montserrat', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+              serif: ['"Roboto Serif"', 'ui-serif', 'Georgia', 'serif'],
+              mono:  ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco',
+                      'Consolas', 'monospace'],
+            },
+            colors: {
+              brand: {
+                red:        { DEFAULT: '#FF3B30', light: '#FFD8D6' },
+                orange:     { DEFAULT: '#FF9500', light: '#FFEACC' },
+                yellow:     { DEFAULT: '#FFCC00', light: '#FFF5CC' },
+                green:      { DEFAULT: '#28CD41', light: '#D4F5D9' },
+                blue:       { DEFAULT: '#007AFF', light: '#CCE4FF' },
+                turquoise:  { DEFAULT: '#79DBDC', light: '#00FFEF' },
+                purple:     { DEFAULT: '#AF52DE', light: '#EFDCF8' },
+                pink:       { DEFAULT: '#FF2D55', light: '#FFD5DD' },
+                gray:       '#808080',
+                offwhite:   '#F8F8F8',
+              },
+              // Semantic aliases so markup stays vocabulary-driven.
+              surface: {
+                primary:        '#F8F8F8',
+                'primary-dark': '#1C1C1E',
+                secondary:        '#FFFFFF',
+                'secondary-dark': '#2C2C2E',
+                tertiary:         '#EAEAEA',
+                'tertiary-dark':  '#3A3A3C',
+              },
+              label: {
+                primary:        '#1C1C1E',
+                'primary-dark': '#F2F2F7',
+                secondary:        '#3C3C43',
+                'secondary-dark': '#EBEBF5',
+                // tertiary bumped from #80808099 (semi-transparent) to a
+                // solid 4.5:1-compliant gray after audit_contrast.py
+                // flagged hint text at 3.95:1 against white. The dark
+                // variant stays bright enough on #1C1C1E (8.5:1).
+                tertiary:         '#6E6E73',
+                'tertiary-dark':  '#B0B0B5',
+              },
+            },
+          },
+        },
+      };
+    </script>
+
+    <!-- Self-hosted web fonts. Both ship under SIL OFL 1.1:
+           - Montserrat (sans)    → vendor/fonts/montserrat/OFL.txt
+           - Roboto Serif (serif) → vendor/fonts/roboto-serif/OFL.txt
+         The editor's monospace pane uses the OS's own system mono
+         stack, so no third web font ships. -->
+    <!-- Cache-busting ?v={{CACHE_BUST}} on every locally-served asset.
+         The server splices a per-process random hex tag at request time
+         so any stale browser is forced to re-fetch app.js / styles.css
+         after a `md2star gui` restart. Without it, browsers hold on to
+         old ES modules in their in-memory module map even when we send
+         Cache-Control: no-store. -->
+    <link rel="stylesheet" href="/vendor/fonts/montserrat/fonts.css?v={{CACHE_BUST}}" />
+    <link rel="stylesheet" href="/vendor/fonts/roboto-serif/fonts.css?v={{CACHE_BUST}}" />
+
+    <link rel="stylesheet" href="/styles.css?v={{CACHE_BUST}}" />
+  </head>
+
+  <body
+    class="h-full font-sans bg-surface-primary text-label-primary
+           antialiased selection:bg-brand-blue/20
+           dark:bg-surface-primary-dark dark:text-label-primary-dark"
+  >
+    <!--
+      Layout: header → 2-pane grid → footer.
+      On md+ the grid is side-by-side; on small screens it stacks
+      (editor on top, preview below).
+    -->
+    <div class="flex h-full flex-col">
+      <!-- ─── Header ─────────────────────────────────────────────── -->
+      <header
+        class="flex flex-wrap items-center gap-3 border-b border-surface-tertiary
+               bg-surface-secondary px-4 py-3
+               dark:border-surface-tertiary-dark dark:bg-surface-secondary-dark"
+      >
+        <div class="flex items-center gap-2">
+          <div
+            class="grid h-8 w-8 place-items-center rounded-lg bg-brand-blue
+                   text-base font-bold text-white"
+            aria-hidden="true"
+          >★</div>
+          <h1 class="text-base font-semibold leading-none">md2star</h1>
+        </div>
+
+        <!-- Format switcher — segmented control. PDF is always the preview;
+             this switcher picks what gets downloaded when you hit the
+             button on the right. -->
+        <div
+          role="radiogroup"
+          aria-label="Download format"
+          class="ml-auto inline-flex rounded-xl bg-surface-tertiary p-1
+                 text-sm font-medium dark:bg-surface-tertiary-dark"
+        >
+          <button
+            type="button"
+            role="radio"
+            aria-checked="true"
+            data-format="pdf"
+            class="seg-active min-h-11 rounded-lg px-3"
+          >PDF</button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked="false"
+            data-format="docx"
+            class="seg-inactive min-h-11 rounded-lg px-3"
+          >DOCX</button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked="false"
+            data-format="pptx"
+            class="seg-inactive min-h-11 rounded-lg px-3"
+          >PPTX</button>
+        </div>
+
+        <!-- Primary action: render + download in the chosen format.
+             Note on contrast: white-on-#007AFF gives WCAG 4.02:1, which
+             clears the 3:1 large-text threshold (we bumped font-size to
+             16 px and weight to bold = ≥14 pt bold per WCAG SC 1.4.3)
+             while preserving the harchaoui.org/warith/colors brand blue
+             without darkening the token. -->
+        <button
+          id="btn-render"
+          type="button"
+          class="inline-flex min-h-11 items-center justify-center gap-2
+                 rounded-full bg-brand-blue px-5 py-3 text-base font-bold
+                 text-white transition-transform duration-100 ease-out
+                 hover:opacity-90 active:scale-[0.97]
+                 focus:outline-none focus-visible:ring-2
+                 focus-visible:ring-brand-blue focus-visible:ring-offset-2
+                 focus-visible:ring-offset-surface-secondary
+                 motion-reduce:active:scale-100
+                 disabled:opacity-50 disabled:pointer-events-none"
+        >
+          <span id="btn-render-label">Render</span>
+          <kbd class="hidden rounded bg-white/20 px-1.5 py-0.5 text-[11px]
+                      font-mono font-normal sm:inline">⌘↵</kbd>
+        </button>
+
+        <!-- Settings toggle reveals the options drawer. -->
+        <button
+          id="btn-options"
+          type="button"
+          aria-expanded="false"
+          aria-controls="options-drawer"
+          aria-label="Toggle options"
+          class="grid min-h-11 min-w-11 place-items-center rounded-full
+                 text-label-secondary hover:bg-surface-tertiary
+                 dark:text-label-secondary-dark dark:hover:bg-surface-tertiary-dark
+                 focus:outline-none focus-visible:ring-2
+                 focus-visible:ring-brand-blue"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round"
+               stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01A1.65 1.65 0 0 0 9 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+
+        <!-- Theme cycler — Light → Dark → Auto. Auto is the default
+             and matches the system `prefers-color-scheme`. The choice
+             persists in localStorage so a returning user keeps their
+             preference. Replaces the old "Quit server" button — kill
+             the server with Ctrl-C in the terminal instead. -->
+        <button
+          id="btn-theme"
+          type="button"
+          aria-label="Theme"
+          title="Light / Dark / Auto"
+          class="inline-flex min-h-11 items-center justify-center
+                 rounded-full border border-surface-tertiary
+                 bg-surface-secondary px-3 text-[13px] font-medium
+                 text-label-secondary hover:bg-surface-tertiary
+                 dark:border-surface-tertiary-dark
+                 dark:bg-surface-secondary-dark
+                 dark:text-label-secondary-dark
+                 dark:hover:bg-surface-tertiary-dark
+                 focus:outline-none focus-visible:ring-2
+                 focus-visible:ring-brand-blue"
+        >
+          <span id="btn-theme-label">🌗 Auto</span>
+        </button>
+      </header>
+
+      <!-- ─── Options drawer (collapsible) ─────────────────────── -->
+      <section
+        id="options-drawer"
+        hidden
+        class="border-b border-surface-tertiary bg-surface-secondary px-4 py-3
+               dark:border-surface-tertiary-dark dark:bg-surface-secondary-dark"
+      >
+        <!-- Four fields, three rows on desktop:
+             - "Authors" accepts a comma-separated list, passed verbatim
+               to Pandoc as a single author metadata string. The Lua
+               filter renders it unchanged in the subtitle.
+             - "Date" overrides the auto-localized today's-date. Use a
+               free-form string ("21 juin 2026", "Q2 2026", "Draft").
+               Leave empty to keep md2star's locale-aware default.
+             - Bibliography heading is the H1 inserted before the
+               rendered citations (default "Bibliography").
+             - Language is NOT a manual field — langdetect picks it up
+               from the Markdown body and injects lang + date_format
+               automatically. Override via YAML front-matter
+               `lang: fr-FR` in the document itself if needed. -->
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <label class="block">
+            <span class="text-xs font-medium text-label-secondary
+                         dark:text-label-secondary-dark">
+              Authors <span class="text-label-tertiary
+                                    dark:text-label-tertiary-dark
+                                    font-normal">(comma separated)</span>
+            </span>
+            <input
+              id="opt-author"
+              type="text"
+              placeholder="e.g. Ada Lovelace, Charles Babbage"
+              autocomplete="name"
+              class="mt-1 w-full rounded-lg border-surface-tertiary
+                     bg-surface-primary px-3 py-2 text-sm
+                     focus:border-brand-blue focus:ring-brand-blue
+                     dark:border-surface-tertiary-dark dark:bg-surface-primary-dark"
+            />
+          </label>
+
+          <label class="block">
+            <span class="text-xs font-medium text-label-secondary
+                         dark:text-label-secondary-dark">
+              Date
+              <span class="text-label-tertiary
+                            dark:text-label-tertiary-dark
+                            font-normal">(optional override)</span>
+            </span>
+            <input
+              id="opt-date"
+              type="text"
+              placeholder="auto (e.g. 21 juin 2026)"
+              autocomplete="off"
+              class="mt-1 w-full rounded-lg border-surface-tertiary
+                     bg-surface-primary px-3 py-2 text-sm
+                     focus:border-brand-blue focus:ring-brand-blue
+                     dark:border-surface-tertiary-dark dark:bg-surface-primary-dark"
+            />
+          </label>
+
+          <label class="block">
+            <span class="text-xs font-medium text-label-secondary
+                         dark:text-label-secondary-dark">Bibliography heading</span>
+            <input
+              id="opt-bibname"
+              type="text"
+              placeholder="Bibliography"
+              class="mt-1 w-full rounded-lg border-surface-tertiary
+                     bg-surface-primary px-3 py-2 text-sm
+                     focus:border-brand-blue focus:ring-brand-blue
+                     dark:border-surface-tertiary-dark dark:bg-surface-primary-dark"
+            />
+          </label>
+
+          <div class="flex items-end">
+            <label class="inline-flex cursor-pointer items-center gap-2">
+              <input id="opt-lint" type="checkbox" role="switch"
+                     class="h-5 w-5 rounded text-brand-blue
+                            focus:ring-brand-blue" />
+              <span class="text-sm">Activate automatic corrections</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Custom reference template — lets the user override the
+             default per-project DOCX styling without dropping a file
+             next to the (nonexistent) .md source. The file is uploaded
+             once to the server's per-session tempdir; subsequent
+             renders reuse it via --reference-doc until cleared. -->
+        <div class="mt-4 flex flex-wrap items-center gap-3 rounded-lg
+                    border border-dashed border-surface-tertiary p-3
+                    dark:border-surface-tertiary-dark">
+          <div class="flex-1 min-w-[200px]">
+            <p class="text-xs font-medium text-label-secondary
+                      dark:text-label-secondary-dark">
+              Custom reference templates
+            </p>
+            <p class="text-[11px] text-label-tertiary
+                      dark:text-label-tertiary-dark">
+              Replace the bundled <code>template.docx</code> and/or
+              <code>template.pptx</code> for this session. Upload either
+              format; the matching renders pick up your fonts, margins,
+              and styles automatically.
+            </p>
+          </div>
+          <!-- Two dedicated buttons — one per format. Each accepts only
+               its matching extension so the user can't pick the wrong
+               file by accident. -->
+          <label class="inline-flex min-h-11 cursor-pointer items-center
+                        rounded-full bg-brand-blue px-4 text-sm font-medium
+                        text-white hover:opacity-90
+                        focus-within:outline-none focus-within:ring-2
+                        focus-within:ring-brand-blue
+                        focus-within:ring-offset-2
+                        focus-within:ring-offset-surface-secondary">
+            <span>Load DOCX template</span>
+            <input id="opt-template-file-docx" type="file"
+                   accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                   class="sr-only" />
+          </label>
+          <label class="inline-flex min-h-11 cursor-pointer items-center
+                        rounded-full bg-brand-blue px-4 text-sm font-medium
+                        text-white hover:opacity-90
+                        focus-within:outline-none focus-within:ring-2
+                        focus-within:ring-brand-blue
+                        focus-within:ring-offset-2
+                        focus-within:ring-offset-surface-secondary">
+            <span>Load PPTX template</span>
+            <input id="opt-template-file-pptx" type="file"
+                   accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                   class="sr-only" />
+          </label>
+          <button id="opt-template-clear" type="button" hidden
+                  class="min-h-11 rounded-full border border-surface-tertiary
+                         px-4 text-sm font-medium text-label-secondary
+                         hover:bg-surface-tertiary
+                         dark:border-surface-tertiary-dark
+                         dark:text-label-secondary-dark
+                         dark:hover:bg-surface-tertiary-dark
+                         focus:outline-none focus-visible:ring-2
+                         focus-visible:ring-brand-blue">
+            Clear
+          </button>
+          <span id="opt-template-status"
+                class="basis-full text-[12px] text-label-tertiary
+                       dark:text-label-tertiary-dark"
+                aria-live="polite">No custom templates — using the bundled defaults.</span>
+        </div>
+
+        <fieldset class="mt-4">
+          <legend class="text-xs font-medium text-label-secondary
+                          dark:text-label-secondary-dark">
+            Skip phases (preprocessor stages to bypass)
+          </legend>
+          <div id="skip-phase-grid"
+               class="mt-2 flex flex-wrap gap-2 text-[13px]">
+            <!-- populated by app.js -->
+          </div>
+        </fieldset>
+
+        <p class="mt-3 text-[12px] text-label-tertiary
+                  dark:text-label-tertiary-dark">
+          Auto-render runs ~2.5 s after you stop typing. Use
+          <kbd class="rounded bg-surface-tertiary px-1 py-0.5 font-mono text-[11px]
+                       dark:bg-surface-tertiary-dark">⌘↵</kbd>
+          (or
+          <kbd class="rounded bg-surface-tertiary px-1 py-0.5 font-mono text-[11px]
+                       dark:bg-surface-tertiary-dark">Ctrl ↵</kbd>)
+          to render immediately.
+        </p>
+      </section>
+
+      <!-- ─── Three-pane: sidebar + editor + preview ─────────────── -->
+      <!-- The grid template is driven from styles.css based on
+           data-folder=0|1. Default (no folder open): two columns
+           (editor + preview). With folder open: three columns
+           (sidebar + editor + preview). Tailwind's `md:grid-cols-2`
+           handles the default; the CSS [data-folder="1"] selector
+           overrides with the 240 px sidebar column. -->
+      <main id="main-grid"
+            class="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2"
+            data-folder="0">
+        <!-- Folder sidebar — only visible when a folder is open. -->
+        <aside id="sidebar"
+               class="hidden min-h-0 flex-col overflow-hidden
+                      border-r border-surface-tertiary
+                      bg-surface-secondary
+                      dark:border-surface-tertiary-dark
+                      dark:bg-surface-secondary-dark"
+               aria-label="Folder browser">
+          <div class="flex items-center justify-between gap-2 border-b
+                      border-surface-tertiary bg-surface-secondary
+                      px-3 py-1.5 text-[12px] font-medium
+                      text-label-secondary
+                      dark:border-surface-tertiary-dark
+                      dark:bg-surface-secondary-dark
+                      dark:text-label-secondary-dark">
+            <span id="sidebar-root" class="truncate" title="">📁 …</span>
+            <div class="flex items-center gap-1">
+              <button id="btn-new-md" type="button"
+                      class="rounded px-2 py-1 hover:bg-surface-tertiary
+                             dark:hover:bg-surface-tertiary-dark
+                             focus:outline-none focus-visible:ring-2
+                             focus-visible:ring-brand-blue"
+                      title="Create a new .md file">+</button>
+              <button id="btn-delete-md" type="button" hidden
+                      class="rounded px-2 py-1 text-brand-red
+                             hover:bg-brand-red-light
+                             focus:outline-none focus-visible:ring-2
+                             focus-visible:ring-brand-red"
+                      title="Delete selected .md files">🗑</button>
+              <button id="btn-close-folder" type="button"
+                      class="rounded px-2 py-1 hover:bg-surface-tertiary
+                             dark:hover:bg-surface-tertiary-dark
+                             focus:outline-none focus-visible:ring-2
+                             focus-visible:ring-brand-blue"
+                      title="Close the folder browser">×</button>
+            </div>
+          </div>
+          <ul id="sidebar-tree"
+              class="min-h-0 flex-1 overflow-auto px-1 py-2 text-[13px]
+                     leading-snug"></ul>
+        </aside>
+
+        <!-- Editor pane (middle) -->
+        <section
+          class="relative flex min-h-0 flex-col border-r border-surface-tertiary
+                 dark:border-surface-tertiary-dark"
+          aria-label="Markdown editor"
+        >
+          <div class="flex items-center justify-between border-b
+                      border-surface-tertiary bg-surface-secondary min-h-9 px-3 py-1.5
+                      text-[12px] font-medium text-label-secondary
+                      dark:border-surface-tertiary-dark
+                      dark:bg-surface-secondary-dark
+                      dark:text-label-secondary-dark">
+            <span id="editor-filename">editor.md</span>
+            <div class="flex items-center gap-2">
+              <button id="btn-open" type="button"
+                      class="rounded px-2 py-1 hover:bg-surface-tertiary
+                             dark:hover:bg-surface-tertiary-dark
+                             focus:outline-none focus-visible:ring-2
+                             focus-visible:ring-brand-blue"
+                      title="Open a folder (sidebar will appear)">
+                Open
+              </button>
+              <button id="btn-save" type="button"
+                      class="rounded px-2 py-1 hover:bg-surface-tertiary
+                             dark:hover:bg-surface-tertiary-dark
+                             focus:outline-none focus-visible:ring-2
+                             focus-visible:ring-brand-blue"
+                      title="Force-save the markdown now (auto-save runs every 4 s)">
+                Save
+              </button>
+            </div>
+          </div>
+          <!-- CodeMirror mounts inside this element. -->
+          <div id="editor" class="min-h-0 flex-1 overflow-auto"
+               data-placeholder="# Start typing Markdown…&#10;&#10;Click Open to pick a folder, then pick a .md file from the sidebar."
+          ></div>
+        </section>
+
+        <!-- Preview pane (right) -->
+        <section
+          class="relative flex min-h-0 flex-col"
+          aria-label="PDF preview"
+        >
+          <div class="flex items-center justify-between border-b
+                      border-surface-tertiary bg-surface-secondary min-h-9 px-3 py-1.5
+                      text-[12px] font-medium text-label-secondary
+                      dark:border-surface-tertiary-dark
+                      dark:bg-surface-secondary-dark
+                      dark:text-label-secondary-dark">
+            <span>preview.pdf</span>
+            <span id="render-status" class="text-label-tertiary
+                                             dark:text-label-tertiary-dark"
+                  aria-live="polite">idle</span>
+          </div>
+          <div id="preview"
+               class="min-h-0 flex-1 overflow-auto bg-surface-tertiary
+                      dark:bg-surface-tertiary-dark">
+            <!-- PDF.js canvases get appended here -->
+            <div id="preview-empty"
+                 class="grid h-full place-items-center px-6 text-center
+                        text-label-secondary
+                        dark:text-label-secondary-dark">
+              <div>
+                <p class="text-lg font-semibold">PDF preview will appear here.</p>
+                <p class="mt-1 text-sm">
+                  Type some Markdown on the left, then wait 2.5 s or press
+                  <kbd class="rounded bg-surface-secondary px-1 py-0.5
+                              font-mono text-[11px]
+                              dark:bg-surface-secondary-dark">⌘↵</kbd>.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- ─── Status footer ─────────────────────────────────────── -->
+      <footer
+        id="footer"
+        class="border-t border-surface-tertiary bg-surface-secondary px-4 py-2
+               text-[12px]
+               dark:border-surface-tertiary-dark dark:bg-surface-secondary-dark"
+      >
+        <div class="flex items-center gap-3">
+          <span id="status-dot"
+                class="inline-block h-2.5 w-2.5 rounded-full bg-brand-gray"
+                aria-hidden="true"></span>
+          <span id="status-text" class="text-label-secondary
+                                         dark:text-label-secondary-dark">Ready</span>
+          <!-- Warnings chip — text darkened from #FF9500 (2.20:1) to
+               #8E4100 (5.06:1) so the 12 px body-weight label clears
+               WCAG AA on the light orange chip. -->
+          <span id="stderr-toggle"
+                class="hidden cursor-pointer rounded bg-brand-orange-light
+                       px-2 py-0.5 font-medium text-[#8E4100]
+                       hover:opacity-90
+                       focus:outline-none focus-visible:ring-2
+                       focus-visible:ring-brand-orange"
+                role="button" tabindex="0" aria-expanded="false"
+                aria-controls="stderr-panel">
+            Warnings
+          </span>
+        </div>
+        <pre id="stderr-panel" hidden
+             class="mt-2 max-h-40 overflow-auto rounded-md bg-surface-tertiary
+                    p-2 font-mono text-[11px] leading-relaxed text-label-primary
+                    dark:bg-surface-tertiary-dark
+                    dark:text-label-primary-dark"></pre>
+      </footer>
+    </div>
+
+    <script type="module" src="/app.js?v={{CACHE_BUST}}"></script>
+  </body>
+</html>

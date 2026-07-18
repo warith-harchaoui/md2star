@@ -33,6 +33,13 @@ page.
 |---|---|
 | ![md2star PPTX — light](assets/pptx-light.png) | ![md2star PPTX — dark](assets/pptx-dark.png) |
 
+*Mode GUI — l'éditeur local façon Overleaf avec aperçu PDF en direct
+(`md2star gui`):*
+
+| Light | Dark |
+|---|---|
+| ![md2star GUI — light](assets/gui-light.png) | ![md2star GUI — dark](assets/gui-dark.png) |
+
 ## Pourquoi md2star ?
 
 Pandoc seul est puissant mais agnostique : il produit un DOCX brut,
@@ -47,12 +54,18 @@ délibéré.
 ## Démarrage rapide
 
 ```bash
-pipx install md2star          # une seule ligne : installe les quatre CLI
+pipx install md2star          # une seule ligne : les quatre CLI + la GUI
 md2star doctor                # vérifie la santé de l'environnement
 md2docx rapport.md            # markdown → DOCX
 md2pptx diapos.md             # markdown → PPTX
 md2pdf  article.md            # markdown → PDF (nécessite LibreOffice)
+md2star gui                   # éditeur navigateur local, aperçu PDF en direct
 ```
+
+Vous préférez `pip` ? Deux fichiers `requirements` reflètent les profils
+d'installation : `pip install -r requirements.txt` pour la CLI, et
+`pip install -r requirements-gui.txt` pour la CLI + la GUI (même wheel —
+la GUI n'ajoute aucune dépendance Python supplémentaire).
 
 Voir **[docs/installation.md](docs/installation.md)** pour la matrice
 complète par OS (macOS / Ubuntu / Fedora / Arch / Windows), le tableau
@@ -112,9 +125,45 @@ Un livre de recettes complet vit dans **[EXAMPLES.md](EXAMPLES.md)**.
 
 ---
 
+## GUI locale (`md2star gui`)
+
+Vous préférez un navigateur à un terminal ? `md2star gui` lance un
+éditeur local façon Overleaf : le Markdown à gauche, un **aperçu PDF
+en direct** à droite, et des téléchargements DOCX / PPTX / PDF en un
+clic.
+
+```bash
+md2star gui                   # ouvre http://127.0.0.1:8765 dans le navigateur
+md2star gui --port 9000       # choisit un port (repli auto si occupé)
+md2star gui --no-browser      # affiche juste l'URL, sans ouvrir le navigateur
+```
+
+Ce qu'elle apporte :
+
+- **Aperçu PDF en direct** rendu dans la page via PDF.js — sans
+  détour par Word ou un lecteur PDF.
+- **Explorateur de dossier** confiné au dossier que vous ouvrez, pour
+  éditer tous les `.md` d'un projet (ouvrir / lire / enregistrer /
+  créer / supprimer) sans quitter la page.
+- **Template de référence en session** : glissez un `template.docx` /
+  `template.pptx` et cette session brande sa sortie avec.
+- **Sauvegarde automatique des brouillons** dans le cache, pour ne
+  jamais perdre votre texte après un crash du navigateur ou un
+  redémarrage.
+
+Elle est **locale d'abord et hors-ligne** : le serveur n'écoute que
+sur `127.0.0.1`, tout le frontend (PDF.js, CodeMirror, Tailwind,
+polices) est embarqué dans le paquet, et elle appelle exactement le
+même convertisseur que la CLI — aucune donnée ne quitte votre machine.
+Depuis la v2.6.0, la GUI est incluse dans le wheel principal : rien de
+plus à installer.
+
+---
+
 ## Fonctionnalités
 
 - **Conversion sans friction** : Écrivez en Markdown avec votre éditeur préféré (`emacs`, `vim`, `Sublime Text`, `Obsidian`, …) et produisez des `.docx`, `.pptx`, `.pdf` stylés.
+- **GUI locale** (`md2star gui`) : un éditeur navigateur hors-ligne (localhost uniquement) avec aperçu PDF en direct, explorateur de dossier confiné, upload de template en session et sauvegarde automatique des brouillons. Incluse dans le wheel principal — rien de plus à installer. Voir [GUI locale](#gui-locale-md2star-gui).
 - **Support LaTeX** : Rendu robuste de formules complexes dans les documents et les diapositives.
 - **Diagrammes Mermaid** : les blocs ` ```mermaid ` sont rendus localement en PNG via la CLI officielle Mermaid et intégrés automatiquement (nécessite Node.js ≥16).
 - **Métadonnées intelligentes** :

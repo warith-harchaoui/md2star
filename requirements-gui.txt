@@ -1,0 +1,30 @@
+# requirements-gui.txt — dependencies for the local GUI (`md2star gui`)
+# ======================================================================
+# The GUI is an Overleaf-style Markdown → PDF editor served by a
+# localhost-only stdlib `http.server`. It *fronts* the CLI: the browser
+# posts Markdown, the server runs the same `_convert` code path, and the
+# result streams back (PDF rendered inline via PDF.js; DOCX/PPTX offered
+# as downloads).
+#
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements-gui.txt
+#   md2star gui
+#
+# Because the whole frontend — PDF.js, CodeMirror, Tailwind and the
+# Montserrat / Roboto Serif fonts — is *vendored* inside md2star/data/gui/
+# and the server itself is pure Python standard library, the GUI adds
+# ZERO extra pip dependencies on top of the CLI. It therefore just
+# inherits the core runtime install below (which pulls in langdetect +
+# Pillow and ships gui_server.py + data/gui in the same wheel).
+-r requirements.txt
+
+# ---------------------------------------------------------------------------
+# Same system tools as the CLI (see requirements.txt for the full matrix):
+#   pandoc      REQUIRED — the conversion engine behind every /render.
+#   LibreOffice REQUIRED for the live PDF preview (DOCX → PDF via soffice).
+#   Node.js     OPTIONAL — only to render ```mermaid``` diagrams.
+#
+# Refresh the vendored frontend assets (PDF.js, CodeMirror, Tailwind,
+# fonts) with `bash scripts/vendor_gui.sh` — the pinned versions live at
+# the top of that script.
+# ---------------------------------------------------------------------------

@@ -1,0 +1,165 @@
+/* md2star GUI — companion stylesheet.
+   Most styling is Tailwind utility classes inside index.html; this file
+   carries the bits that are awkward or impossible to express via
+   utilities (third-party CodeMirror/PDF.js overrides, our segmented-
+   control state classes, and reduced-motion guards). */
+
+/* Segmented control — used by the format switcher in the header.
+   Active = brand-blue pill on white text; inactive = transparent.
+   Both reuse Tailwind tokens so dark mode follows automatically. */
+.seg-active {
+  background-color: #007aff;       /* brand-blue */
+  color: #ffffff;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+}
+.seg-active:focus-visible {
+  outline: 2px solid #007aff;
+  outline-offset: 2px;
+}
+.seg-inactive {
+  background-color: transparent;
+  color: #3c3c43;                   /* label-secondary */
+}
+:is(.dark) .seg-inactive {
+  color: #ebebf5;                   /* label-secondary-dark */
+}
+.seg-inactive:hover {
+  background-color: rgb(0 0 0 / 0.04);
+}
+:is(.dark) .seg-inactive:hover {
+  background-color: rgb(255 255 255 / 0.04);
+}
+.seg-inactive:focus-visible {
+  outline: 2px solid #007aff;
+  outline-offset: 2px;
+}
+
+/* PDF.js — give each rendered page a card-like frame so the preview
+   pane reads as a stack of physical pages on top of the gray surface.
+   10 px radius matches the rest of the GUI's container language. */
+.pdf-page {
+  display: block;
+  margin: 16px auto;
+  background: #ffffff;
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.06),
+    0 4px 12px rgb(0 0 0 / 0.08);
+  border-radius: 10px;
+}
+:is(.dark) .pdf-page {
+  /* Keep the page itself white because that's the printable surface;
+     just soften the shadow so it blends with the dark pane. */
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.4),
+    0 4px 16px rgb(0 0 0 / 0.5);
+}
+
+/* Folder-sidebar layout. Two reachable states:
+   - data-folder="0" (default) — sidebar is `display:none`, grid has
+     two columns: editor + preview (50% / 50%). Set by Tailwind's
+     `md:grid-cols-2` on #main-grid; we don't need extra CSS here.
+   - data-folder="1" — sidebar visible at 240 px, grid has three
+     columns (sidebar + editor + preview). Override Tailwind's two-
+     column default with a specific 3-column template, and flip the
+     aside from `display:none` to `display:flex`.
+   The earlier 0-px first column was a bug: Tailwind's `.hidden`
+   class is `display:none`, which removes the sidebar from the grid
+   entirely. With a `0 1fr 1fr` template, the editor then dropped
+   into the 0-px column and shrank to 1 px, leaving only the preview
+   visible — exactly the symptom we hit before this fix. */
+@media (min-width: 768px) {
+  #main-grid[data-folder="1"] {
+    grid-template-columns: 240px 1fr 1fr;
+  }
+  #main-grid[data-folder="1"] #sidebar {
+    display: flex;
+  }
+}
+
+/* Sidebar rows — each .md / folder is a button-ish row. The hover
+   state hints at clickability; non-md files get the .row-disabled
+   class which mutes the text and disables hover. */
+.sidebar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 4px 6px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: #1c1c1e;
+}
+:is(.dark) .sidebar-row { color: #f2f2f7; }
+.sidebar-row:hover { background: rgb(0 122 255 / 0.08); }
+:is(.dark) .sidebar-row:hover { background: rgb(10 132 255 / 0.18); }
+.sidebar-row.row-active {
+  background: rgb(0 122 255 / 0.14);
+  font-weight: 600;
+}
+.sidebar-row.row-disabled {
+  color: #80808099;
+  cursor: default;
+}
+.sidebar-row.row-disabled:hover { background: transparent; }
+
+/* CodeMirror — make it fill its container and match our font tokens.
+   CodeMirror's default line-height (1.4) feels tight on the OS mono
+   stack at 13.5 px; bumping to 1.55 gives editor-grade breathing room. */
+.cm-editor {
+  height: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+               monospace;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+.cm-editor.cm-focused {
+  outline: none;             /* Tailwind ring on the wrapping element handles it */
+}
+.cm-editor .cm-content {
+  padding: 16px 18px;
+  caret-color: #007aff;      /* brand-blue */
+}
+.cm-editor .cm-gutters {
+  background: transparent;
+  border-right-color: rgb(0 0 0 / 0.08);
+}
+:is(.dark) .cm-editor .cm-gutters {
+  border-right-color: rgb(255 255 255 / 0.08);
+}
+
+/* Reduced motion — kill the spinner, kill the button bounce. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* The render-progress bar in the header — a thin slow track at the
+   top of the preview pane while a request is in flight. CSS-only. */
+.render-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    #007aff 50%,
+    transparent
+  );
+  background-size: 200% 100%;
+  animation: render-progress 1.2s ease-in-out infinite;
+}
+@keyframes render-progress {
+  from { background-position: 100% 0; }
+  to   { background-position: -100% 0; }
+}
+
+/* Status dot — colored by class to encode meaning (success/warning/error).
+   The dot stays the same shape so screen readers see the text label
+   in #status-text rather than a recolored shape. */
+.status-ok      { background: #28cd41; }   /* brand-green */
+.status-busy    { background: #ff9500; }   /* brand-orange */
+.status-error   { background: #ff3b30; }   /* brand-red */
+.status-idle    { background: #808080; }   /* brand-gray */

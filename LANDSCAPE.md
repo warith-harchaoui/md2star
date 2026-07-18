@@ -103,13 +103,12 @@ You should pick md2star when **all** of these apply:
 
 > **A note on the GUI ratings.** Several rows below (WYSIWYG,
 > Mobile, Git-async) describe the local web editor. That GUI was
-> **removed from the core CLI wheel in v2.0** to keep the PyPI
-> package lean, and is slated to return as the opt-in
-> `md2star[gui]` extra in v2.1 (see `ROADMAP.md`). The star
+> removed from the core CLI wheel in v2.0 to keep the PyPI package
+> lean, and was **restored in v2.6.0 bundled in the core package**
+> (invoked via `md2star gui`; no extra to install). The star
 > ratings here reflect the author's editorial judgment of the
-> product *vision*, not what ships in the core CLI today — the
-> GUI-dependent capabilities are an opt-in extra, not part of the
-> default install.
+> product *vision* — the GUI-dependent capabilities now ship in
+> the default install, not as an opt-in extra.
 
 ### Where md2star deliberately doesn't compete
 
@@ -118,15 +117,15 @@ You should pick md2star when **all** of these apply:
   `.private/GIT.md` for the analysis.
 - **WYSIWYG**: 3 stars. The split-pane preview is a deliberate
   choice — it keeps the Markdown source clean and reviewable. The
-  editor itself returns as the `md2star[gui]` extra (v2.1); a
+  editor itself is back in v2.6.0, bundled in the core package; a
   single-pane WYSIWYG mode remains an investigation only and is
   not committed.
-- **Mobile**: 2 stars. The local web GUI (returning as the
-  `md2star[gui]` extra in v2.1) binds to `127.0.0.1` and assumes
+- **Mobile**: 2 stars. The local web GUI (restored in v2.6.0,
+  bundled in the core package) binds to `127.0.0.1` and assumes
   desktop. A Tauri-based mobile shell is on the long-term backlog
   but not promised.
 - **Local-LLM**: 3 stars today (Ollama-based lint, optional). The
-  planned git awareness inside the `[gui]` extra (ROADMAP P2,
+  planned git awareness inside the (now core) GUI (ROADMAP P2,
   v2.2+) would add commit-message generation and LLM-assisted
   merge, which moves this toward 4 stars; the Community Edition
   will support both local and BYO OpenAI-compatible endpoints,
@@ -137,10 +136,10 @@ You should pick md2star when **all** of these apply:
 
 | Dimension | Current | Target | How |
 |---|---|---|---|
-| Git-async | ⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️⭐️ | Git awareness inside the `[gui]` extra (ROADMAP P2, v2.2+): read-only status → opt-in commit-on-save → opt-in push-on-save, rolled out in three phases. |
+| Git-async | ⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️⭐️ | Git awareness inside the (now core) GUI (ROADMAP P2, v2.2+): read-only status → opt-in commit-on-save → opt-in push-on-save, rolled out in three phases. |
 | Local-LLM | ⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️ | The `md2star[ai]` extra (ROADMAP P1, v2.1) plus the git-awareness LLM features (commit messages, merge proposals). |
 | Mobile | ⭐️⭐️ | ⭐️⭐️⭐️ | Document the "use Working Copy + a hosted render endpoint" workflow as an explicit supported path. |
-| WYSIWYG | ⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️ | The split-pane editor returns as the `md2star[gui]` extra (v2.1). A Lexical / TipTap single-pane mode is an investigation only; not committed. |
+| WYSIWYG | ⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️ | The split-pane editor is back in v2.6.0, bundled in the core package. A Lexical / TipTap single-pane mode is an investigation only; not committed. |
 | Cite | ⭐️⭐️⭐️⭐️ | ⭐️⭐️⭐️⭐️⭐️ | Add Zotero Better-BibTeX integration (ROADMAP P2). |
 
 ### Where md2star will probably stay where it is

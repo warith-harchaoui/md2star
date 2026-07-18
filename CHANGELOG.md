@@ -6,6 +6,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.6.0] — 2026-07-18
+
+### Added
+- **The local GUI is back — `md2star gui`.** The Overleaf-style Markdown → PDF
+  editor returns, this time bundled in the core package (no separate extra to
+  install). Launch it with `md2star gui`; it serves a localhost-only editor with
+  live PDF preview (PDF.js), a folder browser confined to one chosen root, an
+  in-session reference-template upload, and server-side draft auto-save. The
+  whole frontend (PDF.js, CodeMirror, Tailwind, Montserrat + Roboto Serif) is
+  vendored under `md2star/data/gui/`, so the GUI runs fully offline and adds
+  **zero** extra Python dependencies — it is pure stdlib `http.server` fronting
+  the same `_convert` code path as the CLI. Path-confinement of the `/fs/*`
+  endpoints is covered by `tests/test_gui_security.py`.
+- **`requirements.txt` (CLI) and `requirements-gui.txt` (GUI)** for users who
+  prefer `pip install -r …` over the packaging extras. The GUI file inherits the
+  CLI one (the GUI adds no pip deps).
+
+### Changed
+- **Version is now single-sourced** from `md2star/__init__.py` via hatchling's
+  version hook (`[tool.hatch.version]`). Previously the version lived in both
+  `pyproject.toml` and `__init__.py`; they drifted at v2.5.1/v2.5.2 (the package
+  reported `2.5.0` while the wheel was `2.5.2`). One edit point now, no drift.
+
+### Fixed
+- **Clean Ctrl-C.** Interrupting a conversion (Pandoc / Mermaid / LibreOffice)
+  now prints `md2star: interrupted.` and exits `130` (shell 128 + SIGINT) instead
+  of dumping a `KeyboardInterrupt` traceback.
+
 ## [2.5.2] — 2026-07-18
 
 ### Tests

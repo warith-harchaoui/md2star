@@ -4,7 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "md2star"
-version = "2.5.2"
+# Version is single-sourced from md2star/__init__.py (__version__) via
+# hatchling's version hook below — never hardcode it here. Bump the
+# string in the package and the wheel metadata follows automatically.
+dynamic = ["version"]
 description = "Markdown → DOCX/PPTX/PDF bridge built on Pandoc, with curated styling, Mermaid rendering, and bibliography support."
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -92,6 +95,13 @@ Issues = "https://github.com/warith-harchaoui/md2star/issues"
 Source = "https://github.com/warith-harchaoui/md2star"
 Changelog = "https://github.com/warith-harchaoui/md2star/blob/main/CHANGELOG.md"
 
+[tool.hatch.version]
+# Read __version__ from the package source — the single source of truth.
+# Explicit pattern because the assignment carries a type annotation
+# (``__version__: str = "..."``) which the default regex does not match.
+path = "md2star/__init__.py"
+pattern = '__version__:\s*str\s*=\s*"(?P<version>[^"]+)"'
+
 [tool.hatch.build.targets.wheel]
 # `packages = ["md2star"]` already picks up everything inside the
 # md2star/ tree (Python sources + the data/ subtree with the bundled
@@ -161,6 +171,13 @@ omit = [
     # __main__.py). The ImportError guards carry `pragma: no cover`.
     "md2star/api.py",
     "md2star/mcp.py",
+    # The GUI server is the same shape: its happy path needs a live
+    # http.server + a browser + Pandoc, exercised by the /render smoke
+    # tests rather than line-coverage. Its security-critical path
+    # confinement (_safe_within_root) IS unit-tested — see
+    # tests/test_gui_security.py — but the HTTP handlers are kept out of
+    # the coverage gate, consistent with api.py / mcp.py.
+    "md2star/gui_server.py",
 ]
 
 [tool.coverage.report]

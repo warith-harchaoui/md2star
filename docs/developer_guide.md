@@ -180,6 +180,7 @@ md2star/
 │   ├── cli.py                        # md2docx / md2pptx / md2pdf / md2star console scripts
 │   ├── cache.py                      # $XDG_CACHE_HOME/md2star/ resolver
 │   ├── doctor.py                     # `md2star doctor` environment diagnostic
+│   ├── gui_server.py                 # `md2star gui` local web editor (stdlib http.server, 127.0.0.1)
 │   ├── errors.py                     # Typed exception classes
 │   ├── postprocess.py                # DOCX table-style re-injection
 │   ├── preprocessing/                # Preprocessor package (one module per phase)
@@ -195,6 +196,7 @@ md2star/
 │   │   └── regexes.py                # Shared compiled regexes
 │   └── data/                         # Bundled package data
 │       ├── filters/md2star.lua       # Pandoc Lua filter (title, subtitle, date_override, …)
+│       ├── gui/                       # Vendored GUI frontend (PDF.js, CodeMirror, Tailwind, fonts)
 │       ├── defaults/                 # Pandoc --defaults YAMLs (vestigial; CLI uses explicit flags)
 │       ├── metadata.yaml             # Global metadata defaults
 │       ├── mermaid-config.json       # mmdc theme defaults
@@ -211,6 +213,7 @@ md2star/
 │   ├── test_preprocessing.py         # ~80 unit tests for the preprocessor
 │   ├── test_lua_filter.py            # End-to-end Lua filter tests via pandoc
 │   ├── test_postprocess.py           # inject_table_styles round-trips
+│   ├── test_gui_security.py         # `/fs/*` path-confinement tests for the GUI server
 │   └── examples/                     # Multi-page demo .md inputs (outputs regenerable via run.sh)
 ├── scripts/
 │   ├── install.sh / install.ps1      # pipx installer + LibreOffice auto-install (--no-libreoffice opt-out)
@@ -227,12 +230,15 @@ md2star/
 
 ## 🌐 5. GUI status
 
-v2.0.0 ships **CLI only**. The Overleaf-style local web editor
-(`md2star gui`) existed in v1.x and was removed for the PyPI debut to
-keep the wheel under 250 KB (the vendored Tailwind / CodeMirror /
-PDF.js / Roboto Serif tree was ~3 MB). The code lives in git history;
-the plan is to bring it back as the `md2star[gui]` PyPI extra in
-v2.1 — see [ROADMAP.md](../ROADMAP.md). The historical architecture
-(stdlib `http.server` on 127.0.0.1, `/fs/*` path-confined endpoints,
-vanilla-JS + Tailwind frontend) was deliberate and is the intended
-restoration point.
+The Overleaf-style local web editor was **restored in v2.6.0**,
+**bundled in the core wheel** (no `md2star[gui]` extra needed).
+Invoke it with `md2star gui`. The server module is
+`md2star/gui_server.py` — pure Python stdlib `http.server` bound to
+`127.0.0.1`, adding **zero** extra Python dependencies. The entire
+frontend (PDF.js, CodeMirror, Tailwind, Montserrat + Roboto Serif) is
+vendored under `md2star/data/gui/`, which is why the wheel grew from
+~200 KB back to ~2.3 MB. Path confinement of the `/fs/*` endpoints
+(root-confined folder browser, in-session reference-template upload,
+server-side draft auto-save) is covered by
+`tests/test_gui_security.py`. It is a fully offline, localhost-only
+Markdown→PDF editor with live PDF preview (PDF.js).
