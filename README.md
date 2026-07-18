@@ -137,7 +137,7 @@ A self-contained cookbook with more recipes lives at
 - **Scientific-Ready**: Native **BibTeX** integration via Pandoc's `citeproc`, for documents with managed reference libraries.
 - **Native Footnotes**: Markdown footnotes (`text[^1]` + `[^1]: …`) pass straight through Pandoc's `footnotes` extension to real Word footnotes — DOCX gets true bottom-of-page footnotes, PPTX collects them into per-slide notes. No special syntax, no preprocessing. See [EXAMPLES.md §10](EXAMPLES.md#10-footnotes).
 - **Automatic Cleanups** (quiet quality-of-life): remote `http(s)://` images downloaded for embedding (opt-in), HTML `<table>` blocks converted to Pandoc pipe-tables, and standalone images split off PPTX slides that contain a table (Pandoc otherwise drops them).
-- **Reversible by Design**: md2star's DOCX output is a *faithful, recoverable* rendering, not a one-way dead end. Read it straight back to Markdown with any DOCX reader (Pandoc, [kreuzberg](https://github.com/Goldziher/kreuzberg)) and your headings, `**bold**`/`*italic*`/`` `code` `` emphasis, tables, and lists come back intact — and repeated conversions converge to a **stable fixed point** rather than drifting. See [Round-trip fidelity](#round-trip-fidelity).
+- **Reversible by Design**: md2star's output is a *faithful, recoverable* rendering, not a one-way dead end. Read the DOCX back with Pandoc and your headings, `**bold**`/`*italic*`/`` `code` `` emphasis, tables, and lists come back intact; render all the way to PDF and read it back with [kreuzberg](https://github.com/Goldziher/kreuzberg) and the `md → docx → pdf → text` round-trip is the exact identity `g(f(x)) = x` for prose, bullet lists, multi-page docs, and footnotes (CI-enforced). Repeated conversions converge to a **stable fixed point** rather than drifting. See [Round-trip fidelity](#round-trip-fidelity).
 - **Graceful Image Path Resolution**: URLs, absolute paths, and relative paths all "just work". Relative `![](images/foo.png)` references resolve against the input file's directory — so `md2docx subdir/file.md` from any cwd still finds the image. No need to `cd` into the source folder first.
 - **Zero-Config Branding**: drop a `template.docx` / `template.pptx` next to your Markdown and md2star will pick it up automatically as `--reference-doc`. If neither exists, md2star fetches the `deraison.ai` default template by default (since v2.5.0) and caches it; pass `--no-remote-templates` / `--offline` to use the bundled template instead.
 - **Discoverable CLI**: every wrapper supports `--help` / `-h` and prints the md2star-specific flags followed by `pandoc --help`, so the full conversion surface is one command away. Try `md2docx --help`, `md2pptx --help`, or `md2star --help`.
@@ -423,11 +423,24 @@ md2docx report.md --offline            # report.md → report.docx
 pandoc report.docx -t gfm --wrap=none  # report.docx → Markdown on stdout
 ```
 
-Prefer an OCR-based reader that also covers the `pdf → md` direction? The same
-property holds with [kreuzberg](https://github.com/Goldziher/kreuzberg)
-(`extract_file_sync(path, config=ExtractionConfig(output_format=OutputFormat.MARKDOWN))`),
-which recovered **100 %** of heading text and body words from the DOCX and
-**94–99 %** from the LibreOffice-rendered PDF in our measurements.
+**The `pdf → md` direction is exact too — and CI-enforced.** Rendered all the way
+to a PDF and read back with [kreuzberg](https://github.com/Goldziher/kreuzberg)
+(`extract_file_sync(path, config=ExtractionConfig(output_format=OutputFormat.PLAIN))`),
+the round-trip `md → docx → pdf → text` is the **identity** `g(f(x)) = x` — proven
+by exact, whole-document string equality under an explicit *normal form* in
+[`tests/test_roundtrip_ocr.py`](tests/test_roundtrip_ocr.py), run for real in CI on a
+full LibreOffice + kreuzberg toolchain. It holds for:
+
+- **paragraphs** of any length (line wrapping is reflowed back);
+- **bullet lists**;
+- **multi-page** documents (page-number footers are normalized out);
+- **footnotes** — numeric `[^1]` and named `[^aa]` alike: the footnote *text* is
+  recovered even though the renderer renumbers the label.
+
+What a PDF *cannot* give back is markup it never stored: inline emphasis, heading
+*levels*, and table structure render to plain text — their words survive, their
+markup does not. That structured markup is exactly what the DOCX reader above
+recovers, so the two directions together cover the whole document.
 
 ---
 

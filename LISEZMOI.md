@@ -406,12 +406,25 @@ md2docx rapport.md --offline           # rapport.md → rapport.docx
 pandoc rapport.docx -t gfm --wrap=none # rapport.docx → Markdown sur stdout
 ```
 
-Vous préférez un lecteur basé sur l'OCR qui couvre aussi le sens `pdf → md` ?
-La même propriété tient avec
-[kreuzberg](https://github.com/Goldziher/kreuzberg)
-(`extract_file_sync(path, config=ExtractionConfig(output_format=OutputFormat.MARKDOWN))`),
-qui a récupéré **100 %** du texte des titres et des mots du corps depuis le
-DOCX et **94–99 %** depuis le PDF rendu par LibreOffice dans nos mesures.
+**Le sens `pdf → md` est exact lui aussi — et vérifié en CI.** Rendu jusqu'au PDF
+puis relu avec [kreuzberg](https://github.com/Goldziher/kreuzberg)
+(`extract_file_sync(path, config=ExtractionConfig(output_format=OutputFormat.PLAIN))`),
+l'aller-retour `md → docx → pdf → texte` est l'**identité** `g(f(x)) = x` — prouvée
+par égalité exacte du document entier sous une *forme normale* explicite dans
+[`tests/test_roundtrip_ocr.py`](tests/test_roundtrip_ocr.py), exécutée pour de vrai
+en CI avec la chaîne complète LibreOffice + kreuzberg. Elle tient pour :
+
+- les **paragraphes** de toute longueur (le retour à la ligne est refusionné) ;
+- les **listes à puces** ;
+- les documents **multi-pages** (les numéros de page sont normalisés) ;
+- les **notes de bas de page** — étiquettes numériques `[^1]` comme nommées `[^aa]` :
+  le *texte* de la note est récupéré même si le rendu renumérote l'étiquette.
+
+Ce qu'un PDF ne peut pas rendre, c'est le balisage qu'il n'a jamais stocké :
+l'emphase en ligne, les *niveaux* de titres et la structure des tableaux deviennent
+du texte brut — les mots survivent, pas le balisage. Ce balisage structuré est
+précisément ce que le lecteur DOCX ci-dessus récupère, si bien que les deux sens
+couvrent ensemble tout le document.
 
 ---
 

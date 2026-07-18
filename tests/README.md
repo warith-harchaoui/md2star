@@ -13,6 +13,7 @@ artifacts never escape the test directory.
 | `test_lua_filter.py` | The Pandoc Lua filter — drives `pandoc --lua-filter` against fixture Markdown. Skipped when pandoc is not on PATH. |
 | `test_postprocess.py` | `inject_table_styles` round-trips against a synthesised DOCX zip. |
 | `test_roundtrip.py` | `md → docx → md` fidelity: content survival + the fixed-point (`g(g(x)) == g(x)`) idempotence guarantee, read back with Pandoc's native DOCX reader. Skipped when pandoc is not on PATH. |
+| `test_roundtrip_ocr.py` | `md → docx → pdf → text` OCR round-trip **identity** `g(f(x)) == x`: exact whole-document equality under an explicit normal form, for prose (any length), bullet lists, multi-page docs, and footnotes (numeric `[^1]` and named `[^aa]`). Marked `slow` — needs LibreOffice + kreuzberg; the CI `ocr-roundtrip` job installs them and runs it for real. |
 | `examples/` | Multi-page demo `.md` sources (Markdown only — the corresponding `.docx` / `.pptx` outputs are regenerable via `run.sh` and not committed). |
 
 ## Running
@@ -39,4 +40,6 @@ make test                   # or: bash scripts/test.sh
 - **Bibliography**: citeproc against the curated `assets/references.bib`.
 - **Date localisation**: French weekday / month rendering via the in-filter dictionary.
 - **Preprocessor invariants**: list spacing, fenced-block preservation, HTML-table conversion, pipe-table separator scaling, image width injection, language detection, mermaid fallback, math-in-code unwrap, PPTX slide isolation, `--skip-phase` plumbing.
-- **Round-trip fidelity**: `md → docx → md` preserves headings, emphasis, tables, and lists, and the pipeline is a fixed point (`g(g(x)) == g(x)`).
+- **Round-trip fidelity**, two complementary directions:
+  - `md → docx → md` (Pandoc's DOCX reader) preserves headings, emphasis, tables, and lists, and is a fixed point (`g(g(x)) == g(x)`).
+  - `md → docx → pdf → text` (kreuzberg OCR) is the identity `g(f(x)) == x` for prose (any length), bullet lists, multi-page docs, and footnotes — with inline emphasis, heading *levels*, and table structure being the provable exceptions (a PDF stores no such markup layer; their text survives, their markup does not).

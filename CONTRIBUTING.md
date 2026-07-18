@@ -58,9 +58,12 @@ gives you the runtime set only (`-e .`).
     subprocess; skipped when pandoc is not on PATH).
   - `test_offline_security.py` — the `--offline` / `--allow-remote-*`
     network gates (the contract documented in `SECURITY.md`).
-  - `test_roundtrip_ocr.py` — the md → docx → pdf → text OCR round-trip;
-    marked `slow` (needs LibreOffice + kreuzberg) and skipped by
-    `pytest -m "not slow"`.
+  - `test_roundtrip_ocr.py` — the `md → docx → pdf → text` OCR round-trip
+    *identity* `g(f(x)) = x`: exact whole-document equality under an explicit
+    normal form, for prose (any length), bullet lists, multi-page docs, and
+    footnotes (numeric `[^1]` and named `[^aa]`). Marked `slow` (needs
+    LibreOffice + kreuzberg); the CI `ocr-roundtrip` job installs the toolchain
+    and runs it for real (and fails if it skips).
 
   Other files cover the CLI, doctor, API/MCP surfaces, templates, and
   bibliography localization.
