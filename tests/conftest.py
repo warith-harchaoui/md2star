@@ -4,6 +4,10 @@ The autouse ``isolated_cache`` fixture redirects ``$MD2STAR_CACHE_DIR`` to a
 fresh ``tmp_path`` for every test, so cache artifacts (resized rasters,
 SVG→PNG conversions, downloaded remote images, mermaid renders) land in a
 known location and do not pollute the user's real cache.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

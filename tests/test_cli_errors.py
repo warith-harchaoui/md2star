@@ -18,6 +18,10 @@ The seven original cases collapse into four functional scenarios: the
 parametrized ``_render_error`` shape (headline+hint / multiline / empty),
 the shared missing-input exit-2 contract across all three wrappers, and
 the missing-system-dependency exit-127 contract.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

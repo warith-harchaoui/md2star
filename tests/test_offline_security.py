@@ -17,6 +17,10 @@ gate it broke. Value-families (allowed vs. default, etc.) are folded as
 in-body loops rather than dropped. Assertions run at the API level
 (``preprocess_markdown`` + ``_resolve_reference_doc``) so they're
 independent of the CLI's argparse layer.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

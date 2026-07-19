@@ -3,6 +3,10 @@
 The auditor gates rule 4 in CI, so its measurement must be correct: it has to
 count ``#`` comments, ignore docstrings, and ignore comments that live inside
 string literals. These tests pin exactly those behaviours on synthetic inputs.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

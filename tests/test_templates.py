@@ -13,6 +13,10 @@ The suite is organised by behaviour:
 * :class:`TestCli` exercises the two subcommands end to end: ``list``
   (both formats, winner marking) and ``path`` (fmt handling, bundled
   vs. per-project), plus the top-level CLI dispatch.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

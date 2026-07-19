@@ -10,6 +10,10 @@ Bibliografía in Spanish, …). The resolution order is:
 These tests exercise ``_localized_bibliography_heading`` (the resolver)
 and ``_BIBLIOGRAPHY_HEADING_BY_LANG`` (the localization table) grouped by
 workflow, rather than one micro-assertion per language.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

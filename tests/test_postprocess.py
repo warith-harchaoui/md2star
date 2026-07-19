@@ -16,6 +16,10 @@ The seven original cases collapse into four functional scenarios:
 * idempotency + partial re-injection (regression — no duplicates);
 * ``strip_table_normal_for_pdf`` excising the style and its refs;
 * ``strip_table_normal_for_pdf`` as a no-op byte-identical passthrough.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

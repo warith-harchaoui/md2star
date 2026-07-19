@@ -38,6 +38,10 @@ use cases end-to-end"):
 A shared ``conftest.py`` fixture redirects the on-disk cache to a fresh
 ``tmp_path`` for every test, so SVG / raster / mermaid artifacts land in a
 known location and never pollute the user's real ``$MD2STAR_CACHE_DIR``.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

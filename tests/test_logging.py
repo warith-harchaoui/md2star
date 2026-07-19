@@ -13,6 +13,10 @@ These pin the contracts PR-A relies on:
 The ten original cases collapse into four functional scenarios: naming,
 handler lifecycle (attach + idempotency), the parametrized level mapping,
 and the stderr-routing / format contract exercised end-to-end.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

@@ -15,6 +15,10 @@ Each test:
 These tests exist to catch regressions in the integration *paths*
 md2star wires together — pandoc invocation, template resolution,
 soffice piping, mermaid plumbing — not to retest pandoc itself.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

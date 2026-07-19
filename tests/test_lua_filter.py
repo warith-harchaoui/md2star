@@ -14,6 +14,10 @@ break vs. untouched HTML rule) becomes one FORMAT-gate scenario.
 
 The whole module is skipped when ``pandoc`` is not on ``PATH`` — the unit
 tests must still pass on machines that have only installed Python deps.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

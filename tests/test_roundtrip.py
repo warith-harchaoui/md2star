@@ -25,6 +25,10 @@ and kreuzberg are installed, and CI installs them so it actually executes).
 The whole module skips when ``pandoc`` is not on ``PATH`` — mirroring
 ``tests/test_lua_filter.py`` so the pure-Python test set still passes on a
 machine with only the pip deps installed.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

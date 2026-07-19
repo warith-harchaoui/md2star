@@ -14,6 +14,10 @@ The suite is organised by behaviour:
   shape, the human-readable render, and the exit-code contract. The
   "pandoc missing → exit 1" contract is kept standalone because it is
   the load-bearing regression the CLI exists to guarantee.
+
+Author
+------
+Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations
