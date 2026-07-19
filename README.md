@@ -145,10 +145,16 @@ Overleaf-style local editor: Markdown on the left, a **live PDF
 preview** on the right, and one-click DOCX / PPTX / PDF downloads.
 
 ```bash
+pip install 'md2star[gui]'    # self-documenting "I want the GUI" install
 md2star gui                   # opens http://127.0.0.1:8765 in your browser
 md2star gui --port 9000       # pick a port (auto-falls-back if taken)
 md2star gui --no-browser      # just print the URL, don't auto-open
 ```
+
+> `md2star[gui]` resolves to the **same wheel** as plain `md2star` — the GUI is
+> bundled and needs no extra Python packages, so `pip install md2star` already
+> includes it. The `[gui]` form is just a clearer way to say "I'm here for the
+> editor".
 
 What it gives you:
 
@@ -166,7 +172,9 @@ It is **local-first and offline**: the server binds to `127.0.0.1`
 only, the entire frontend (PDF.js, CodeMirror, Tailwind, fonts) is
 vendored inside the package, and it fronts the exact same converter as
 the CLI — no data ever leaves your machine. Since v2.6.0 the GUI ships
-in the core wheel; there is nothing extra to install.
+in the core wheel; there is nothing extra to install (the
+`pip install 'md2star[gui]'` command is a self-documenting alias for the
+same wheel, not a separate download).
 
 ---
 

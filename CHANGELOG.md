@@ -20,6 +20,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `md2star/preprocessing/_ollama_client.py` wrapper + `tests/test_ollama_client.py`
   (both transports and both response shapes covered against an injected fake, so
   the suite stays offline).
+- **`md2star[gui]` install command.** `pip install 'md2star[gui]'` is now a
+  valid, self-documenting way to install for the local GUI. The GUI remains
+  bundled in the single core wheel (its frontend is fully vendored, zero extra
+  Python deps), so this extra resolves to the identical wheel as plain
+  `md2star` — a UX/marker alias, not a separate download. (A separate
+  `md2star-gui` distribution was considered and deliberately not pursued, to
+  avoid maintaining two coupled PyPI packages.)
 
 ## [2.6.0] — 2026-07-18
 

@@ -65,6 +65,14 @@ mcp = [
 ai = [
     "ollama>=0.4,<1",
 ]
+# The local GUI (`md2star gui`) ships bundled in this same wheel and needs no
+# extra Python packages — its frontend (PDF.js, CodeMirror, Tailwind, fonts) is
+# fully vendored and the server is pure stdlib. This extra exists so
+# `pip install 'md2star[gui]'` is a valid, self-documenting command for GUI
+# users, and reserves a home for any future GUI-only Python dependency. It
+# resolves to the identical wheel as plain `md2star` — slimming the base install
+# would need a separate distribution, which the project deliberately avoids.
+gui = []
 dev = [
     "pytest>=9.0.3,<10",
     "pytest-cov>=5.0,<7",   # coverage gate; see [tool.coverage.report] below

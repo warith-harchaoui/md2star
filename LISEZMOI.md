@@ -133,10 +133,16 @@ en direct** à droite, et des téléchargements DOCX / PPTX / PDF en un
 clic.
 
 ```bash
+pip install 'md2star[gui]'    # commande d'installation explicite « je veux la GUI »
 md2star gui                   # ouvre http://127.0.0.1:8765 dans le navigateur
 md2star gui --port 9000       # choisit un port (repli auto si occupé)
 md2star gui --no-browser      # affiche juste l'URL, sans ouvrir le navigateur
 ```
+
+> `md2star[gui]` résout vers le **même wheel** que `md2star` : la GUI est incluse
+> et n'ajoute aucune dépendance Python, donc `pip install md2star` la contient
+> déjà. La forme `[gui]` n'est qu'une façon plus claire de dire « je viens pour
+> l'éditeur ».
 
 Ce qu'elle apporte :
 
