@@ -1,11 +1,12 @@
 """Functional tests for the opt-in Ollama lint pass (``md2star.preprocessing.lint``).
 
-Every path in this module talks to a local Ollama daemon over HTTP or spawns
-the ``ollama`` binary, so the whole module is exercised here with those two
-boundaries mocked — no daemon, no binary, fully deterministic. The design
-contract under test is that lint is **never load-bearing**: whatever goes wrong
-(binary missing, daemon down, model absent, junk response), the original
-Markdown is returned unchanged so the surrounding conversion still succeeds.
+Every path talks to a local Ollama daemon over HTTP or spawns the ``ollama``
+binary, so the module is exercised with those two boundaries mocked — no daemon,
+no binary, fully deterministic. The contract under test is that lint is **never
+load-bearing**: whatever goes wrong (binary missing, daemon down, model absent,
+junk response), the original Markdown is returned unchanged. Each test drives a
+whole family of cases through the real functions so a few tests cover the entire
+resolution ladder.
 
 Author
 ------
@@ -26,34 +27,16 @@ from md2star.preprocessing import lint
 def _force_urllib_transport(monkeypatch) -> None:
     """Pin these tests to the zero-dependency urllib transport.
 
-    They mock ``urllib.request.urlopen`` to drive the fallback path, so if the
-    optional ``md2star[ai]`` extra happens to be installed in the dev env we
-    force ``_ollama_client.OLLAMA`` to ``None`` — otherwise lint would route
-    through the client and skip the very socket these tests fake. The dedicated
-    client path is covered in ``test_ollama_client.py``.
+    They mock ``urlopen`` to drive the fallback path, so if the ``md2star[ai]``
+    extra is installed we force ``_ollama_client.OLLAMA`` to ``None``; the client
+    path is covered in ``test_ollama_client.py``.
     """
     monkeypatch.setattr(lint._ollama_client, "OLLAMA", None)
 
 
 @contextmanager
 def _fake_http(payload: dict):
-    """Yield a stand-in for ``urlopen(...)`` returning *payload* as JSON.
-
-    Parameters
-    ----------
-    payload : dict
-        The object the fake endpoint should serialize and return from
-        ``.read()``, mimicking an Ollama HTTP response.
-
-    Yields
-    ------
-    object
-        A context-manager-compatible response whose ``read()`` returns the
-        UTF-8 JSON encoding of *payload*.
-    """
-    # Minimal object with just the .read() the module uses; the outer
-    # contextmanager supplies the __enter__/__exit__ that `with urlopen(...)`
-    # needs, so we don't have to hand-roll them.
+    """Yield a ``urlopen(...)`` stand-in whose ``.read()`` returns *payload* JSON."""
     class _Resp:
         def read(self) -> bytes:
             return json.dumps(payload).encode("utf-8")
@@ -61,39 +44,24 @@ def _fake_http(payload: dict):
     yield _Resp()
 
 
-# ── _model_present drives the real _fetch_ollama_models over a mocked socket ──
-@pytest.mark.parametrize(
-    ("installed", "query", "expected"),
-    [
-        # Exact tag match is the common hit.
+def test_model_discovery_over_mocked_socket(monkeypatch) -> None:
+    """``_model_present`` / ``_fetch_ollama_models`` / ``_ping_ollama`` end to end.
+
+    Drives tag matching (exact + ``:latest``-implied + genuinely absent) and the
+    daemon-unreachable degradation through the real functions, faking only the
+    socket.
+    """
+    # Tag-match matrix: exact hit, untagged tolerates :latest, absent → False.
+    for installed, query, expected in [
         (["gemma4:e2b"], "gemma4:e2b", True),
-        # Untagged query tolerates the ``:latest`` form Ollama stores.
         (["gemma4:latest"], "gemma4", True),
-        # Genuinely-absent model → False (daemon reachable, just missing it).
         (["other:latest"], "gemma4:e2b", False),
-    ],
-)
-def test_model_present_matches_tags(monkeypatch, installed, query, expected) -> None:
-    """``_model_present`` honors exact and ``:latest``-implied tag matches.
+    ]:
+        models = {"models": [{"name": n} for n in installed] + [{"name": ""}]}
+        monkeypatch.setattr(lint.urllib.request, "urlopen", lambda *a, _m=models, **k: _fake_http(_m))
+        assert lint._model_present(query) is expected
 
-    Routing through the real ``_fetch_ollama_models`` (only the socket is
-    faked) covers the tag-list parsing and the empty-name filtering too.
-    """
-    # Fake /api/tags to advertise exactly the `installed` models.
-    models = {"models": [{"name": n} for n in installed] + [{"name": ""}]}
-    monkeypatch.setattr(
-        lint.urllib.request, "urlopen", lambda *a, **k: _fake_http(models)
-    )
-    assert lint._model_present(query) is expected
-
-
-def test_fetch_models_returns_none_when_daemon_unreachable(monkeypatch) -> None:
-    """An unreachable daemon degrades to ``None``, never an exception.
-
-    Callers treat ``None`` as "no models"; this is what lets the whole lint
-    pass stay best-effort instead of surfacing a connection error.
-    """
-    # Any urlopen error must be swallowed into a None return.
+    # An unreachable daemon degrades to None / False, never an exception.
     def _boom(*_a, **_k):
         raise OSError("connection refused")
 
@@ -102,52 +70,32 @@ def test_fetch_models_returns_none_when_daemon_unreachable(monkeypatch) -> None:
     assert lint._ping_ollama() is False
 
 
-@pytest.mark.parametrize(
-    ("present", "run_rc", "run_exc", "expected"),
-    [
-        # Already pulled → short-circuits to True without shelling out.
-        (True, None, None, True),
-        # Missing then a clean pull (rc 0) → True.
-        (False, 0, None, True),
-        # Missing then a failed pull (rc 1) → False, non-fatal.
-        (False, 1, None, False),
-        # Missing then the binary vanishes mid-pull → False, non-fatal.
-        (False, None, FileNotFoundError("ollama"), False),
-    ],
-)
-def test_ensure_model_pulled(monkeypatch, present, run_rc, run_exc, expected) -> None:
+def test_ensure_model_pulled_all_outcomes(monkeypatch) -> None:
     """``_ensure_model_pulled`` pulls on demand and never raises on failure.
 
-    Parameters
-    ----------
-    present : bool
-        Whether the model is reported already-present (skips the pull).
-    run_rc : int or None
-        Return code of the mocked ``ollama pull`` (ignored when *present*).
-    run_exc : Exception or None
-        Exception the mocked ``subprocess.run`` should raise instead.
-    expected : bool
-        The expected boolean result.
+    Covers: already-present (no shell-out), clean pull (rc 0), failed pull
+    (rc 1), and the binary vanishing mid-pull — the last three via a faked
+    ``subprocess.run``.
     """
-    # Steer the presence check without touching the network.
-    monkeypatch.setattr(lint, "_model_present", lambda *_a, **_k: present)
+    for present, run_rc, run_exc, expected in [
+        (True, None, None, True),                       # already pulled
+        (False, 0, None, True),                         # clean pull
+        (False, 1, None, False),                        # failed pull, non-fatal
+        (False, None, FileNotFoundError("ollama"), False),  # binary vanished
+    ]:
+        monkeypatch.setattr(lint, "_model_present", lambda *_a, _p=present, **_k: _p)
 
-    # Fake `ollama pull` to either raise, or return an object with .returncode.
-    def _fake_run(*_a, **_k):
-        if run_exc is not None:
-            raise run_exc
-        return type("P", (), {"returncode": run_rc, "stderr": b""})()
+        def _fake_run(*_a, _rc=run_rc, _exc=run_exc, **_k):
+            if _exc is not None:
+                raise _exc
+            return type("P", (), {"returncode": _rc, "stderr": b""})()
 
-    monkeypatch.setattr(lint.subprocess, "run", _fake_run)
-    assert lint._ensure_model_pulled("gemma4:e2b") is expected
+        monkeypatch.setattr(lint.subprocess, "run", _fake_run)
+        assert lint._ensure_model_pulled("gemma4:e2b") is expected
 
 
 def test_ensure_running_spawns_then_gives_up(monkeypatch) -> None:
-    """``_ensure_ollama_running`` returns False when a spawned daemon never answers.
-
-    Covers the spawn branch: ping fails, we Popen ``ollama serve``, then poll
-    and still get no answer — best-effort, so it gives up with False.
-    """
+    """``_ensure_ollama_running`` returns False when a spawned daemon never answers."""
     # Daemon never answers the ping; skip real sleeping between polls.
     monkeypatch.setattr(lint, "_ping_ollama", lambda *_a, **_k: False)
     monkeypatch.setattr(lint.time, "sleep", lambda *_a, **_k: None)
@@ -155,59 +103,39 @@ def test_ensure_running_spawns_then_gives_up(monkeypatch) -> None:
     assert lint._ensure_ollama_running() is False
 
 
-# ── lint_with_llm: the public entry point and its full fallback ladder ──
-@pytest.mark.parametrize(
-    ("scenario", "expect_fixed"),
-    [
-        ("not_installed", False),   # ollama binary absent → original kept
-        ("daemon_down", False),     # daemon unreachable → original kept
-        ("model_missing", False),   # pull fails → original kept
-        ("empty_response", False),  # blank model output → original kept
-        ("length_guard", False),    # wildly-long output → distrusted, original kept
-        ("request_error", False),   # HTTP error mid-request → original kept
-        ("success", True),          # sane output → model's fixed markdown returned
-    ],
-)
-def test_lint_with_llm_fallback_ladder(monkeypatch, scenario, expect_fixed) -> None:
+def test_lint_with_llm_fallback_ladder(monkeypatch) -> None:
     """Every failure mode falls back to the original; only a sane fix is applied.
 
-    Parameters
-    ----------
-    scenario : str
-        Which rung of the resolution ladder to exercise.
-    expect_fixed : bool
-        True only for the happy path where the model's output replaces the
-        input; every other scenario must return the input verbatim.
+    Walks the whole ladder — binary absent, daemon down, model missing, empty
+    output, length-guard trip, request error, and the happy path — asserting the
+    input is returned verbatim except when the model returns sane output.
     """
     content = "# Title\n\nSome body text that is long enough to compare."
     fixed_text = "# Title\n\nSome body text that is long enough to compare!!"
 
-    # Default every gate to "reachable"; each scenario knocks out one rung.
-    monkeypatch.setattr(lint, "is_ollama_installed", lambda: scenario != "not_installed")
-    monkeypatch.setattr(
-        lint, "_ensure_ollama_running", lambda: scenario != "daemon_down"
-    )
-    monkeypatch.setattr(
-        lint, "_ensure_model_pulled", lambda *_a, **_k: scenario != "model_missing"
-    )
+    for scenario, expect_fixed in [
+        ("not_installed", False), ("daemon_down", False), ("model_missing", False),
+        ("empty_response", False), ("length_guard", False), ("request_error", False),
+        ("success", True),
+    ]:
+        # Default every gate to reachable; each scenario knocks out one rung.
+        monkeypatch.setattr(lint, "is_ollama_installed", lambda _s=scenario: _s != "not_installed")
+        monkeypatch.setattr(lint, "_ensure_ollama_running", lambda _s=scenario: _s != "daemon_down")
+        monkeypatch.setattr(lint, "_ensure_model_pulled", lambda *_a, _s=scenario, **_k: _s != "model_missing")
 
-    # Shape the final HTTP response per scenario (only reached past the gates).
-    responses = {
-        "empty_response": {"response": ""},
-        "length_guard": {"response": "x" * (len(content) * 5)},
-        "success": {"response": fixed_text},
-    }
-    if scenario == "request_error":
-        def _urlopen(*_a, **_k):
-            raise OSError("socket died")
-        monkeypatch.setattr(lint.urllib.request, "urlopen", _urlopen)
-    else:
-        payload = responses.get(scenario, {"response": fixed_text})
-        monkeypatch.setattr(
-            lint.urllib.request, "urlopen", lambda *a, **k: _fake_http(payload)
-        )
+        # Shape the HTTP response per scenario (only reached past the gates).
+        if scenario == "request_error":
+            def _urlopen(*_a, **_k):
+                raise OSError("socket died")
+            monkeypatch.setattr(lint.urllib.request, "urlopen", _urlopen)
+        else:
+            payload = {
+                "empty_response": {"response": ""},
+                "length_guard": {"response": "x" * (len(content) * 5)},
+                "success": {"response": fixed_text},
+            }.get(scenario, {"response": fixed_text})
+            monkeypatch.setattr(lint.urllib.request, "urlopen",
+                                lambda *a, _p=payload, **k: _fake_http(_p))
 
-    result = lint.lint_with_llm(content, model="gemma4:e2b")
-
-    # Happy path returns the model's text; every other rung keeps the original.
-    assert result == (fixed_text if expect_fixed else content)
+        result = lint.lint_with_llm(content, model="gemma4:e2b")
+        assert result == (fixed_text if expect_fixed else content), f"scenario {scenario}"

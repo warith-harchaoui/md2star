@@ -82,51 +82,33 @@ def _style_count(root: ET.Element, style_id: str) -> int:
 # ──────────────────────────────────────────────────────────────────
 
 
-def test_inject_adds_styles_with_border_colour_and_preserves_zip(tmp_path) -> None:
-    """A fresh inject lands both styles, the grey border, and touches nothing else.
+def test_inject_adds_styles_then_is_idempotent_and_gap_filling(tmp_path) -> None:
+    """A fresh inject lands both styles + grey border; re-runs never duplicate.
 
-    Bundles four assertions that describe one realistic first-injection run:
-    the return flag, both style ids, the documented ``#9E9E9E`` border
-    colour, and byte-for-byte preservation of the sibling document part.
+    One end-to-end story: the first injection reports a change, declares both
+    styles, uses the documented ``#9E9E9E`` border, and leaves document.xml
+    byte-identical; a second run is a no-op (no duplicates); and a catalogue
+    already carrying ``MyTable`` gains only the still-missing ``MyTableSmall``.
     """
     docx = tmp_path / "blank.docx"
     _build_minimal_docx(docx)
 
-    # A first injection into an empty catalogue reports that it changed the file.
-    changed = inject_table_styles(str(docx))
-    assert changed is True
+    # First injection into an empty catalogue reports it changed the file.
+    assert inject_table_styles(str(docx)) is True
 
-    # Both custom table styles are now declared.
     root = _styles_root(docx)
-    assert _has_style(root, "MyTable")
-    assert _has_style(root, "MyTableSmall")
+    assert _has_style(root, "MyTable") and _has_style(root, "MyTableSmall")
 
-    # The injected borders use the documented grey; spot-check on raw text to
-    # avoid namespace gymnastics around the nested <w:tblBorders> element.
+    # Grey border present; document.xml untouched (only styles.xml rewritten).
     with zipfile.ZipFile(docx) as z:
         styles = z.read("word/styles.xml").decode("utf-8")
         document = z.read("word/document.xml")
     assert 'w:color="9E9E9E"' in styles
-
-    # The rewrite only rewrote styles.xml — document.xml round-trips identical.
     assert document == _MINIMAL_DOCUMENT_XML
 
-
-def test_inject_is_idempotent_and_only_adds_missing(tmp_path) -> None:
-    """Re-running never duplicates, and a partial catalogue only gains the gap.
-
-    Two regression facets in one scenario: a repeated run on a fully-injected
-    file is a no-op (returns False, no duplicate styles), and a catalogue that
-    already carries ``MyTable`` gains only the still-missing ``MyTableSmall``.
-    """
-    # --- Idempotency: second run over a fully-injected file is a no-op. ---
-    docx = tmp_path / "blank.docx"
-    _build_minimal_docx(docx)
-    assert inject_table_styles(str(docx)) is True   # first run adds both
-    assert inject_table_styles(str(docx)) is False  # second run: nothing to do
-
+    # Idempotency: a second run is a no-op with no duplicate styles.
+    assert inject_table_styles(str(docx)) is False
     root = _styles_root(docx)
-    # Exactly one of each — the second run added no duplicates.
     assert _style_count(root, "MyTable") == 1
     assert _style_count(root, "MyTableSmall") == 1
 
@@ -192,36 +174,28 @@ def _build_docx_with_table_normal(path) -> None:
         zout.writestr("word/document.xml", document)
 
 
-def test_strip_table_normal_removes_style_and_refs(tmp_path) -> None:
-    """The function drops the style block AND every body-level ``<w:tblStyle>`` ref."""
+def test_strip_table_normal_removes_refs_and_is_a_noop_when_absent(tmp_path) -> None:
+    """The strip drops the style block + body refs, and is a byte-noop when absent.
+
+    Two facets of one function: on a DOCX carrying ``TableNormal0`` it reports a
+    change, removes the style definition and every body ``<w:tblStyle>`` ref
+    (keeping the cell text); on a DOCX that never had it, it returns False and
+    rewrites not a single byte.
+    """
+    # Present: the strip removes the style + refs but keeps content.
     docx = tmp_path / "intermediate.docx"
     _build_docx_with_table_normal(docx)
-
-    # The offending style + refs are present, so the strip reports a change.
     assert strip_table_normal_for_pdf(str(docx)) is True
-
     with zipfile.ZipFile(docx) as z:
         styles = z.read("word/styles.xml").decode("utf-8")
         document = z.read("word/document.xml").decode("utf-8")
-
-    # Style definition is gone from the catalogue.
     assert 'w:styleId="TableNormal0"' not in styles
-    # The reference inside the body is gone too.
-    assert 'TableNormal0' not in document
-    # The table cell text survived; we only excised the style hook.
-    assert "<w:t>cell</w:t>" in document
+    assert "TableNormal0" not in document
+    assert "<w:t>cell</w:t>" in document  # cell text survived
 
-
-def test_strip_table_normal_idempotent_when_absent(tmp_path) -> None:
-    """A DOCX that never had TableNormal0 returns False and is byte-identical after."""
-    docx = tmp_path / "blank.docx"
-    _build_minimal_docx(docx)
-
-    # Snapshot the whole archive before the no-op strip.
-    before = docx.read_bytes()
-
-    # Nothing to remove → the function reports no change.
-    assert strip_table_normal_for_pdf(str(docx)) is False
-
-    # And it must not have rewritten a single byte.
-    assert docx.read_bytes() == before
+    # Absent: nothing to remove → no change, byte-identical archive.
+    blank = tmp_path / "blank.docx"
+    _build_minimal_docx(blank)
+    before = blank.read_bytes()
+    assert strip_table_normal_for_pdf(str(blank)) is False
+    assert blank.read_bytes() == before

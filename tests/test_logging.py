@@ -72,20 +72,17 @@ def test_configure_installs_single_handler_and_is_idempotent() -> None:
     assert len(_owned_handlers()) == 1
 
 
-@pytest.mark.parametrize(
-    ("kwargs", "expected"),
-    [
-        ({}, logging.INFO),                       # default preserves old behaviour
-        ({"verbose": True}, logging.DEBUG),       # --verbose shows everything
-        ({"quiet": True}, logging.ERROR),         # --quiet keeps only errors
-        ({"verbose": True, "quiet": True}, logging.ERROR),  # quiet wins
-    ],
-)
-def test_configure_level_mapping(kwargs: dict[str, bool], expected: int) -> None:
+def test_configure_level_mapping() -> None:
     """Verbosity flags map to the documented thresholds; quiet outranks verbose."""
-    configure(**kwargs)
-    # The root level is what gates every child logger's records.
-    assert logging.getLogger("md2star").level == expected
+    for kwargs, expected in [
+        ({}, logging.INFO),                                 # default
+        ({"verbose": True}, logging.DEBUG),                 # --verbose: everything
+        ({"quiet": True}, logging.ERROR),                   # --quiet: errors only
+        ({"verbose": True, "quiet": True}, logging.ERROR),  # quiet wins
+    ]:
+        configure(**kwargs)
+        # The root level gates every child logger's records.
+        assert logging.getLogger("md2star").level == expected
 
 
 def test_output_routes_to_live_stderr_bare_and_level_gated(capsys) -> None:

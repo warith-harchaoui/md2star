@@ -519,50 +519,24 @@ def test_skip_phase_scenario() -> None:
     not _module_importable("langdetect"),
     reason="langdetect not installed; language metadata is optional",
 )
-@pytest.mark.parametrize(
-    "text, present, absent",
-    [
-        pytest.param(
-            "This is a simple text that has words like the and to in it.",
-            "lang: en-US",
-            None,
-            id="english-detected",
-        ),
-        pytest.param(
-            "Ceci est un texte avec le, la, les, et, est.",
-            "lang: fr-FR",
-            None,
-            id="french-detected",
-        ),
-        pytest.param(
-            "---\nlang: de-DE\n---\n\nEnglish words like the and to.",
-            "lang: de-DE",
-            "lang: en-US",
-            id="existing-lang-respected",
-        ),
-    ],
-)
-def test_language_detection_scenario(text, present, absent) -> None:
+def test_language_detection_scenario() -> None:
     """Language metadata is injected from stop words, never overwriting an
     explicit ``lang:`` already in the front-matter.
 
-    Skipped when ``langdetect`` is absent — the feature degrades gracefully
-    (no metadata), so its absence should not fake a red.
-
-    Parameters
-    ----------
-    text : str
-        Stop-word-heavy source (or one with a pre-declared lang).
-    present : str
-        Metadata line that must appear after injection.
-    absent : str | None
-        Metadata line that must NOT appear (guards no-overwrite), or None.
+    Sweeps English detection, French detection, and the no-overwrite guard when
+    a ``lang:`` is already declared.
     """
-    # Metadata injection stays ON here (the feature under test); linting off.
-    result = _pp(text, inject_metadata=True)
-    assert present in result
-    if absent is not None:
-        assert absent not in result
+    cases = [
+        ("This is a simple text that has words like the and to in it.", "lang: en-US", None),
+        ("Ceci est un texte avec le, la, les, et, est.", "lang: fr-FR", None),
+        ("---\nlang: de-DE\n---\n\nEnglish words like the and to.", "lang: de-DE", "lang: en-US"),
+    ]
+    for text, present, absent in cases:
+        # Metadata injection stays ON here (the feature under test); linting off.
+        result = _pp(text, inject_metadata=True)
+        assert present in result
+        if absent is not None:
+            assert absent not in result
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -570,80 +544,39 @@ def test_language_detection_scenario(text, present, absent) -> None:
 # ──────────────────────────────────────────────────────────────────
 
 
-# Inputs with nothing to transform must survive byte-for-byte; each guards a
-# different "no transformation should fire" edge.
-@pytest.mark.parametrize(
-    "text",
-    [
-        pytest.param("", id="empty-string"),
-        pytest.param("<div>Hello</div>", id="non-table-html"),
-    ],
-)
-def test_passthrough_unchanged(text: str) -> None:
-    """Inputs with nothing to transform pass through byte-for-byte.
-
-    Parameters
-    ----------
-    text : str
-        A source that must not be modified by any phase.
-    """
-    assert _pp(text) == text
+def test_passthrough_unchanged() -> None:
+    """Inputs with nothing to transform pass through byte-for-byte."""
+    # Each guards a different "no transformation should fire" edge.
+    for text in ("", "<div>Hello</div>"):
+        assert _pp(text) == text
 
 
-# One case per list-marker family plus the structural variants (ordered
-# single/multi digit, nested indent, heading-before-list). A blank line must
-# be injected before each list item so Pandoc reads a loose list.
-@pytest.mark.parametrize(
-    "text, expected",
-    [
-        pytest.param("Hello\n- item", "Hello\n\n- item", id="dash-marker"),
-        pytest.param("Hello\n* item", "Hello\n\n* item", id="star-marker"),
-        pytest.param("Hello\n+ item", "Hello\n\n+ item", id="plus-marker"),
-        # Ordered lists: the regex must handle numbers > 9, not just 1–9.
-        pytest.param(
-            "Intro\n10. Tenth", "Intro\n\n10. Tenth", id="ordered-multi-digit"
-        ),
-        # Indented sub-items keep their indent while still getting spacing.
-        pytest.param(
-            "- parent\n  - child", "- parent\n\n  - child", id="nested-item"
-        ),
-    ],
-)
-def test_blank_line_inserted_before_lists(text: str, expected: str) -> None:
+def test_blank_line_inserted_before_lists() -> None:
     """A blank line is inserted before a list item for every marker kind.
 
-    Parameters
-    ----------
-    text : str
-        Markdown with a list item glued to preceding content.
-    expected : str
-        The same source with the required blank line injected.
+    Covers dash/star/plus markers, multi-digit ordered items (regex must handle
+    numbers > 9), and indented sub-items — Pandoc needs the blank line to read a
+    loose list.
     """
-    assert _pp(text) == expected
+    cases = [
+        ("Hello\n- item", "Hello\n\n- item"),
+        ("Hello\n* item", "Hello\n\n* item"),
+        ("Hello\n+ item", "Hello\n\n+ item"),
+        ("Intro\n10. Tenth", "Intro\n\n10. Tenth"),   # multi-digit ordered
+        ("- parent\n  - child", "- parent\n\n  - child"),  # nested indent kept
+    ]
+    for text, expected in cases:
+        assert _pp(text) == expected
 
 
-# Delimiter families for the pure-math unwrap. The ``$..$`` / ``$$..$$``
-# (dollar) forms are already exercised by ``test_math_protection_scenario``;
-# the LaTeX ``\(..\)`` / ``\[..\]`` forms are separate recognizer branches, so
-# they stay pinned here as their own family.
-@pytest.mark.parametrize(
-    "src, expected",
-    [
-        pytest.param(r"`\(x^2\)`", r"\(x^2\)", id="inline-paren"),
-        pytest.param(r"`\[x^2\]`", r"\[x^2\]", id="display-bracket"),
-    ],
-)
-def test_pure_math_latex_delimiter_families(src: str, expected: str) -> None:
+def test_pure_math_latex_delimiter_families() -> None:
     """The ``\\(..\\)`` and ``\\[..\\]`` forms unwrap from a pure-math code span.
 
-    Parameters
-    ----------
-    src : str
-        A code span whose content is exactly one LaTeX-delimited math chunk.
-    expected : str
-        The bare (unwrapped) math the span must become.
+    The ``$..$`` / ``$$..$$`` forms are covered by ``test_math_protection_scenario``;
+    the LaTeX delimiters are separate recognizer branches pinned here.
     """
-    assert _pp(src) == expected
+    for src, expected in [(r"`\(x^2\)`", r"\(x^2\)"), (r"`\[x^2\]`", r"\[x^2\]")]:
+        assert _pp(src) == expected
 
 
 def test_a4_cap_taller_than_wide_caps_height(tmp_path) -> None:

@@ -24,8 +24,6 @@ from __future__ import annotations
 
 import logging
 
-import pytest
-
 from md2star import errors
 from md2star.cli import (
     _render_error,
@@ -39,40 +37,25 @@ from md2star.cli import (
 # ──────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    ("exc", "expected"),
-    [
-        # A single-line hint: headline plus one 2-space-indented hint line.
-        (
-            errors.MissingDependencyError(
-                "pandoc not found", hint="install via brew / apt / winget"
-            ),
-            ["md2star: pandoc not found", "  install via brew / apt / winget"],
-        ),
-        # A multiline hint: each line is indented and logged as its own record.
-        (
-            errors.MissingDependencyError("soffice missing", hint="line 1\nline 2"),
-            ["md2star: soffice missing", "  line 1", "  line 2"],
-        ),
-        # An empty hint: only the headline, no trailing blank hint record.
-        (errors.Md2starError("naked error", hint=""), ["md2star: naked error"]),
-    ],
-    ids=["single-line-hint", "multiline-hint", "empty-hint"],
-)
-def test_render_error_logs_headline_then_indented_hint(
-    exc: errors.Md2starError, expected: list[str], caplog
-) -> None:
+def test_render_error_logs_headline_then_indented_hint(caplog) -> None:
     """``_render_error`` logs the headline first, then each hint line indented.
 
-    Parametrised over the three hint shapes the renderer must handle. The
-    exact record list is asserted so the empty-hint case proves no stray
-    blank record leaks out.
+    Sweeps the three hint shapes: single-line, multiline (each line its own
+    indented record), and empty (headline only — proving no stray blank record).
     """
-    # Capture md2star records at any level for the duration of this test.
-    caplog.set_level(logging.DEBUG, logger="md2star")
-    _render_error(exc)
-    # The full record sequence must match — order and indentation included.
-    assert caplog.messages == expected
+    cases = [
+        (errors.MissingDependencyError("pandoc not found", hint="install via brew / apt / winget"),
+         ["md2star: pandoc not found", "  install via brew / apt / winget"]),
+        (errors.MissingDependencyError("soffice missing", hint="line 1\nline 2"),
+         ["md2star: soffice missing", "  line 1", "  line 2"]),
+        (errors.Md2starError("naked error", hint=""), ["md2star: naked error"]),
+    ]
+    for exc, expected in cases:
+        caplog.clear()
+        caplog.set_level(logging.DEBUG, logger="md2star")
+        _render_error(exc)
+        # The full record sequence must match — order and indentation included.
+        assert caplog.messages == expected
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -80,18 +63,12 @@ def test_render_error_logs_headline_then_indented_hint(
 # ──────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "main",
-    [md2docx_main, md2pptx_main, md2pdf_main],
-    ids=["md2docx", "md2pptx", "md2pdf"],
-)
-def test_missing_input_returns_2(main, caplog) -> None:
+def test_missing_input_returns_2(caplog) -> None:
     """Nonexistent input maps to InvalidInputError → exit 2 on every wrapper."""
     caplog.set_level(logging.DEBUG, logger="md2star")
-    # A path that cannot exist trips the invalid-input branch.
-    rc = main(["/totally/not/here.md"])
-    # All three wrappers share the exit-2 contract for bad input.
-    assert rc == 2
+    # A path that cannot exist trips the invalid-input branch on all three.
+    for main in (md2docx_main, md2pptx_main, md2pdf_main):
+        assert main(["/totally/not/here.md"]) == 2
 
 
 def test_missing_input_message_shape(caplog) -> None:

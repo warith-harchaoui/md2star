@@ -105,78 +105,39 @@ class TestDiagnosis:
         assert report.feature_status("pdf") == doctor.STATUS_OK
         assert report.feature_status("mermaid") == doctor.STATUS_OK
 
-    @pytest.mark.parametrize(
-        "present, check, expected_status, feature, feature_status, note",
-        [
-            # Pandoc absent → core failure; every conversion target dies.
-            (
-                {}, "Pandoc", doctor.STATUS_MISSING,
-                "docx", "UNAVAILABLE",
-                "pandoc is core; without it docx/pptx/pdf all go UNAVAILABLE",
-            ),
-            # Soffice absent → PDF degrades to PARTIAL, docx still fine.
-            (
-                {"pandoc": "/usr/bin/pandoc"}, "LibreOffice", doctor.STATUS_MISSING,
-                "pdf", "PARTIAL",
-                "no LibreOffice → PDF partial, but pandoc alone covers docx",
-            ),
-            # Node absent → mermaid rendering is impossible.
-            (
-                {"pandoc": "/usr/bin/pandoc"}, "Node.js", doctor.STATUS_INFO,
-                "mermaid", "UNAVAILABLE",
-                "no Node → mermaid UNAVAILABLE (Node is optional, so INFO)",
-            ),
-            # npx present without a global mmdc is acceptable (npx -y mmdc).
-            (
-                {"pandoc": "/p", "node": "/n", "npx": "/x"}, "Mermaid CLI", doctor.STATUS_INFO,
-                "mermaid", None,
-                "npx alone is fine; md2star runs `npx -y mmdc` lazily",
-            ),
-        ],
-    )
-    def test_missing_dependency_matrix(
-        self, present, check, expected_status, feature, feature_status, note,
-    ):
+    def test_missing_dependency_matrix(self):
         """Each missing tool drives the right check status and feature fallout.
 
-        Parameters
-        ----------
-        present : dict[str, str]
-            The dependency environment fed to ``fake_which``.
-        check : str
-            Name of the check whose status is asserted.
-        expected_status : str
-            Expected status constant for ``check``.
-        feature : str
-            Feature whose availability is asserted (``mermaid``/``pdf``/...).
-        feature_status : str or None
-            Expected ``feature_status`` value, or ``None`` to skip that
-            assertion (used when only the check status matters).
-        note : str
-            Rationale surfaced in assertion messages.
+        Sweeps: pandoc absent (core failure, all targets die), soffice absent
+        (PDF partial, docx fine), Node absent (mermaid unavailable, INFO), and
+        npx-without-global-mmdc (fine via lazy ``npx -y mmdc``). Each case is
+        (present-tools, check, expected status, feature, feature status/None).
         """
-        report = doctor.run_checks(which=fake_which(present))
-        # The named check lands on its expected status.
-        assert report.get(check).status == expected_status, note
-        if feature_status is not None:
-            # ...and the derived feature availability matches.
-            assert report.feature_status(feature) == feature_status, note
+        cases = [
+            ({}, "Pandoc", doctor.STATUS_MISSING, "docx", "UNAVAILABLE"),
+            ({"pandoc": "/usr/bin/pandoc"}, "LibreOffice", doctor.STATUS_MISSING, "pdf", "PARTIAL"),
+            ({"pandoc": "/usr/bin/pandoc"}, "Node.js", doctor.STATUS_INFO, "mermaid", "UNAVAILABLE"),
+            ({"pandoc": "/p", "node": "/n", "npx": "/x"}, "Mermaid CLI", doctor.STATUS_INFO, "mermaid", None),
+        ]
+        for present, check, expected_status, feature, feature_status in cases:
+            report = doctor.run_checks(which=fake_which(present))
+            # The named check lands on its expected status …
+            assert report.get(check).status == expected_status, check
+            if feature_status is not None:
+                # … and the derived feature availability matches.
+                assert report.feature_status(feature) == feature_status, check
 
-        # Case-specific extra guarantees that don't fit the shared columns.
-        if check == "Pandoc":
-            # Missing pandoc is a hard core failure across every target.
-            assert report.core_failing() is True
-            assert report.feature_status("pptx") == "UNAVAILABLE"
-            assert report.feature_status("pdf") == "UNAVAILABLE"
-        else:
-            # Any optional tool missing leaves core intact.
-            assert report.core_failing() is False
-        if check == "LibreOffice":
-            # pandoc alone still exports docx even without LibreOffice.
-            assert report.feature_status("docx") == doctor.STATUS_OK
-        if check == "Mermaid CLI":
-            # The detail explains the npx fallback so users aren't confused.
-            assert "npx" in report.get("Mermaid CLI").detail
+            # Case-specific extra guarantees that don't fit the shared columns.
+            if check == "Pandoc":
+                assert report.core_failing() is True
+                assert report.feature_status("pptx") == "UNAVAILABLE"
+                assert report.feature_status("pdf") == "UNAVAILABLE"
+            else:
+                assert report.core_failing() is False
+            if check == "LibreOffice":
+                assert report.feature_status("docx") == doctor.STATUS_OK
+            if check == "Mermaid CLI":
+                assert "npx" in report.get("Mermaid CLI").detail
 
 
 class TestCli:

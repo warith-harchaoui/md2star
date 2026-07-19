@@ -148,22 +148,21 @@ def test_roundtrip_reaches_a_fixed_point(tmp_path):
     assert _canon(once) == _canon(twice)
 
 
-@pytest.mark.parametrize(
-    "source",
-    [
-        # A title with a prose body, then each structural construct. We keep
-        # a paragraph before the table/list because Pandoc migrates a lone
-        # ``# Title`` into the DOCX's title *metadata*; a document whose only
-        # body is a bare table then needs one extra pass to settle. Real
-        # documents have prose, and those are an immediate fixed point.
+def test_fixed_point_for_varied_documents(tmp_path):
+    """The fixed-point property holds across paragraph / list / table / section docs.
+
+    Each source keeps a paragraph before the table/list because Pandoc migrates a
+    lone ``# Title`` into the DOCX title *metadata*; a body that is only a bare
+    table then needs one extra pass to settle. Real documents have prose, and
+    those are an immediate fixed point.
+    """
+    sources = [
         "# Title\n\nA single paragraph of prose with no other structure.\n",
         "# Heading\n\nIntro line before the list.\n\n- one\n- two\n- three\n",
         "# Doc\n\nIntro line before the table.\n\n| A | B |\n|---|---|\n| 1 | 2 |\n",
         "# Doc\n\nIntro.\n\n## Section\n\nBody under a section heading.\n",
-    ],
-)
-def test_fixed_point_for_varied_documents(tmp_path, source):
-    """The fixed-point property holds across paragraph / list / table docs."""
-    once = _roundtrip(source, tmp_path, "a")
-    twice = _roundtrip(once, tmp_path, "b")
-    assert _canon(once) == _canon(twice)
+    ]
+    for i, source in enumerate(sources):
+        once = _roundtrip(source, tmp_path, f"a{i}")
+        twice = _roundtrip(once, tmp_path, f"b{i}")
+        assert _canon(once) == _canon(twice)

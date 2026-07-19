@@ -26,33 +26,24 @@ def _write(tmp_path: Path, body: str) -> Path:
     return p
 
 
-def test_counts_comments_over_code(tmp_path: Path) -> None:
-    """Density is comment_lines / code_lines for a simple module."""
+def test_counting_is_correct_across_edge_cases(tmp_path: Path) -> None:
+    """The auditor counts ``#`` comments while ignoring docstrings and strings.
+
+    Three measurement contracts in one pass: plain comment/code density; a
+    module docstring counting as neither (rule 4); and a ``#`` inside a string
+    literal not being miscounted (tokenize, not a naive scan).
+    """
     # 2 comment lines, 2 code lines → density 1.0.
-    src = "# c1\nx = 1\n# c2\ny = 2\n"
-    stats = audit.analyze(_write(tmp_path, src))
-    assert stats["comments"] == 2
-    assert stats["code"] == 2
-    assert stats["density"] == 1.0
+    plain = audit.analyze(_write(tmp_path, "# c1\nx = 1\n# c2\ny = 2\n"))
+    assert plain["comments"] == 2 and plain["code"] == 2 and plain["density"] == 1.0
 
+    # A triple-quoted module docstring inflates neither count.
+    doc = audit.analyze(_write(tmp_path, '"""Module.\n\nMore.\n"""\n# note\nz = 3\n'))
+    assert doc["comments"] == 1 and doc["code"] == 1
 
-def test_docstrings_are_excluded(tmp_path: Path) -> None:
-    """A module docstring counts as neither comment nor code (rule 4)."""
-    # The triple-quoted module docstring spans 3 lines but must not inflate the
-    # comment count — only the '# note' line and 'z = 3' count.
-    src = '"""Module.\n\nMore.\n"""\n# note\nz = 3\n'
-    stats = audit.analyze(_write(tmp_path, src))
-    assert stats["comments"] == 1
-    assert stats["code"] == 1
-
-
-def test_hash_inside_string_is_not_a_comment(tmp_path: Path) -> None:
-    """A '#' inside a string literal must not be miscounted as a comment."""
-    # tokenize (not a naive '#' scan) is why this works.
-    src = 's = "not # a comment"\n'
-    stats = audit.analyze(_write(tmp_path, src))
-    assert stats["comments"] == 0
-    assert stats["code"] == 1
+    # A '#' inside a string literal is not a comment.
+    instr = audit.analyze(_write(tmp_path, 's = "not # a comment"\n'))
+    assert instr["comments"] == 0 and instr["code"] == 1
 
 
 def test_glue_flag_by_name(tmp_path: Path) -> None:

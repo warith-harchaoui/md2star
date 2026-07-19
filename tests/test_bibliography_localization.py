@@ -17,47 +17,26 @@ from __future__ import annotations
 from md2star.cli import _BIBLIOGRAPHY_HEADING_BY_LANG, _localized_bibliography_heading
 
 
-def test_explicit_lang_overrides_body_across_all_locales():
-    """Explicit ``--lang`` wins over body content for every shipped locale.
+def test_explicit_lang_precedence_and_english_fallback():
+    """Explicit ``--lang`` wins over body content, and the tails degrade to English.
 
-    Notes
-    -----
-    One assertion per shipped locale, all driven from a single table. The
-    body is deliberately English so a French/Spanish/… result can only
-    come from honouring the tag — never from detection — proving the
-    ``--lang`` > detection precedence. Region subtags (``fr-FR``) confirm
-    only the primary subtag is consulted.
+    One place for the whole precedence rule: every shipped locale resolves from
+    the tag (English prose must not sway it, proving ``--lang`` > detection, and
+    region subtags like ``fr-FR`` consult only the primary subtag); an unknown
+    tag and no-signal bodies (empty / single char) all degrade to English
+    without raising.
     """
-    # (tag-as-passed-to--lang, heading the resolver must return).
+    # Explicit lang beats detection for every shipped locale.
     cases = {
-        "fr-FR": "Bibliographie",
-        "es-ES": "Bibliografía",
-        "de-DE": "Literatur",
-        "it": "Bibliografia",
-        "pt-BR": "Bibliografia",
-        "nl": "Bibliografie",
-        "ru": "Библиография",
-        "en-US": "Bibliography",
+        "fr-FR": "Bibliographie", "es-ES": "Bibliografía", "de-DE": "Literatur",
+        "it": "Bibliografia", "pt-BR": "Bibliografia", "nl": "Bibliografie",
+        "ru": "Библиография", "en-US": "Bibliography",
     }
-    # Explicit lang beats detection: English prose must not sway the result.
     for lang, expected in cases.items():
         assert _localized_bibliography_heading("body in English", lang) == expected
 
-
-def test_english_fallback_for_unknown_lang_and_undetectable_bodies():
-    """Unknown tags and no-signal bodies all degrade to English.
-
-    Notes
-    -----
-    Covers the two tails of the resolution chain in one place:
-    * an unrecognised ``--lang`` tag is not an error — it → English;
-    * with no ``--lang`` and nothing detectable (empty body, or a single
-      char langdetect can't classify) the resolver must not raise and must
-      return the English default.
-    """
-    # Unknown explicit tag → English (not an error).
+    # The tails of the chain all degrade to English (never an error).
     assert _localized_bibliography_heading("body", "xx-YY") == "Bibliography"
-    # No lang + no detectable signal → deterministic English fallback.
     assert _localized_bibliography_heading("", None) == "Bibliography"
     assert _localized_bibliography_heading("a", None) == "Bibliography"
 

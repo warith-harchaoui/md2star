@@ -113,46 +113,32 @@ class TestTitleAndSubtitle:
 # ──────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    ("lang", "must_contain_french", "must_not_contain"),
-    [
-        # A supported language substitutes a localised month name from the dict.
-        ("fr-FR", True, ()),
-        # An unsupported language falls back to os.date()'s raw %B — never a
-        # French / German dictionary month.
-        ("xx-YY", False, ("février", "februar")),
-    ],
-    ids=["french-dict", "unknown-lang-fallback"],
-)
-def test_date_localisation(
-    lang: str, must_contain_french: bool, must_not_contain: tuple[str, ...]
-) -> None:
+def test_date_localisation() -> None:
     """``date_format`` + ``lang`` localise month names for supported languages only.
 
     ``%B`` alone keeps the output deterministic across runs (the year changes
-    daily but the month name does not). The filter carries dictionaries for a
-    handful of languages; anything else drops through to the system locale.
+    daily but the month name does not). A supported language (fr-FR) surfaces a
+    French month from the dict; an unknown language (xx-YY) drops through to the
+    system locale and must never pull a dictionary month.
     """
-    out = _run_pandoc(
-        "# Titre\n\nCorps.\n",
-        "markdown",
-        "--standalone",
-        "--metadata", f"lang={lang}",
-        "--metadata", "date_format=%B",
-    ).lower()
-
     french_months = (
         "janvier", "février", "mars", "avril", "mai", "juin",
         "juillet", "août", "septembre", "octobre", "novembre", "décembre",
     )
-    if must_contain_french:
-        # A supported language must surface at least one French month name.
-        assert any(m in out for m in french_months), (
-            f"expected a French month name in: {out!r}"
-        )
-    # An unknown language must not pull French/German names out of the dict.
-    for forbidden in must_not_contain:
-        assert forbidden not in out
+
+    def _render(lang: str) -> str:
+        return _run_pandoc(
+            "# Titre\n\nCorps.\n", "markdown", "--standalone",
+            "--metadata", f"lang={lang}", "--metadata", "date_format=%B",
+        ).lower()
+
+    # Supported language surfaces at least one French month name.
+    fr = _render("fr-FR")
+    assert any(m in fr for m in french_months), f"expected a French month in: {fr!r}"
+
+    # Unknown language must not pull French/German dict months.
+    xx = _render("xx-YY")
+    assert "février" not in xx and "februar" not in xx
 
 
 # ──────────────────────────────────────────────────────────────────

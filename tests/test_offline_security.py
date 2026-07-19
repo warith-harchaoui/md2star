@@ -43,40 +43,29 @@ MD_WITH_LOCAL_IMG = (
 # ─────────────────────────────────────────────────────────────────────
 
 
-def test_default_deny_leaves_remote_image_and_warns_at_opt_in_flag(caplog):
-    """Default: the remote URL is untouched and a warning names the opt-in.
+def test_remote_image_soft_refuse_warning_behaviour(caplog):
+    """The default-deny warning fires only when there is a remote image to refuse.
 
-    Notes
-    -----
-    Covers two facets of the *default-deny* gate in one realistic run:
-    (1) no network happened, so the URL survives verbatim for pandoc to
-    see; (2) the soft-refuse warning flows through the ``md2star`` logger
-    and tells the user both *which* URL was skipped and *how* to allow it.
+    Three facets in one run: (1) by default the remote URL is preserved verbatim
+    and an actionable warning names the URL + opt-in flag; (2) a local-only doc
+    logs no warning (no false positive); (3) an explicit ``--offline`` silences
+    the nudge as noise (the refusal is already intentional).
     """
+    # Default deny: URL survives, warning names the URL and the opt-in flag.
     caplog.set_level(logging.WARNING, logger="md2star")
-    result = preprocess_markdown(
-        MD_WITH_REMOTE_IMG, inject_metadata=False, lint_enabled=False,
-    )
-    # No download was permitted → the URL is preserved exactly as written.
+    result = preprocess_markdown(MD_WITH_REMOTE_IMG, inject_metadata=False, lint_enabled=False)
     assert "https://example.invalid/banner.png" in result
-    # The warning must be actionable: name the URL and the opt-in flag.
     assert "--allow-remote-images" in caplog.text
     assert "https://example.invalid/banner.png" in caplog.text
 
+    # Local-only document: no remote-skip warning at all.
+    caplog.clear()
+    preprocess_markdown(MD_WITH_LOCAL_IMG, inject_metadata=False, lint_enabled=False)
+    assert "--allow-remote-images" not in caplog.text
 
-def test_no_remote_image_produces_no_skip_warning(caplog):
-    """A document with only local images logs no remote-skip warning.
-
-    Notes
-    -----
-    Guards the warning against false positives: the soft-refuse surface
-    must stay silent when there is nothing remote to refuse.
-    """
-    caplog.set_level(logging.WARNING, logger="md2star")
-    preprocess_markdown(
-        MD_WITH_LOCAL_IMG, inject_metadata=False, lint_enabled=False,
-    )
-    # Nothing remote → the opt-in hint must not appear in the log.
+    # Explicit --offline: the nudge is suppressed (refusal already intentional).
+    caplog.clear()
+    preprocess_markdown(MD_WITH_REMOTE_IMG, inject_metadata=False, lint_enabled=False, offline=True)
     assert "--allow-remote-images" not in caplog.text
 
 
@@ -138,25 +127,6 @@ def test_offline_blocks_every_lint_side_effect_even_when_lint_enabled():
             assert not mock_fn.called, target
 
 
-def test_offline_silences_the_remote_image_warning(caplog):
-    """In offline mode the soft-refuse warning is suppressed as noise.
-
-    Notes
-    -----
-    The default-deny warning exists to nudge users toward the opt-in flag.
-    Once the user has declared ``--offline`` the refusal is explicit and
-    intentional, so re-emitting the nudge would be pure noise — it must be
-    silenced.
-    """
-    caplog.set_level(logging.WARNING, logger="md2star")
-    preprocess_markdown(
-        MD_WITH_REMOTE_IMG, inject_metadata=False, lint_enabled=False,
-        offline=True,
-    )
-    # Explicit --offline → no soft-refuse hint should be logged.
-    assert "--allow-remote-images" not in caplog.text
-
-
 # ─────────────────────────────────────────────────────────────────────
 # _resolve_reference_doc — remote-template policy
 # ─────────────────────────────────────────────────────────────────────
@@ -204,29 +174,19 @@ def test_reference_doc_uses_bundled_template_without_network(tmp_path):
             assert resolved.name == "template.docx"
 
 
-def test_reference_doc_downloads_when_remote_explicitly_allowed(tmp_path):
-    """``allow_remote_templates=True`` (and online) fetches the remote doc.
+def test_reference_doc_downloads_when_online(tmp_path):
+    """The remote template is fetched both with the explicit opt-in AND by default.
 
-    Parameters
-    ----------
-    tmp_path : pathlib.Path
-        Pytest-provided temp dir holding a throwaway input file.
-
-    Notes
-    -----
-    The positive half of the template gate: with the opt-in flag set and
-    no ``--offline``, ``urlopen`` is called and its bytes are written to
-    the resolved reference doc. ``urlopen`` is mocked so the test never
-    touches the real network.
+    Pins the v2.5.0 behaviour: with ``allow_remote_templates=True`` OR with no
+    kwargs at all (the remote deraison.ai template is now the default branding),
+    an online resolve reaches ``urlopen`` and persists the fetched bytes.
+    ``urlopen`` is mocked so the test never touches the real host.
     """
     from md2star.cache import cache_dir
     from md2star.cli import _resolve_reference_doc
 
     input_path = tmp_path / "foo.md"
     input_path.write_text("# hi")
-    for f in cache_dir("templates").glob("*"):
-        f.unlink()
-
     fake_bytes = b"PK\x03\x04fake-docx-content"
 
     class _FakeResp:
@@ -239,67 +199,17 @@ def test_reference_doc_downloads_when_remote_explicitly_allowed(tmp_path):
             return None
 
         def read(self):
-            """Return the canned docx bytes the resolver should persist."""
             return fake_bytes
 
-    with patch(
-        "urllib.request.urlopen", return_value=_FakeResp(),
-    ) as mock_urlopen:
-        resolved = _resolve_reference_doc(
-            input_path, "docx",
-            allow_remote_templates=True,
-        )
-        # Opt-in + online → network fetched and its bytes were persisted.
-        assert mock_urlopen.called
-        assert resolved is not None
-        assert resolved.read_bytes() == fake_bytes
-
-
-def test_reference_doc_downloads_by_default(tmp_path):
-    """Since v2.5.0 the deraison.ai template is fetched with NO opt-in flag.
-
-    Parameters
-    ----------
-    tmp_path : pathlib.Path
-        Pytest-provided temp dir holding a throwaway input file.
-
-    Notes
-    -----
-    This pins the v2.5.0 behaviour change: calling
-    ``_resolve_reference_doc`` with default kwargs (no
-    ``allow_remote_templates``, no ``offline``) must reach the network
-    and persist the fetched bytes — the remote template is now the
-    default branding, not an opt-in. ``urlopen`` is mocked so the test
-    never touches the real deraison.ai host.
-    """
-    from md2star.cache import cache_dir
-    from md2star.cli import _resolve_reference_doc
-
-    input_path = tmp_path / "foo.md"
-    input_path.write_text("# hi")
-    for f in cache_dir("templates").glob("*"):
-        f.unlink()
-
-    fake_bytes = b"PK\x03\x04default-remote-docx"
-
-    class _FakeResp:
-        """Minimal context-manager stand-in for a urlopen response."""
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return None
-
-        def read(self):
-            """Return the canned docx bytes the resolver should persist."""
-            return fake_bytes
-
-    with patch(
-        "urllib.request.urlopen", return_value=_FakeResp(),
-    ) as mock_urlopen:
-        # No kwargs at all — the v2.5.0 default must still fetch.
-        resolved = _resolve_reference_doc(input_path, "docx")
-        assert mock_urlopen.called
+    # Both the explicit opt-in and the bare default must fetch and persist.
+    for resolve_kwargs in ({"allow_remote_templates": True}, {}):
+        # Wipe the cache so a prior download can't mask the fetch under test.
+        for f in cache_dir("templates").glob("*"):
+            f.unlink()
+        with patch("urllib.request.urlopen", return_value=_FakeResp()) as mock_urlopen:
+            resolved = _resolve_reference_doc(input_path, "docx", **resolve_kwargs)
+            assert mock_urlopen.called, resolve_kwargs
+            assert resolved is not None
+            assert resolved.read_bytes() == fake_bytes
         assert resolved is not None
         assert resolved.read_bytes() == fake_bytes

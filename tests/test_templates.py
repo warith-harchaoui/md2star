@@ -20,8 +20,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
-
 from md2star import templates as tpl
 
 # ──────────────────────────────────────────────────────────────────
@@ -104,67 +102,44 @@ class TestCli:
         assert re.search(r"→\s+per-project \(template\)\s+\S+template\.docx", out)
         assert "→  bundled" in out
 
-    @pytest.mark.parametrize(
-        "argv_extra, seed_local, use_src, expected_suffix",
-        [
-            # Default fmt is docx; empty CWD resolves to the bundled template.
-            ([], None, False, "template.docx"),
-            # Explicit --fmt docx behaves the same on an empty dir.
-            (["--fmt", "docx"], None, False, "template.docx"),
-            # --fmt pptx with a local template.pptx (in CWD) resolves to it.
-            (["--fmt", "pptx"], "template.pptx", False, "template.pptx"),
-            # A source-file arg keys resolution off the source's directory,
-            # not the CWD — the local template beside the source wins.
-            (["--fmt", "pptx"], "template.pptx", True, "template.pptx"),
-        ],
-    )
-    def test_path_resolves_expected_template(
-        self, capsys, tmp_path: Path, monkeypatch, argv_extra, seed_local, use_src, expected_suffix,
-    ) -> None:
+    def test_path_resolves_expected_template(self, capsys, tmp_path: Path, monkeypatch) -> None:
         """``path`` prints the resolved template for the format + environment.
 
         Sweeps default/explicit fmt, bundled fallback vs. local override, and
-        CWD-relative vs. source-file-relative resolution.
-
-        Parameters
-        ----------
-        capsys : pytest.CaptureFixture
-            Captures the one-line resolved path.
-        tmp_path : pathlib.Path
-            The working directory (CWD) and template location.
-        monkeypatch : pytest.MonkeyPatch
-            Chdir into ``tmp_path`` so relative resolution is deterministic.
-        argv_extra : list[str]
-            Extra args appended after ``path`` (e.g. ``--fmt pptx``).
-        seed_local : str or None
-            Local template filename to create, or ``None`` for an empty dir.
-        use_src : bool
-            When true, pass a ``deck.md`` source arg so resolution keys off
-            the source's directory rather than the CWD.
-        expected_suffix : str
-            Expected trailing filename of the printed path.
+        CWD- vs. source-file-relative resolution. Each case is
+        (argv_extra, local-template filename or None, use_src, expected suffix).
         """
-        monkeypatch.chdir(tmp_path)
-        if seed_local is not None:
-            # Seed a per-project template so resolution has a local winner.
-            (tmp_path / seed_local).write_bytes(b"PK\x03\x04stub")
-        argv = ["path", *argv_extra]
-        if use_src:
-            # A source file next to the template exercises source-dir keying.
-            src = tmp_path / "deck.md"
-            src.write_text("# Hi\n")
-            argv.append(str(src))
+        cases = [
+            ([], None, False, "template.docx"),                          # default fmt = docx
+            (["--fmt", "docx"], None, False, "template.docx"),           # explicit docx
+            (["--fmt", "pptx"], "template.pptx", False, "template.pptx"),  # local CWD override
+            (["--fmt", "pptx"], "template.pptx", True, "template.pptx"),   # source-dir keying
+        ]
+        for i, (argv_extra, seed_local, use_src, expected_suffix) in enumerate(cases):
+            # A fresh sub-CWD per case so seeded local templates don't leak across.
+            work = tmp_path / f"case{i}"
+            work.mkdir()
+            monkeypatch.chdir(work)
+            if seed_local is not None:
+                # Seed a per-project template so resolution has a local winner.
+                (work / seed_local).write_bytes(b"PK\x03\x04stub")
+            argv = ["path", *argv_extra]
+            if use_src:
+                # A source file next to the template exercises source-dir keying.
+                src = work / "deck.md"
+                src.write_text("# Hi\n")
+                argv.append(str(src))
 
-        rc = tpl.main(argv)
-        assert rc == 0
-        line = capsys.readouterr().out.strip()
-        # The printed path ends in the expected template and points at a
-        # real file (bundled fallback) or the seeded local override.
-        assert line.endswith(expected_suffix)
-        if seed_local is None:
-            assert Path(line).exists()
-        else:
-            assert line == str((tmp_path / seed_local).resolve())
+            rc = tpl.main(argv)
+            assert rc == 0
+            line = capsys.readouterr().out.strip()
+            # Ends in the expected template and points at a real file (bundled
+            # fallback) or the seeded local override.
+            assert line.endswith(expected_suffix)
+            if seed_local is None:
+                assert Path(line).exists()
+            else:
+                assert line == str((work / seed_local).resolve())
 
     def test_cli_dispatches_templates_subcommand(self, capsys) -> None:
         """``md2star templates list`` reaches ``templates.main`` via ``cli.main``.
