@@ -28,6 +28,13 @@ Set the ``MD2STAR_LINT_MODEL`` env variable to override the default tag
 without editing code (useful on private registries or for trying a larger
 model).
 
+Transport is transparent: with the optional ``md2star[ai]`` extra installed
+the request goes through the official ``ollama`` Python client (via
+:mod:`md2star.preprocessing._ollama_client`); without it the same request is
+sent with a hand-rolled :mod:`urllib.request` POST. Behaviour is identical
+either way — the extra only buys the ergonomic typed client, never a
+different result.
+
 
 Author
 ------
@@ -45,6 +52,7 @@ import time
 import urllib.request
 
 from ..logging import get_logger
+from . import _ollama_client
 
 # Module logger — child of the root "md2star" logger (configured by the CLI).
 logger = get_logger(__name__)
@@ -92,6 +100,11 @@ Return ONLY the fixed Markdown, character for character where no fix is needed."
 
 def _fetch_ollama_models(timeout: float = 2.0) -> list[str] | None:
     """Return installed model names from ``/api/tags``, or None if unreachable."""
+    # Fast path: with the ``md2star[ai]`` extra the official client answers the
+    # same query with a typed response. It returns None when the extra is
+    # absent, in which case we fall through to the zero-dependency urllib probe.
+    if _ollama_client.OLLAMA is not None:
+        return _ollama_client.list_model_names(timeout)
     # /api/tags lists locally-pulled models. A broad except → None means
     # "daemon unreachable"; callers treat that as "no models" and degrade
     # gracefully rather than surfacing a connection error to the user.
@@ -253,26 +266,36 @@ def lint_with_llm(content: str, model: str | None = None) -> str:
     try:
         # temperature=0.0 for a deterministic, minimal syntax fix — we want a
         # corrector, not a creative rewriter. The prompt precedes the document.
-        payload = json.dumps({
-            "model": model,
-            "prompt": _LINT_PROMPT + "\n\n" + content,
-            "stream": False,
-            "options": {"temperature": 0.0},
-        }).encode("utf-8")
+        prompt = _LINT_PROMPT + "\n\n" + content
+        if _ollama_client.OLLAMA is not None:
+            # ``[ai]`` extra installed → route through the official client; it
+            # returns the trimmed response or None (which we map to the empty
+            # string so the shared "keep original" guards below apply).
+            fixed = _ollama_client.generate(
+                model, prompt, options={"temperature": 0.0}, timeout=30
+            ) or ""
+        else:
+            # Zero-dependency fallback: POST to /api/generate ourselves.
+            payload = json.dumps({
+                "model": model,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.0},
+            }).encode("utf-8")
 
-        req = urllib.request.Request(
-            "http://localhost:11434/api/generate",
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "md2star/1.0",
-            },
-            method="POST",
-        )
-        # 30s cap on the whole request; the response holds the fixed markdown.
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            fixed = result.get("response", "").strip()
+            req = urllib.request.Request(
+                "http://localhost:11434/api/generate",
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "md2star/1.0",
+                },
+                method="POST",
+            )
+            # 30s cap on the whole request; the response holds the fixed markdown.
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                fixed = result.get("response", "").strip()
 
         # Empty response → nothing to apply, keep the original.
         if not fixed:

@@ -177,7 +177,7 @@ plus à installer.
 - **Résolution gracieuse des chemins d'images** : URLs, chemins absolus et chemins relatifs « marchent comme on s'y attend ». Une référence relative `![](images/foo.png)` est résolue par rapport au dossier du fichier source.
 - **Identité visuelle zéro-config** : déposez un `template.docx` / `template.pptx` à côté de votre Markdown, md2star le détecte automatiquement comme `--reference-doc`. Si aucun n'existe, md2star télécharge par défaut (depuis v2.5.0) le template `deraison.ai` et le met en cache ; passez `--no-remote-templates` / `--offline` pour utiliser le template embarqué à la place.
 - **CLI auto-documentée** : chaque wrapper supporte `--help` / `-h` et affiche d'abord les options spécifiques à md2star puis `pandoc --help`. Essayez `md2docx --help`, `md2pptx --help` ou `md2star --help`.
-- **Linter LLM opt-in** : une passe locale Ollama corrige les erreurs de syntaxe (liens d'images cassés, fences non fermées, pipes mal formés) **avant** que Pandoc lise le fichier. **Désactivé par défaut** ; ajoutez `--lint` pour l'activer. Le wrapper lance alors `ollama serve` et `ollama pull` le modèle par défaut à la demande — `gemma4:e2b-mlx` sur macOS (build MLX optimisé Apple Silicon) ou `gemma4:e2b` sur Linux/Windows.
+- **Linter LLM opt-in** : une passe locale Ollama corrige les erreurs de syntaxe (liens d'images cassés, fences non fermées, pipes mal formés) **avant** que Pandoc lise le fichier. **Désactivé par défaut** ; ajoutez `--lint` pour l'activer. Le wrapper lance alors `ollama serve` et `ollama pull` le modèle par défaut à la demande — `gemma4:e2b-mlx` sur macOS (build MLX optimisé Apple Silicon) ou `gemma4:e2b` sur Linux/Windows. La passe fonctionne **sans dépendance Python** (via `urllib` de la stdlib) ; l'extra optionnel `md2star[ai]` bascule sur le client officiel `ollama` pour une API plus ergonomique, sans changer le comportement.
 - **Texte alternatif rédigé par IA** : avec `--lint`, chaque `![](src)` au texte alternatif vide reçoit une description générée par modèle de vision (même modèle `gemma4:e2b`, cache par image). Surchargez le modèle via `MD2STAR_ALT_TEXT_MODEL`.
 - **Compagnon : Adaptateur de Templates IA** : pour brander un template PPTX
   d'entreprise dont les noms de mises en page ne suivent pas la convention
@@ -208,6 +208,8 @@ Node.js que pour Mermaid ; Ollama que pour `--lint`.
   brew install node
   # Optionnel : --lint et le texte alt IA nécessitent Ollama
   brew install ollama
+  # Optionnel : transport IA plus ergonomique (client ollama officiel)
+  pipx inject md2star ollama      # équivalent à l'extra md2star[ai]
   ```
 
 - Ubuntu 🐧 : `sudo apt-get install pandoc pipx`
@@ -322,7 +324,7 @@ md2docx brouillon.md --lint
 md2docx brouillon.md --no-lint
 ```
 
-Lorsque vous passez `--lint`, une passe locale Ollama (modèle texte `gemma4:e2b-mlx` sur macOS, `gemma4:e2b` sur Linux/Windows) corrige liens d'images cassés, fences non fermées et pipes de tables mal formés avant que Pandoc lise le fichier. Le même `--lint` remplit aussi les `![](src)` vides en utilisant un modèle de vision local (`MD2STAR_ALT_TEXT_MODEL` pour surcharger). Le wrapper démarre le démon à la demande (`ollama serve`) et tire le modèle par défaut au premier usage. Si `--lint` est passé mais qu'Ollama n'est pas installé, md2star affiche un avertissement et continue avec le Markdown original.
+Lorsque vous passez `--lint`, une passe locale Ollama (modèle texte `gemma4:e2b-mlx` sur macOS, `gemma4:e2b` sur Linux/Windows) corrige liens d'images cassés, fences non fermées et pipes de tables mal formés avant que Pandoc lise le fichier. Le même `--lint` remplit aussi les `![](src)` vides en utilisant un modèle de vision local (`MD2STAR_ALT_TEXT_MODEL` pour surcharger). Le wrapper démarre le démon à la demande (`ollama serve`) et tire le modèle par défaut au premier usage. Si `--lint` est passé mais qu'Ollama n'est pas installé, md2star affiche un avertissement et continue avec le Markdown original. Par défaut la requête passe par `urllib` (stdlib, aucune dépendance Python) ; installez l'extra `md2star[ai]` — `pip install 'md2star[ai]'` ou `pipx inject md2star ollama` — pour utiliser le client officiel `ollama` à la place (même modèles, même sortie, mêmes garanties de repli).
 
 ---
 

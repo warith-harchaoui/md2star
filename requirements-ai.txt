@@ -1,0 +1,29 @@
+# requirements-ai.txt — optional AI transport for the `--lint` passes
+# ====================================================================
+# The opt-in `--lint` syntax fixer and empty-alt-text drafter talk to a local
+# Ollama daemon. Out of the box they do so with ZERO Python dependencies (a
+# hand-rolled `urllib` POST, shipped in the core wheel). Installing this file
+# adds the official `ollama` client so the same requests go through its
+# ergonomic, typed API instead — behaviour is identical, only the transport
+# changes.
+#
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements-ai.txt
+#   md2docx draft.md --lint      # now routed through the ollama client
+#
+# Mirrors pyproject.toml's [project.optional-dependencies].ai — the single
+# source of truth for the pin — and inherits the core runtime install so the
+# converters themselves are present too.
+-r requirements.txt
+ollama>=0.4,<1
+
+# ---------------------------------------------------------------------------
+# System Ollama is STILL required at runtime, with or without this client:
+#   - the `ollama` binary (for `ollama serve` / `ollama pull` on demand)
+#   - a reachable daemon on http://localhost:11434
+#     macOS 🍎 : brew install ollama            (install brew via https://brew.sh/)
+#     Ubuntu 🐧: curl -fsSL https://ollama.com/install.sh | sh
+#     Windows 🪟: winget install --id Ollama.Ollama
+# Without Ollama installed, `--lint` prints a one-line warning and falls back
+# to the original Markdown — the pass is never load-bearing.
+# ---------------------------------------------------------------------------

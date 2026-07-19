@@ -6,6 +6,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.7.0] — 2026-07-19
+
+### Added
+- **`md2star[ai]` extra — the official `ollama` Python client for the AI passes.**
+  The opt-in `--lint` syntax fixer and empty-alt-text drafter can now talk to the
+  local Ollama daemon through the ergonomic, typed `ollama` client instead of a
+  hand-rolled `urllib.request` POST. Install with `pip install 'md2star[ai]'`
+  (or `pipx inject md2star ollama`). The extra is purely a transport upgrade:
+  behaviour is identical to v2.0, and **without** it the passes keep working via
+  the zero-dependency urllib fallback. System Ollama (the daemon + `ollama pull`)
+  is still required at runtime either way. New
+  `md2star/preprocessing/_ollama_client.py` wrapper + `tests/test_ollama_client.py`
+  (both transports and both response shapes covered against an injected fake, so
+  the suite stays offline).
+
 ## [2.6.0] — 2026-07-18
 
 ### Added

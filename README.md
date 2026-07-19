@@ -187,7 +187,7 @@ in the core wheel; there is nothing extra to install.
 - **Graceful Image Path Resolution**: URLs, absolute paths, and relative paths all "just work". Relative `![](images/foo.png)` references resolve against the input file's directory — so `md2docx subdir/file.md` from any cwd still finds the image. No need to `cd` into the source folder first.
 - **Zero-Config Branding**: drop a `template.docx` / `template.pptx` next to your Markdown and md2star will pick it up automatically as `--reference-doc`. If neither exists, md2star fetches the `deraison.ai` default template by default (since v2.5.0) and caches it; pass `--no-remote-templates` / `--offline` to use the bundled template instead.
 - **Discoverable CLI**: every wrapper supports `--help` / `-h` and prints the md2star-specific flags followed by `pandoc --help`, so the full conversion surface is one command away. Try `md2docx --help`, `md2pptx --help`, or `md2star --help`.
-- **Opt-in LLM Linter**: a local Ollama pass fixes syntax-level mistakes (broken image links, unclosed fences, malformed pipes) **before** Pandoc parses the file. **Off by default** so conversions stay deterministic; pass `--lint` to opt in. The wrapper then spawns `ollama serve` and `ollama pull`s the default model on demand — `gemma4:e2b-mlx` on macOS (Apple-Silicon-optimized MLX build) or `gemma4:e2b` on Linux/Windows.
+- **Opt-in LLM Linter**: a local Ollama pass fixes syntax-level mistakes (broken image links, unclosed fences, malformed pipes) **before** Pandoc parses the file. **Off by default** so conversions stay deterministic; pass `--lint` to opt in. The wrapper then spawns `ollama serve` and `ollama pull`s the default model on demand — `gemma4:e2b-mlx` on macOS (Apple-Silicon-optimized MLX build) or `gemma4:e2b` on Linux/Windows. The pass works with **zero Python dependencies** (stdlib `urllib`); installing the optional `md2star[ai]` extra swaps in the official `ollama` client for a nicer API with no change in behaviour.
 - **AI-Drafted Alt-Text**: with `--lint`, every empty `![](src)` reference gets a vision-model-drafted alt text (same `gemma4:e2b` model, cached per image). Override the model with `MD2STAR_ALT_TEXT_MODEL`.
 - **Companion: AI Template Adapter**: when you need to brand a corporate
   PPTX template that doesn't follow Pandoc's standard layout names, use the
@@ -220,6 +220,8 @@ is needed for Mermaid; Ollama is needed for `--lint`.
   brew install node
   # Optional: --lint and AI alt-text need Ollama
   brew install ollama
+  # Optional: nicer AI transport (official ollama client) — pipx-friendly
+  pipx inject md2star ollama      # equivalent to the md2star[ai] extra
   ```
 
 - Ubuntu 🐧 : `sudo apt-get install pandoc pipx`
@@ -334,6 +336,8 @@ md2docx draft.md --no-lint
 ```
 
 When you pass `--lint`, a local Ollama pass (text-only `gemma4:e2b-mlx` on macOS, `gemma4:e2b` on Linux/Windows) fixes broken image links, unclosed code fences, and malformed table pipes before Pandoc sees the file. The same `--lint` flag also fills empty `![](src)` alt text via a local vision model (override the model with `MD2STAR_ALT_TEXT_MODEL`). The wrapper starts the daemon on demand (`ollama serve`) and pulls the default model on first use (`ollama pull gemma4:e2b…`) — a one-time download, narrated on stderr. If `--lint` is passed but Ollama isn't installed, md2star prints a one-line warning on stderr and falls back to the original Markdown so the conversion still succeeds.
+
+The request reaches the daemon over stdlib `urllib` by default (no Python dependency). Install the optional `md2star[ai]` extra — `pip install 'md2star[ai]'`, or `pipx inject md2star ollama` for a pipx install — to route through the official `ollama` client instead. It is a pure transport upgrade: same models, same output, same fallback guarantees; the extra only buys the typed client API.
 
 ---
 

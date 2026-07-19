@@ -22,6 +22,19 @@ import pytest
 from md2star.preprocessing import lint
 
 
+@pytest.fixture(autouse=True)
+def _force_urllib_transport(monkeypatch) -> None:
+    """Pin these tests to the zero-dependency urllib transport.
+
+    They mock ``urllib.request.urlopen`` to drive the fallback path, so if the
+    optional ``md2star[ai]`` extra happens to be installed in the dev env we
+    force ``_ollama_client.OLLAMA`` to ``None`` — otherwise lint would route
+    through the client and skip the very socket these tests fake. The dedicated
+    client path is covered in ``test_ollama_client.py``.
+    """
+    monkeypatch.setattr(lint._ollama_client, "OLLAMA", None)
+
+
 @contextmanager
 def _fake_http(payload: dict):
     """Yield a stand-in for ``urlopen(...)`` returning *payload* as JSON.

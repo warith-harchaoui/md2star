@@ -26,6 +26,10 @@ Per-image results are cached in ``$XDG_CACHE_HOME/md2star/alt-text/`` keyed
 by ``<image-md5>_<model>.txt`` so repeated runs over the same source tree
 do not re-query Ollama.
 
+Like the text lint, the transport is transparent: the ``md2star[ai]`` extra
+routes through the official ``ollama`` client, and its absence falls back to
+a hand-rolled :mod:`urllib.request` POST with no change in behaviour.
+
 
 Author
 ------
@@ -43,6 +47,7 @@ import urllib.request
 
 from ..cache import cache_dir
 from ..logging import get_logger
+from . import _ollama_client
 from .lint import (
     _default_lint_model,
     _ensure_model_pulled,
@@ -99,49 +104,64 @@ def _hash_file(path: str) -> str | None:
 
 
 def _generate_alt(image_path: str, model: str, timeout: float = 60.0) -> str | None:
-    """Ask Ollama's ``/api/generate`` to describe *image_path* with *model*.
+    """Ask Ollama's vision model to describe *image_path* with *model*.
 
     Returns the trimmed response on success, ``None`` on any failure — the
-    caller treats ``None`` as "leave the markdown unchanged".
+    caller treats ``None`` as "leave the markdown unchanged". With the
+    ``md2star[ai]`` extra the request goes through the official client;
+    without it we base64-post to ``/api/generate`` ourselves. Both paths
+    share the quote/whitespace cleanup below.
     """
-    # Ollama's vision API takes images as base64 in the JSON body, so read the
-    # bytes and encode. An unreadable file → None ("leave markdown unchanged").
-    try:
-        with open(image_path, "rb") as f:
-            img_b64 = base64.b64encode(f.read()).decode("ascii")
-    except OSError:
-        return None
+    if _ollama_client.OLLAMA is not None:
+        # ``[ai]`` extra installed → hand the image *path* to the client, which
+        # owns the read + base64 encoding. Any failure returns None (skip).
+        alt = _ollama_client.generate(
+            model,
+            _ALT_PROMPT,
+            images=[image_path],
+            options={"temperature": 0.2},
+            timeout=timeout,
+        )
+    else:
+        # Zero-dependency fallback: Ollama's vision API takes images as base64
+        # in the JSON body, so read the bytes and encode. Unreadable file →
+        # None ("leave markdown unchanged").
+        try:
+            with open(image_path, "rb") as f:
+                img_b64 = base64.b64encode(f.read()).decode("ascii")
+        except OSError:
+            return None
 
-    # stream=False so we get one complete JSON response; low temperature keeps
-    # alt-text deterministic-ish and on-task rather than creative.
-    payload = json.dumps({
-        "model": model,
-        "prompt": _ALT_PROMPT,
-        "images": [img_b64],
-        "stream": False,
-        "options": {"temperature": 0.2},
-    }).encode("utf-8")
+        # stream=False so we get one complete JSON response; low temperature
+        # keeps alt-text deterministic-ish and on-task rather than creative.
+        payload = json.dumps({
+            "model": model,
+            "prompt": _ALT_PROMPT,
+            "images": [img_b64],
+            "stream": False,
+            "options": {"temperature": 0.2},
+        }).encode("utf-8")
 
-    req = urllib.request.Request(
-        "http://localhost:11434/api/generate",
-        data=payload,
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "md2star/1.0",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
+        req = urllib.request.Request(
+            "http://localhost:11434/api/generate",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "md2star/1.0",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        alt = data.get("response")
 
-    alt = (data.get("response") or "").strip()
-    # Strip any surrounding quotes the model may have produced.
-    alt = alt.strip('"').strip("'").strip()
-    # Drop trailing periods so the rendered alt reads as a label rather
+    # Shared cleanup across both transports. Strip any surrounding quotes the
+    # model may have produced so the rendered alt reads as a label rather
     # than a sentence (matches the W3C-style examples we asked for).
+    alt = (alt or "").strip().strip('"').strip("'").strip()
     return alt or None
 
 
