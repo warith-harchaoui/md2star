@@ -23,6 +23,19 @@ The server binds to ``127.0.0.1`` only (no LAN exposure) and uses
 ``/preview`` reads. There is no auth and no sandbox — it is intended
 to run on the same machine as the user invoking it, just like Jupyter
 or Vite's dev server.
+
+Security note
+-------------
+The only untrusted input is the ``/fs/*`` path a browser sends. Every such
+path is funnelled through :func:`_safe_within_root`, which rejects ``..``
+segments, absolute paths and symlink escapes so a request can never read or
+write outside the single folder root the user opened. That confinement is
+unit-tested in ``tests/test_gui_security.py``.
+
+
+Author
+------
+`Warith Harchaoui <https://www.linkedin.com/in/warith-harchaoui/>`_
 """
 
 from __future__ import annotations

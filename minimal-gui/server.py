@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-md2star-overleaf · split-pane preview server
-============================================
+md2star minimal GUI · split-pane preview server
+================================================
 
 Tiny stdlib HTTP server that exposes the md2docx → PDF pipeline as
 a single endpoint the in-browser editor calls on every keystroke
@@ -37,7 +37,7 @@ Usage
 
 ::
 
-    cd ~/md2star-test/overleaf
+    cd minimal-gui
     python3 server.py                    # default: 127.0.0.1:8765
     python3 server.py --port 9999        # alt port
     python3 server.py --bind 0.0.0.0     # accept LAN connections

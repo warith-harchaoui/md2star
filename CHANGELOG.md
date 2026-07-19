@@ -6,6 +6,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **click CLI front-end (`md2star-x`).** A modern click-based command surface
+  (`md2star-x docx|pptx|pdf|gui|doctor`) over the exact same conversion pipeline
+  as the argparse wrappers — a thin adapter delegating to `md2star.cli._convert`,
+  so the two front-ends can never drift. `click>=8,<9` joins the core deps.
+- **Agent skill packaging (`skills/md2star/`).** md2star now ships as a Claude
+  Skill *and* OpenCode skill: `SKILL.md` with a trigger-rich description + SKIP
+  clause, and `references/{cli-reference,surfaces,triggers}.md`.
+  `scripts/check_triggers.py` enforces exhaustive trigger coverage (run in CI via
+  `tests/test_skill.py`).
+- **`scripts/brew.sh`** — idempotent macOS Homebrew bootstrap (pandoc + pipx +
+  md2star, with `--with-pdf/--with-mermaid/--with-ai/--all`); added to CI
+  shellcheck.
+- **AI-eval layer (`tests/test_ai_eval.py`, marker `ai_eval`).** Quality eval of
+  the opt-in `--lint`/alt-text passes against a real local Ollama daemon; skips
+  cleanly in CI where no daemon is present.
+
+### Changed
+- **Renamed the standalone preview server `overleaf/` → `minimal-gui/`** (the old
+  name borrowed a trademark and duplicated the `md2star gui` concept). No code
+  referenced the path, so nothing breaks; it is now the documented "minimal GUI"
+  surface. Added `md2star/gui_server.py`'s missing author header.
+
 ## [2.7.0] — 2026-07-19
 
 ### Added

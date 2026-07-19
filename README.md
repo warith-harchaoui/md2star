@@ -80,6 +80,11 @@ curl -F 'file=@report.md' 'http://localhost:8000/convert?fmt=docx' -o report.doc
 md2star-mcp                    # same tools (doctor / convert) over MCP
 ```
 
+Prefer click? `md2star-x docx|pptx|pdf|gui|doctor` is a click front-end over
+the same pipeline (ships with the core install). And md2star packages itself as
+a **Claude Skill / OpenCode skill** so an agent can drive it — see
+[`skills/md2star/`](skills/md2star/SKILL.md) and [`skills/README.md`](skills/README.md).
+
 See **[docs/installation.md](docs/installation.md)** for the full
 per-OS matrix (macOS / Ubuntu / Fedora / Arch / Windows), feature-
 by-feature dependency table, verification recipe, and the
@@ -215,7 +220,8 @@ hard system dependency; LibreOffice is needed for `md2pdf`; Node.js
 is needed for Mermaid; Ollama is needed for `--lint`.
 
 - macOS 🍎 : `brew install pandoc pipx`
-  (install `brew` thanks to [brew.sh](https://brew.sh/))
+  (install `brew` thanks to [brew.sh](https://brew.sh/)) — or run the
+  one-shot idempotent bootstrap `bash scripts/brew.sh --with-pdf`
 
   ```bash
   pipx ensurepath          # one-time: add ~/.local/bin to PATH

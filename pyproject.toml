@@ -32,6 +32,10 @@ classifiers = [
     "Topic :: Office/Business",
 ]
 dependencies = [
+    # click backs the `md2star-x` front-end (md2star/click_cli.py); a small,
+    # ubiquitous CLI library kept in the core deps so that command is always
+    # available alongside the argparse wrappers.
+    "click>=8,<9",
     "langdetect>=1.0.9,<2",
     # Pillow 12.x ships fixes for ~37 CVEs flagged on 11.3 by
     # pip-audit (PYSEC-2026-165, CVE-2026-25990, CVE-2026-40192,
@@ -99,6 +103,8 @@ md2star = "md2star.cli:main"
 md2docx = "md2star.cli:md2docx_main"
 md2pptx = "md2star.cli:md2pptx_main"
 md2pdf  = "md2star.cli:md2pdf_main"
+# Modern click front-end over the same conversion pipeline (md2star/click_cli.py).
+md2star-x = "md2star.click_cli:cli"
 # HTTP + MCP servers (install with the [api] / [api,mcp] extras).
 md2star-api = "md2star.api:main"
 md2star-mcp = "md2star.mcp:main"
@@ -135,6 +141,8 @@ include = [
     "/docs",
     "/assets",
     "/scripts",
+    "/skills",
+    "/minimal-gui",
     "/Makefile",
     "/README.md",
     "/LISEZMOI.md",
@@ -167,6 +175,7 @@ addopts = "-ra"
 # round-trip); skip them with `pytest -m "not slow"` for a millisecond suite.
 markers = [
     "slow: end-to-end test that renders via LibreOffice and/or runs kreuzberg OCR",
+    "ai_eval: quality eval of the opt-in Ollama passes; needs a local daemon, skips in CI",
 ]
 
 # Coverage configuration — wired into the CI's `coverage` job (see
