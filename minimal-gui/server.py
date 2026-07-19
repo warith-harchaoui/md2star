@@ -83,7 +83,7 @@ from typing import Any
 #: and removed on clean shutdown. Each request lands in a fresh
 #: subdirectory so concurrent users (rare in this dev loop) cannot
 #: clobber each other.
-WORK_DIR: Path = Path(tempfile.mkdtemp(prefix="md2star-overleaf-"))
+WORK_DIR: Path = Path(tempfile.mkdtemp(prefix="md2star-minimal-gui-"))
 
 
 #: Process-level lock — soffice + the LibreOffice user profile do not
@@ -99,7 +99,7 @@ STATIC_DIR: Path = Path(__file__).resolve().parent
 
 #: Path to the md2star project root — we add it to ``sys.path`` so
 #: ``python -m md2star`` resolves without an install. Walks up from
-#: this file: ``overleaf/server.py`` lives inside the project.
+#: this file: ``minimal-gui/server.py`` lives inside the project.
 PROJECT_DIR: Path = STATIC_DIR.parent
 
 
@@ -236,7 +236,7 @@ def render_markdown_to_pdf(markdown: str, fmt: str = "docx") -> bytes:
 class OverleafHandler(http.server.BaseHTTPRequestHandler):
     """Three routes — see module docstring."""
 
-    server_version = "md2star-overleaf/0.1"
+    server_version = "md2star-minimal-gui/0.1"
 
     # Silence default-stdlib access log; we re-emit a slimmer line.
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: D401
@@ -372,7 +372,7 @@ class OverleafHandler(http.server.BaseHTTPRequestHandler):
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point."""
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
-        prog="md2star-overleaf-server",
+        prog="md2star-minimal-gui-server",
         description=(
             "Single-page Overleaf-style editor for md2star: "
             "Markdown on the left, live PDF on the right, "
