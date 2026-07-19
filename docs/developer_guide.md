@@ -31,7 +31,7 @@ graph TD;
 
 ## 🐍 1. Python Preprocessing Engine
 
-**Entry point:** [`md2star/cli.py`](../md2star/cli.py) — the single Python module that registers the `md2docx`, `md2pptx`, and `md2star` console scripts.
+**Entry point:** [`md2star/cli.py`](../md2star/cli.py) — the single Python module that registers the `md2docx`, `md2pptx`, `md2pdf`, and `md2star` console scripts. A second front-end, [`md2star/click_cli.py`](../md2star/click_cli.py) (`md2star-x docx|pptx|pdf|gui|doctor`), is a thin click adapter that reconstructs the flag list and delegates to the same `md2star.cli._convert`, so the two surfaces can never drift.
 
 **Implementation:** [`md2star/preprocessing/`](../md2star/preprocessing/) (9 modules; run `wc -l md2star/preprocessing/*.py` for an up-to-date total)
 
@@ -169,6 +169,29 @@ Exercises the full `md2docx` / `md2pptx` pipeline against sample Markdown files 
 make test
 ```
 
+### Surface, eval, and idempotence layers
+
+Beyond the preprocessor unit tests, the suite also guards the newer
+surfaces and behavioural invariants:
+
+- **Surfaces** — `tests/test_click_cli.py` (the `md2star-x` click
+  front-end), `tests/test_api.py` / `tests/test_mcp.py` (the FastAPI +
+  FastAPI-MCP servers, skipped cleanly when the `api`/`mcp` deps are
+  absent), and `tests/test_skill.py` (the agent skill).
+- **Idempotence** — `tests/test_idempotence.py` and
+  `tests/test_roundtrip.py` assert the `md → docx → md` fixed point
+  (`g(g(x)) == g(x)`); `tests/test_roundtrip_ocr.py` (marker `slow`)
+  proves the exact `md → docx → pdf → text` identity `g(f(x)) = x` via
+  LibreOffice + kreuzberg.
+- **AI-eval** — `tests/test_ai_eval.py` (marker `ai_eval`) is a quality
+  eval of the opt-in `--lint` / alt-text passes against a real local
+  Ollama daemon; it skips cleanly in CI where no daemon runs.
+- **Skill triggers** — `scripts/check_triggers.py` (driven by
+  `tests/test_skill.py`, also a standalone CI step) asserts that
+  `skills/md2star/SKILL.md`'s `description` covers every required
+  trigger bucket plus an explicit SKIP clause, so the skill neither
+  under- nor over-fires.
+
 ---
 
 ## 📁 Repository Structure
@@ -177,9 +200,14 @@ make test
 md2star/
 ├── md2star/                          # Importable Python package
 │   ├── __init__.py                   # Re-exports preprocess_markdown, __version__
-│   ├── cli.py                        # md2docx / md2pptx / md2pdf / md2star console scripts
+│   ├── cli.py                        # md2docx / md2pptx / md2pdf / md2star console scripts (argparse)
+│   ├── click_cli.py                  # md2star-x docx|pptx|pdf|gui|doctor (click front-end → cli._convert)
+│   ├── api.py                        # FastAPI HTTP surface (md2star-api; [api] extra)
+│   ├── mcp.py                        # FastAPI-MCP server (md2star-mcp; [mcp] extra)
 │   ├── cache.py                      # $XDG_CACHE_HOME/md2star/ resolver
 │   ├── doctor.py                     # `md2star doctor` environment diagnostic
+│   ├── templates.py                  # `md2star templates {list,path}` resolution
+│   ├── logging.py                    # Named stdlib logger + configure() for --verbose/--quiet
 │   ├── gui_server.py                 # `md2star gui` local web editor (stdlib http.server, 127.0.0.1)
 │   ├── errors.py                     # Typed exception classes
 │   ├── postprocess.py                # DOCX table-style re-injection
@@ -214,10 +242,20 @@ md2star/
 │   ├── test_lua_filter.py            # End-to-end Lua filter tests via pandoc
 │   ├── test_postprocess.py           # inject_table_styles round-trips
 │   ├── test_gui_security.py         # `/fs/*` path-confinement tests for the GUI server
+│   ├── test_click_cli.py           # md2star-x click front-end
+│   ├── test_api.py / test_mcp.py    # FastAPI + FastAPI-MCP surfaces (skip without deps)
+│   ├── test_idempotence.py         # md → docx → md fixed point
+│   ├── test_roundtrip_ocr.py       # md → docx → pdf → text identity (slow: LibreOffice + kreuzberg)
+│   ├── test_ai_eval.py             # quality eval of --lint / alt-text (ai_eval: needs local Ollama)
+│   ├── test_skill.py               # skill trigger coverage via check_triggers.py
 │   └── examples/                     # Multi-page demo .md inputs (outputs regenerable via run.sh)
+├── minimal-gui/                       # Standalone stdlib md→PDF preview server (python3 minimal-gui/server.py)
+├── skills/                            # Claude Skill / OpenCode skill packaging (skills/md2star/SKILL.md)
 ├── scripts/
 │   ├── install.sh / install.ps1      # pipx installer + LibreOffice auto-install (--no-libreoffice opt-out)
 │   ├── uninstall.sh / uninstall.ps1  # Confirm + pipx uninstall + legacy cleanup
+│   ├── brew.sh                        # Idempotent macOS Homebrew bootstrap (--with-pdf/--with-mermaid/--with-ai/--all)
+│   ├── check_triggers.py             # Enforces skill trigger coverage (CI + tests/test_skill.py)
 │   └── test.sh                       # Integration suite
 ├── .github/workflows/ci.yml          # pytest matrix + integration + shellcheck
 ├── Makefile                          # `make install / dev / test / build / publish`
@@ -242,3 +280,13 @@ vendored under `md2star/data/gui/`, which is why the wheel grew from
 server-side draft auto-save) is covered by
 `tests/test_gui_security.py`. It is a fully offline, localhost-only
 Markdown→PDF editor with live PDF preview (PDF.js).
+
+### Minimal GUI (`minimal-gui/`)
+
+Separate from the bundled editor, `minimal-gui/server.py` is a
+single-file, zero-dependency stdlib preview server that exposes
+`md → PDF` on one `/render` endpoint — a hackable, embeddable starting
+point when the full `md2star gui` is overkill. Run it straight from the
+repo with `python3 minimal-gui/server.py`. (This directory was renamed
+from the earlier `overleaf/`; the "Overleaf-style" adjective for the
+editor UX stays, but there is no longer an `overleaf/` path.)

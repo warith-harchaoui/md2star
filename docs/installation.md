@@ -15,11 +15,30 @@ md2docx README.md                   # smoke test → produces README.docx
 ```
 
 That gets you `md2docx`, `md2pptx`, `md2pdf`, and `md2star` on your
-PATH. If you cloned the repository instead, `bash scripts/install.sh`
-runs the same check and then `pipx install .` from the local copy
-(**conservative by default** — it does not auto-install Pandoc /
-LibreOffice; pass `--install-system-deps` to have it run the
-platform's package manager).
+PATH, plus the click front-end `md2star-x` (`click` is a core
+dependency). If you cloned the repository instead, `bash
+scripts/install.sh` runs the same check and then `pipx install .`
+from the local copy (**conservative by default** — it does not
+auto-install Pandoc / LibreOffice; pass `--install-system-deps` to
+have it run the platform's package manager).
+
+### Optional install profiles
+
+The core wheel already ships the four CLIs, the `md2star-x` click
+front-end, and the bundled `md2star gui`. A few opt-in extras layer on
+Python packages for other surfaces:
+
+| Extra | Command | What it adds |
+|-------|---------|--------------|
+| `api` | `pip install 'md2star[api]'` | FastAPI HTTP server (`md2star-api`). |
+| `mcp` | `pip install 'md2star[mcp]'` | FastAPI-MCP server (`md2star-mcp`). |
+| `ai`  | `pip install 'md2star[ai]'`  | Official `ollama` client for the opt-in `--lint` / alt-text passes (they otherwise work via a zero-dependency `urllib` fallback). |
+| `gui` | `pip install 'md2star[gui]'` | Self-documenting alias — resolves to the **same** wheel as plain `md2star`; the GUI is already bundled and adds no Python packages. |
+
+md2star also packages itself as a **Claude Skill / OpenCode skill**
+under `skills/md2star/` so an agent can drive it — see
+[`skills/README.md`](../skills/README.md) for the copy-into-place
+install.
 
 ## Installation matrix
 
@@ -58,6 +77,18 @@ kill-switch that forbids every network touch.
   brew install node
   # Optional: --lint and AI alt-text
   brew install ollama
+  ```
+
+  Or run the one-shot idempotent Homebrew bootstrap, which installs
+  pandoc + pipx + md2star and (with flags) the optional system tools:
+
+  ```bash
+  bash scripts/brew.sh                 # core: pandoc + pipx + md2star
+  bash scripts/brew.sh --with-pdf      # + LibreOffice (md2pdf)
+  bash scripts/brew.sh --with-mermaid  # + Node.js (mermaid)
+  bash scripts/brew.sh --with-ai       # + Ollama (--lint / alt-text)
+  bash scripts/brew.sh --all           # everything above
+  bash scripts/brew.sh --dry-run       # print the commands, run nothing
   ```
 
 - Ubuntu 🐧 : `sudo apt-get install -y pandoc pipx`
@@ -121,6 +152,15 @@ md2star doctor          # full environment report
 md2star --help          # subcommand list
 md2star gui             # launch the offline localhost web editor (Ctrl-C to stop)
 md2docx --help          # per-format flags
+md2star-x doctor        # same diagnostic via the click front-end
+```
+
+The single-file, zero-dependency **minimal GUI** — a hackable stdlib
+preview server that exposes `md → PDF` on one endpoint — runs straight
+from the repo without installing anything extra:
+
+```bash
+python3 minimal-gui/server.py   # then open the printed http://127.0.0.1 URL
 ```
 
 A healthy install shows `OK` on every Core row and ends with:
@@ -176,7 +216,8 @@ bash scripts/uninstall.sh --yes              # silent
 bash scripts/uninstall.sh --clear-cache      # also wipe $XDG_CACHE_HOME/md2star/
 ```
 
-This removes the pipx-managed `md2star` package and its four console
-scripts (`md2docx`, `md2pptx`, `md2pdf`, `md2star`). It does NOT
-uninstall Pandoc / LibreOffice / Node / Ollama — those are
-system-wide and the user may want to keep them.
+This removes the pipx-managed `md2star` package and all its console
+scripts (`md2docx`, `md2pptx`, `md2pdf`, `md2star`, `md2star-x`, and —
+when the `api`/`mcp` extras are installed — `md2star-api` /
+`md2star-mcp`). It does NOT uninstall Pandoc / LibreOffice / Node /
+Ollama — those are system-wide and the user may want to keep them.

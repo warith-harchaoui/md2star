@@ -67,6 +67,24 @@ d'installation : `pip install -r requirements.txt` pour la CLI, et
 `pip install -r requirements-gui.txt` pour la CLI + la GUI (même wheel —
 la GUI n'ajoute aucune dépendance Python supplémentaire).
 
+Vous préférez HTTP ou MCP ? md2star embarque aussi une surface FastAPI et un
+serveur MCP :
+
+```bash
+pip install 'md2star[api,mcp]'
+
+md2star-api                    # FastAPI : /health, /doctor, /convert — docs sur /docs
+curl -F 'file=@rapport.md' 'http://localhost:8000/convert?fmt=docx' -o rapport.docx
+
+md2star-mcp                    # mêmes outils (doctor / convert) via MCP
+```
+
+Vous préférez click ? `md2star-x docx|pptx|pdf|gui|doctor` est une façade click
+au-dessus du même pipeline (fournie avec l'installation cœur). Et md2star se
+distribue aussi comme **Claude Skill / OpenCode skill** pour qu'un agent le
+pilote — voir [`skills/md2star/`](skills/md2star/SKILL.md) et
+[`skills/README.md`](skills/README.md).
+
 Voir **[docs/installation.md](docs/installation.md)** pour la matrice
 complète par OS (macOS / Ubuntu / Fedora / Arch / Windows), le tableau
 de dépendances par fonctionnalité et le guide de dépannage.
@@ -202,7 +220,8 @@ système obligatoire ; LibreOffice n'est requis que pour `md2pdf` ;
 Node.js que pour Mermaid ; Ollama que pour `--lint`.
 
 - macOS 🍎 : `brew install pandoc pipx`
-  (installez `brew` grâce à [brew.sh](https://brew.sh/))
+  (installez `brew` grâce à [brew.sh](https://brew.sh/)) — ou lancez le
+  bootstrap idempotent en une commande `bash scripts/brew.sh --with-pdf`
 
   ```bash
   pipx ensurepath          # une fois : ajoute ~/.local/bin au PATH

@@ -40,6 +40,13 @@ gives you the runtime set only (`-e .`).
   - `cli.py` — the single source of truth for `md2docx` / `md2pptx` /
     `md2pdf` / `md2star`. There used to be a bash wrapper, a PowerShell
     wrapper, and a `.cmd` wrapper. Don't bring them back.
+  - `click_cli.py` — the `md2star-x docx|pptx|pdf|gui|doctor` click
+    front-end. It is a *thin adapter*: it delegates to
+    `cli._convert`, so behaviour is defined once. Add a flag in
+    `cli.py` first, then wire it through here — never fork the logic.
+  - `api.py` / `mcp.py` — the FastAPI HTTP surface (`md2star-api`,
+    `[api]` extra) and the FastAPI-MCP server (`md2star-mcp`, `[mcp]`
+    extra). Both wrap the same conversion pipeline.
   - `doctor.py` — `md2star doctor` environment diagnostic.
   - `preprocessing/` — the 12-phase Markdown preprocessor. The order
     is in `pipeline.py` and is *load-bearing*; reordering needs a
@@ -65,11 +72,25 @@ gives you the runtime set only (`-e .`).
     LibreOffice + kreuzberg); the CI `ocr-roundtrip` job installs the toolchain
     and runs it for real (and fails if it skips).
 
-  Other files cover the CLI, doctor, API/MCP surfaces, templates, and
-  bibliography localization.
+  Other files cover the CLI surfaces (`test_click_cli.py`,
+  `test_api.py`, `test_mcp.py`), the agent skill (`test_skill.py`),
+  idempotence (`test_idempotence.py`), doctor, templates, and
+  bibliography localization. `test_ai_eval.py` (marker `ai_eval`) is a
+  quality eval of the opt-in `--lint` / alt-text passes against a real
+  local Ollama daemon and skips cleanly when none is running.
+- `minimal-gui/` — the standalone stdlib `md → PDF` preview server
+  (`python3 minimal-gui/server.py`). Renamed from the old `overleaf/`;
+  don't reintroduce that path.
+- `skills/` — the Claude Skill / OpenCode skill packaging
+  (`skills/md2star/SKILL.md` + `references/`). The host model only reads
+  the `description`, so `scripts/check_triggers.py` enforces trigger
+  coverage — edit the description and `references/triggers.md` together
+  and re-run it.
 - `scripts/` — `install.sh` / `uninstall.sh` / `test.sh` plus the
-  PowerShell siblings (`install.ps1` / `uninstall.ps1` / `update.ps1`)
-  and `audit_comments.py`. Thin wrappers; the real install path is `pipx`.
+  PowerShell siblings (`install.ps1` / `uninstall.ps1` / `update.ps1`),
+  `brew.sh` (idempotent macOS Homebrew bootstrap), `check_triggers.py`
+  (skill trigger coverage), and `audit_comments.py`. Thin wrappers; the
+  real install path is `pipx`.
 - `docs/developer_guide.md` — architectural notes (the why, not the what).
 
 ## PR checklist
@@ -89,8 +110,14 @@ Before opening a PR:
       checked it in via Git LFS. The regenerable demos live there as
       Markdown only; their `.docx` / `.pptx` outputs are produced by
       `tests/examples/run.sh` and intentionally not committed.
-- [ ] If you added user-facing flags, update both `README.md` and
-      `LISEZMOI.md` (and `CHANGELOG.md`'s `## [Unreleased]` section).
+- [ ] If you added user-facing flags, wire them through both the
+      argparse `cli.py` and the click `click_cli.py` front-ends, and
+      update both `README.md` and `LISEZMOI.md` (and `CHANGELOG.md`'s
+      `## [Unreleased]` section).
+- [ ] If you changed a capability the agent skill advertises, update
+      `skills/md2star/SKILL.md`'s `description` (and
+      `references/triggers.md`) and re-run `python scripts/check_triggers.py`
+      until it exits 0.
 - [ ] If you added a network-touching code path, route it through the
       `--offline` / `--allow-remote-*` gates (see `md2star/cli.py`
       and the contract in `SECURITY.md`).

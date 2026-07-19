@@ -31,6 +31,18 @@ detailed audit these priorities came from.
 
 ## P1 — shipped
 
+- [x] **click front-end `md2star-x`** (Unreleased) — a modern
+      `md2star-x docx|pptx|pdf|gui|doctor` surface over the exact same
+      pipeline (thin adapter to `cli._convert`; `click>=8,<9` is a core
+      dep), alongside the argparse wrappers.
+- [x] **Agent skill packaging** (Unreleased) — md2star ships as a
+      Claude Skill *and* an OpenCode skill under `skills/md2star/`
+      (`SKILL.md` + `references/` + install README), with
+      `scripts/check_triggers.py` enforcing exhaustive trigger coverage
+      in CI.
+- [x] **`scripts/brew.sh`** (Unreleased) — idempotent macOS Homebrew
+      bootstrap (`--with-pdf` / `--with-mermaid` / `--with-ai` /
+      `--all` / `--dry-run`).
 - [x] **`md2star templates {list,path}`** (v2.1.0) — shows every
       resolution candidate (per-project / cached / bundled) and
       prints the absolute path of the active template for a given
@@ -66,14 +78,14 @@ detailed audit these priorities came from.
       to reclaim the small core) stays available as a later
       optimization. Path confinement covered by
       `tests/test_gui_security.py`.
-- [ ] **`md2star[ai]` PyPI extra.** Today the `--lint` /
-      AI-alt-text passes shell out to the local `ollama` binary
-      via stdlib `urllib.request` — zero Python deps. The
-      `[ai]` extra would pull the `ollama` Python client
-      (https://pypi.org/project/ollama/) and let us swap the
-      hand-rolled HTTP calls for a typed client (modest code
-      cleanup, future-proof if AI deps grow heavier). Symmetric
-      with the `[gui]` extra.
+- [x] **`md2star[ai]` PyPI extra** (v2.7.0). The opt-in `--lint` /
+      AI-alt-text passes reach the local Ollama daemon via stdlib
+      `urllib.request` by default — zero Python deps. Installing the
+      `[ai]` extra (`pip install 'md2star[ai]'`, or `pipx inject
+      md2star ollama`) swaps in the official `ollama` Python client
+      (https://pypi.org/project/ollama/) for a typed transport; it is a
+      pure transport upgrade with the same behaviour and the same
+      urllib fallback. Symmetric with the `[gui]` marker extra.
 - [ ] **User config file** — `$XDG_CONFIG_HOME/md2star/config.toml`
       via `platformdirs`. Precedence: CLI > config > defaults.
       `md2star config {path,show,init}`.
