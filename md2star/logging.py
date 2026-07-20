@@ -1,4 +1,4 @@
-"""Central logging surface for md2star.
+"""Central logging surface for md2star (backed by os_helper).
 
 Module summary
 --------------
@@ -15,11 +15,15 @@ progress narration) go through this logging surface to *stderr*, while program
 separate is what lets ``md2star ... | some-tool`` keep working — a warning must
 never land in the piped payload.
 
+The actual logging setup is delegated to :func:`os_helper.init_logging` — the
+suite's shared logging primitive — in its CLI-friendly mode: a *named* logger
+(``"md2star"``), a bare ``%(message)s`` format, a **live** stderr handler that
+re-resolves ``sys.stderr`` on each emit (so pytest's ``capsys`` and any stream
+redirection keep working), idempotent so repeated calls never double-print, and
+``propagate=True`` so ``caplog`` and host applications still observe records.
 Every md2star module gets its logger from :func:`get_logger`, whose names are
-dotted children of the root ``"md2star"`` logger (``md2star.cli``,
-``md2star.preprocessing.lint``, ...). Because Python loggers propagate to
-their ancestors, configuring the single ``"md2star"`` logger in
-:func:`configure` wires up handler + level for the whole package at once.
+dotted children of ``"md2star"`` (``md2star.cli``, ``md2star.preprocessing.lint``,
+…) and therefore inherit that configuration.
 
 Usage example
 -------------
@@ -40,7 +44,8 @@ from __future__ import annotations
 # imports by default, so ``import logging`` is keyed as ``"logging"`` in
 # ``sys.modules`` while this file is ``"md2star.logging"`` — no shadowing.
 import logging
-import sys
+
+import os_helper as osh
 
 # Root logger name for the whole package. Every module logger is a dotted
 # child of this (e.g. "md2star.cli"), so configuring this one logger — and
@@ -52,58 +57,6 @@ _ROOT_NAME: str = "md2star"
 # verbatim from the pre-logging ``print`` era so the on-screen UX is
 # unchanged), and multi-line error hints must not get a per-line level prefix.
 _FORMAT: str = "%(message)s"
-
-# Marker attribute stamped on the handler we own, so :func:`configure` can be
-# called repeatedly (PDF → DOCX re-entry, batch conversions in one process)
-# without stacking duplicate handlers that would double-print every line.
-_HANDLER_FLAG: str = "_md2star_owned"
-
-
-class _LiveStderrHandler(logging.StreamHandler):
-    """A :class:`~logging.StreamHandler` that always targets the *current* stderr.
-
-    ``logging.StreamHandler`` binds ``sys.stderr`` once at construction. That
-    breaks whenever ``sys.stderr`` is swapped afterwards — most notably under
-    pytest's ``capsys`` fixture (which replaces the streams per test) and in
-    any host that redirects stderr. Re-reading ``sys.stderr`` on every access
-    keeps diagnostics flowing to wherever stderr currently points. This mirrors
-    what :data:`logging.lastResort` does internally.
-
-    Notes
-    -----
-    The ``stream`` setter is intentionally a no-op: the stream is not stored,
-    it is computed live, so assignments (including the one in
-    ``StreamHandler.__init__``) are simply ignored.
-    """
-
-    def __init__(self) -> None:
-        """Initialise the handler without caching a stderr stream.
-
-        Delegates to ``StreamHandler.__init__`` so the formatter and lock
-        machinery are wired up; the stream it tries to store is silently
-        discarded by the no-op ``stream`` setter, keeping stderr resolution
-        live at emit time.
-        """
-        super().__init__()
-
-    @property
-    def stream(self):  # type: ignore[override]
-        """Return the live ``sys.stderr`` at emit time (never a stale handle)."""
-        return sys.stderr
-
-    @stream.setter
-    def stream(self, value: object) -> None:
-        """Ignore stream assignments so stderr stays resolved live.
-
-        Parameters
-        ----------
-        value : object
-            The stream ``StreamHandler`` (or a caller) tries to bind. It is
-            intentionally discarded — see the class docstring — because the
-            getter always recomputes ``sys.stderr``.
-        """
-        # No-op on purpose — see the class docstring. We never cache a stream.
-        pass
 
 
 def get_logger(name: str = _ROOT_NAME) -> logging.Logger:
@@ -131,10 +84,13 @@ def get_logger(name: str = _ROOT_NAME) -> logging.Logger:
 
 
 def configure(*, verbose: bool = False, quiet: bool = False) -> logging.Logger:
-    """Configure the root ``"md2star"`` logger once, idempotently.
+    """Configure the root ``"md2star"`` logger once, idempotently, via os_helper.
 
-    Attaches exactly one stderr :class:`~logging.StreamHandler` and sets the
-    threshold from the two mutually-exclusive verbosity flags.
+    Delegates to :func:`os_helper.init_logging` in its named-logger + live-stderr
+    mode, which attaches exactly one stderr handler and re-resolves ``sys.stderr``
+    on each emit (so ``capsys`` / redirection keep working). Repeated calls are a
+    no-op on the handler set, so re-entry (PDF → DOCX, batch conversions) never
+    double-prints.
 
     Parameters
     ----------
@@ -156,8 +112,6 @@ def configure(*, verbose: bool = False, quiet: bool = False) -> logging.Logger:
     this migration is behaviour-preserving by default. Diagnostics always go
     to *stderr* so they never contaminate stdout output.
     """
-    root = logging.getLogger(_ROOT_NAME)
-
     # Pick the threshold from the flags. ``quiet`` is the strongest signal,
     # then ``verbose``, then the behaviour-preserving INFO default.
     if quiet:
@@ -166,25 +120,20 @@ def configure(*, verbose: bool = False, quiet: bool = False) -> logging.Logger:
         level = logging.DEBUG
     else:
         level = logging.INFO
-    root.setLevel(level)
 
-    # Idempotency: only attach our stderr handler the first time. We recognise
-    # our own handler by the marker attribute so a second call (or a handler
-    # some host app added) never triggers a duplicate.
-    already_installed = any(getattr(h, _HANDLER_FLAG, False) for h in root.handlers)
-    if not already_installed:
-        # Our own handler is what makes INFO-level progress visible: relying on
-        # logging.lastResort alone would silently drop everything below WARNING.
-        handler = _LiveStderrHandler()
-        handler.setFormatter(logging.Formatter(_FORMAT))
-        # Stamp the marker so the check above finds it on subsequent calls.
-        setattr(handler, _HANDLER_FLAG, True)
-        root.addHandler(handler)
-
-    # Keep propagation ON (the default). Our own handler already prints to
-    # stderr once; because a handler *is* found in the hierarchy, lastResort
-    # never fires, so there's no double-print in normal CLI use. Propagation
-    # additionally lets a host application's / pytest's root handlers observe
-    # md2star records (e.g. caplog in tests) — testability we want to keep.
-    root.propagate = True
-    return root
+    # os_helper owns the handler machinery for the whole suite. The kwargs pin
+    # md2star's CLI contract: the "md2star" tree, bare stderr output, a live
+    # stream (capsys-safe), no ANSI coloring of the bare line, no warnings
+    # capture (we route our own), and propagate=True so caplog / host apps see
+    # our records. init_logging is idempotent for a named logger, so calling
+    # configure() again never stacks a duplicate handler.
+    return osh.init_logging(
+        name=_ROOT_NAME,
+        level=level,
+        stdout=False,
+        log_format=_FORMAT,
+        use_colors=False,
+        capture_warnings=False,
+        live_stream=True,
+        propagate=True,
+    )

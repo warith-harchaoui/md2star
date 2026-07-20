@@ -26,6 +26,7 @@ Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from unittest.mock import patch
 
 from md2star.preprocessing import preprocess_markdown
@@ -168,12 +169,14 @@ def test_reference_doc_uses_bundled_template_without_network(tmp_path):
         # short-circuit the resolver and mask the gate under test.
         for f in cache_dir("templates").glob("*"):
             f.unlink()
-        with patch("urllib.request.urlopen") as mock_urlopen:
+        # The template fetch now goes through os_helper.download_file; patch it
+        # to prove it is never reached when remote is opted out / offline.
+        with patch("md2star.cli.osh.download_file") as mock_dl:
             resolved = _resolve_reference_doc(
                 input_path, "docx", **resolve_kwargs,
             )
             # Network must not be reached, and the bundled template wins.
-            assert not mock_urlopen.called, resolve_kwargs
+            assert not mock_dl.called, resolve_kwargs
             assert resolved is not None
             assert resolved.name == "template.docx"
 
@@ -183,8 +186,8 @@ def test_reference_doc_downloads_when_online(tmp_path):
 
     Pins the v2.5.0 behaviour: with ``allow_remote_templates=True`` OR with no
     kwargs at all (the remote deraison.ai template is now the default branding),
-    an online resolve reaches ``urlopen`` and persists the fetched bytes.
-    ``urlopen`` is mocked so the test never touches the real host.
+    an online resolve reaches ``os_helper.download_file`` and persists the bytes.
+    ``download_file`` is mocked so the test never touches the real host.
     """
     from md2star.cache import cache_dir
     from md2star.cli import _resolve_reference_doc
@@ -193,27 +196,19 @@ def test_reference_doc_downloads_when_online(tmp_path):
     input_path.write_text("# hi")
     fake_bytes = b"PK\x03\x04fake-docx-content"
 
-    class _FakeResp:
-        """Minimal context-manager stand-in for a urlopen response."""
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *a):
-            return None
-
-        def read(self):
-            return fake_bytes
+    def _fake_download(url, file_path, **kwargs):
+        # download_file streams straight to disk, so the stand-in just writes the
+        # canned bytes where the resolver expects the cached template.
+        Path(file_path).write_bytes(fake_bytes)
 
     # Both the explicit opt-in and the bare default must fetch and persist.
     for resolve_kwargs in ({"allow_remote_templates": True}, {}):
         # Wipe the cache so a prior download can't mask the fetch under test.
         for f in cache_dir("templates").glob("*"):
             f.unlink()
-        with patch("urllib.request.urlopen", return_value=_FakeResp()) as mock_urlopen:
+        with patch("md2star.cli.osh.download_file", side_effect=_fake_download) as mock_dl:
             resolved = _resolve_reference_doc(input_path, "docx", **resolve_kwargs)
-            assert mock_urlopen.called, resolve_kwargs
+            assert mock_dl.called, resolve_kwargs
             assert resolved is not None
             assert resolved.read_bytes() == fake_bytes
-        assert resolved is not None
         assert resolved.read_bytes() == fake_bytes

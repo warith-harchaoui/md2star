@@ -48,7 +48,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import urllib.request
 from importlib import resources
 from pathlib import Path
 
@@ -166,12 +165,10 @@ def _resolve_reference_doc(
     url = _TEMPLATE_URLS.get(fmt)
     if url is not None and allow_remote_templates and not offline:
         try:
-            req = urllib.request.Request(
-                url,
-                headers={"User-Agent": f"md2star/{__version__}"},
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                cached.write_bytes(resp.read())
+            # os_helper streams the download straight to disk (flat memory,
+            # progress bar auto-suppressed off-TTY); progress=False keeps the
+            # CLI quiet since this is a small one-shot template fetch.
+            osh.download_file(url, str(cached), progress=False)
             # Informational: confirm the (default) network fetch happened.
             # INFO so it stays visible by default but --quiet can hide it.
             logger.info(

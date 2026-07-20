@@ -25,7 +25,12 @@ import logging
 
 import pytest
 
-from md2star.logging import _HANDLER_FLAG, configure, get_logger
+from md2star.logging import configure, get_logger
+
+# md2star's ``configure`` delegates to ``os_helper.init_logging``, which stamps
+# every handler it installs with this marker attribute — the seam these tests
+# use to find "our" handler on the shared "md2star" logger.
+_OWNED_FLAG = "_osh_owned"
 
 
 @pytest.fixture(autouse=True)
@@ -41,7 +46,7 @@ def _reset_md2star_logger():
     saved_level = root.level
     saved_propagate = root.propagate
     # Start each test from a clean slate: drop any handler we own.
-    root.handlers = [h for h in saved_handlers if not getattr(h, _HANDLER_FLAG, False)]
+    root.handlers = [h for h in saved_handlers if not getattr(h, _OWNED_FLAG, False)]
     yield
     # Restore verbatim.
     root.handlers = saved_handlers
@@ -50,9 +55,9 @@ def _reset_md2star_logger():
 
 
 def _owned_handlers() -> list[logging.Handler]:
-    """Return the md2star-owned handlers currently on the root logger."""
+    """Return the os_helper-installed handlers currently on the md2star logger."""
     root = logging.getLogger("md2star")
-    return [h for h in root.handlers if getattr(h, _HANDLER_FLAG, False)]
+    return [h for h in root.handlers if getattr(h, _OWNED_FLAG, False)]
 
 
 def test_get_logger_is_dotted_child() -> None:

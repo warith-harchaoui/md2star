@@ -8,15 +8,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - **Adopted `os_helper` (md2star's sibling in the same suite) across the package.**
-  Added `os-helper>=1.5,<2` as a core dependency and routed the hand-rolled
+  Added `os-helper>=1.6,<2` as a core dependency and routed the hand-rolled
   primitives through it: cache-key hashing (`osh.hash_string` in `images.py` /
   `mermaid.py`), OS detection (`osh.macos()/linux()/windows()` in `cache.py`,
-  `lint.py`, `gui_server.py`), directory creation (`osh.make_directory`), and
-  temp folders (`osh.temporary_folder`). The standalone `minimal-gui` server now
-  logs through `osh.init_logging` / `osh.info` / `osh.warning` (incl. its LAN-bind
-  security banner). The CLI keeps its purpose-built stdlib logging (osh's logger
-  binds the stream at init, which would break the live-stderr capture the tests
-  and CLI UX rely on).
+  `lint.py`, `gui_server.py`), directory creation (`osh.make_directory`), temp
+  folders (`osh.temporary_folder`), and the default-template download
+  (`osh.download_file`). The standalone `minimal-gui` server logs through
+  `osh.init_logging` / `osh.info` / `osh.warning` (incl. its LAN-bind banner).
+- **The CLI's logging surface is now backed by `os_helper` too.** Rather than
+  keep a bespoke live-stderr handler in md2star, the capability was contributed
+  upstream: `os_helper` 1.6.0 gained named-logger + `live_stream` support (a
+  handler that re-resolves `sys.stderr` on each emit, idempotent, `propagate=True`).
+  `md2star.logging.configure()` now delegates to `osh.init_logging(name="md2star",
+  live_stream=True, …)`, so `--verbose`/`--quiet`, the bare-message format, and
+  pytest's `capsys`/`caplog` capture all work as before — with one less
+  hand-rolled handler to maintain.
+- Kept deliberately on stdlib where `osh` can't yet fit without regressing
+  behaviour: remote **image** download (needs the response `Content-Type` to pick
+  the extension), the API request tempdir (deferred cleanup after streaming), the
+  GUI session dir (process-lifetime), and `alt_text`'s content hash (needs
+  None-on-error). Documented as future `osh` enhancement candidates.
 
 ### Fixed
 - **`minimal-gui/server.py` invoked a non-existent `md2star convert` CLI.** It now
