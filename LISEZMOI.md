@@ -5,6 +5,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![Licence : BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)
 ![Statut : beta](https://img.shields.io/badge/status-beta-orange.svg)
+[![Local-first](https://img.shields.io/badge/privacy-local--first-2f6f5e.svg)](#la-promesse)
 
 > **md2star** convertit du Markdown en `.docx`, `.pptx` et `.pdf`
 > brandés, de bout en bout, en s'appuyant sur Pandoc, des templates
@@ -19,6 +20,24 @@ de bibliographie, formules LaTeX, diagrammes Mermaid, embarquement
 d'images, largeurs de colonnes, isolation de diapositives PPTX — pour
 vous garder dans Markdown sans ouvrir Word pour corriger la mise en
 page.
+
+## La promesse
+
+**Local d'abord, par conception.** md2star fonctionne entièrement sur votre
+machine — le Markdown est converti en DOCX/PPTX/PDF localement via
+Pandoc/LibreOffice ; vos documents ne sont jamais téléversés vers un service
+tiers, aucune télémétrie, aucun compte, aucune dépendance au cloud. Fait partie
+de la suite [AI Helpers](https://github.com/warith-harchaoui/ai-helpers) :
+la souveraineté sur vos données grâce à l'Open Source local d'abord.
+
+*La seule réserve honnête :* le **contenu** de votre document reste local. Deux
+commodités optionnelles et clairement signalées peuvent toucher le réseau — et
+seulement si vous les y autorisez : le template par défaut est téléchargé une
+fois depuis `deraison.ai` si vous n'avez pas de `--reference-doc` local (passez
+`--offline` pour forcer le template embarqué et ne jamais rien contacter), et les
+images distantes `![](https://…)` ne sont intégrées que si vous passez
+`--allow-remote-images`. Ni l'une ni l'autre n'envoie jamais votre Markdown où
+que ce soit.
 
 
 *Mode DOCX — algorithme d'ingénierie de Musk rendu en direct:*
@@ -73,17 +92,25 @@ serveur MCP :
 ```bash
 pip install 'md2star[api,mcp]'
 
-md2star-api                    # FastAPI : /health, /doctor, /convert — docs sur /docs
+md2star-api                    # FastAPI : /gui, /health, /doctor, /convert — docs sur /docs
 curl -F 'file=@rapport.md' 'http://localhost:8000/convert?fmt=docx' -o rapport.docx
+# ouvrez http://localhost:8000/gui pour un banc d'essai minimal dans le navigateur
 
 md2star-mcp                    # mêmes outils (doctor / convert) via MCP
 ```
+
+> Le serveur `md2star-api` sert aussi un **banc d'essai minimal** dans le
+> navigateur sur `GET /gui` — déposez un `.md`, choisissez un format, téléchargez
+> le résultat. C'est le petit frère de l'éditeur complet `md2star gui` (aperçu
+> PDF en direct).
 
 Vous préférez click ? `md2star-x docx|pptx|pdf|gui|doctor` est une façade click
 au-dessus du même pipeline (fournie avec l'installation cœur). Et md2star se
 distribue aussi comme **Claude Skill / OpenCode skill** pour qu'un agent le
 pilote — voir [`skills/md2star/`](skills/md2star/SKILL.md) et
-[`skills/README.md`](skills/README.md).
+[`skills/README.md`](skills/README.md). Le catalogue complet de ce qui doit
+déclencher md2star (formulations, commandes, situations de fichier) vit dans
+**[TRIGGERS.md](TRIGGERS.md)**.
 
 Voir **[docs/installation.md](docs/installation.md)** pour la matrice
 complète par OS (macOS / Ubuntu / Fedora / Arch / Windows), le tableau

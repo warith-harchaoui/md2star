@@ -5,6 +5,7 @@
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)
 ![Status: beta](https://img.shields.io/badge/status-beta-orange.svg)
+[![Local-first](https://img.shields.io/badge/privacy-local--first-2f6f5e.svg)](#the-promise)
 
 > 🇫🇷 *Version française : **[LISEZMOI.md](LISEZMOI.md)**.*
 
@@ -18,6 +19,21 @@ with a curated styling layer. It handles the parts Pandoc alone gets
 wrong — list spacing, bibliography injection, LaTeX math, Mermaid
 diagrams, image embedding, table widths, PPTX slide isolation — so
 you stay in Markdown and never open Word to fix layout.
+
+## The Promise
+
+**Local-first by design.** md2star runs entirely on your machine — Markdown is
+converted to DOCX/PPTX/PDF locally via Pandoc/LibreOffice; your documents are
+never uploaded to a third-party service, no telemetry, no account, no cloud
+lock-in. Part of the [AI Helpers](https://github.com/warith-harchaoui/ai-helpers)
+suite: sovereignty over your data through local-first Open Source.
+
+*The one honest caveat:* the **content** of your document stays local. Two
+optional, clearly-flagged conveniences may touch the network — and only when you
+let them: the bundled default template is fetched once from `deraison.ai` if you
+have no local `--reference-doc` (pass `--offline` to force the vendored template
+and never reach out), and remote `![](https://…)` images are embedded only when
+you pass `--allow-remote-images`. Neither ever sends your Markdown anywhere.
 
 *DOCX mode — Musk's five-step engineering algorithm rendered live:*
 
@@ -74,16 +90,23 @@ Prefer HTTP or MCP? md2star also ships a FastAPI surface and an MCP server:
 ```bash
 pip install 'md2star[api,mcp]'
 
-md2star-api                    # FastAPI: /health, /doctor, /convert — docs at /docs
+md2star-api                    # FastAPI: /gui, /health, /doctor, /convert — docs at /docs
 curl -F 'file=@report.md' 'http://localhost:8000/convert?fmt=docx' -o report.docx
+# open http://localhost:8000/gui for a minimal drop-a-file browser bench
 
 md2star-mcp                    # same tools (doctor / convert) over MCP
 ```
+
+> The `md2star-api` server also serves a **minimal browser bench** at
+> `GET /gui` — drop a `.md`, pick a format, download the result. It is the
+> lightweight sibling of the full `md2star gui` editor (live PDF preview).
 
 Prefer click? `md2star-x docx|pptx|pdf|gui|doctor` is a click front-end over
 the same pipeline (ships with the core install). And md2star packages itself as
 a **Claude Skill / OpenCode skill** so an agent can drive it — see
 [`skills/md2star/`](skills/md2star/SKILL.md) and [`skills/README.md`](skills/README.md).
+The full catalogue of what should invoke md2star (phrasings, commands, file
+situations) lives in **[TRIGGERS.md](TRIGGERS.md)**.
 
 See **[docs/installation.md](docs/installation.md)** for the full
 per-OS matrix (macOS / Ubuntu / Fedora / Arch / Windows), feature-

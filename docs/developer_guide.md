@@ -202,7 +202,8 @@ md2star/
 │   ├── __init__.py                   # Re-exports preprocess_markdown, __version__
 │   ├── cli.py                        # md2docx / md2pptx / md2pdf / md2star console scripts (argparse)
 │   ├── click_cli.py                  # md2star-x docx|pptx|pdf|gui|doctor (click front-end → cli._convert)
-│   ├── api.py                        # FastAPI HTTP surface (md2star-api; [api] extra)
+│   ├── api.py                        # FastAPI HTTP surface (md2star-api; [api] extra) — /gui, /health, /doctor, /convert
+│   ├── gui.py                        # Minimal single-page /gui bench served by api.py (self-contained HTML)
 │   ├── mcp.py                        # FastAPI-MCP server (md2star-mcp; [mcp] extra)
 │   ├── cache.py                      # $XDG_CACHE_HOME/md2star/ resolver
 │   ├── doctor.py                     # `md2star doctor` environment diagnostic

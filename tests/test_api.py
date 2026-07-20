@@ -44,6 +44,24 @@ def test_health_returns_ok(client: TestClient) -> None:
     assert r.json() == {"status": "ok"}
 
 
+def test_gui_serves_html_bench(client: TestClient) -> None:
+    """``/gui`` returns the self-contained HTML conversion bench."""
+    r = client.get("/gui")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/html")
+    # The page must be the md2star bench and must POST to the /convert endpoint.
+    assert "md2star — Conversion Bench" in r.text
+    assert "/convert" in r.text
+
+
+def test_root_redirects_to_gui(client: TestClient) -> None:
+    """``/`` redirects to the browser bench at ``/gui``."""
+    # follow_redirects=False so we assert on the redirect itself, not the target.
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code in (307, 308)
+    assert r.headers["location"] == "/gui"
+
+
 def test_openapi_exposes_expected_routes(client: TestClient) -> None:
     """The OpenAPI schema must list the documented endpoints (drift guard)."""
     paths = client.get("/openapi.json").json()["paths"]

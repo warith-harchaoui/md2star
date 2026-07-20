@@ -6,6 +6,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.8.0] — 2026-07-20
+
+### Added
+- **Minimal browser bench on the FastAPI surface (`GET /gui`).** `md2star-api`
+  now serves a self-contained, build-step-free HTML page (`md2star/gui.py`):
+  drop a `.md`, pick a target format, download the rendered document. It adds
+  zero server logic — it POSTs to the same `/convert` endpoint the CLI and MCP
+  surfaces use — and aligns md2star with the AI Helpers house standard where
+  every package's API serves a minimal `/gui` (mirrors `audio_helper.gui`).
+  `GET /` now redirects to `/gui`. This is the lightweight sibling of the full
+  `md2star gui` Overleaf-style editor (`md2star/gui_server.py`), which is
+  unchanged and remains the primary human surface. Covered by
+  `tests/test_api.py` (`/gui` serves HTML, `/` redirects).
+- **Repo-root `TRIGGERS.md`.** A user-facing, exhaustive catalogue of the
+  phrasings, commands, and file situations that should invoke md2star — the
+  house-standard companion to the skill's machine-checked
+  `skills/md2star/references/triggers.md`. Referenced from README + LISEZMOI.
+- **Local-first badge + "The Promise" / "La promesse" section** in README and
+  LISEZMOI, standardised across the suite. Phrased truthfully: the document
+  *content* stays local; the two optional network conveniences (the one-time
+  default-template fetch, opt-in `--allow-remote-images`) are called out with
+  their opt-outs.
+
 ### Changed
 - **Alt-text drafting is now language-aware and context-aware** (aligned with the
   suite's `front-vision` skill). The `--lint` empty-alt pass writes the alt text

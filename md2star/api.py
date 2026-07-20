@@ -10,6 +10,12 @@ document.
 
 Exposed surface:
 
+- ``GET  /`` — redirect to the browser bench at ``/gui``.
+- ``GET  /gui`` — a minimal single-page conversion bench (drop a ``.md``, pick a
+  format, download the result). The self-contained HTML lives in
+  :mod:`md2star.gui`; the page POSTs to ``/convert`` and adds no server logic.
+  (For the full Overleaf-style editor with a live PDF preview, run
+  ``md2star gui`` — that is :mod:`md2star.gui_server`, a separate stdlib server.)
 - ``GET  /health`` — liveness probe.
 - ``GET  /doctor`` — the same environment diagnostic as ``md2star doctor
   --json`` (which tools are present, per-format feature status).
@@ -57,7 +63,7 @@ import os_helper as osh
 # bare ModuleNotFoundError, so we re-raise with the exact pip command.
 try:
     from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
-    from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
         "The FastAPI HTTP surface requires the [api] extra. "
@@ -88,6 +94,39 @@ _FORMAT_MEDIA: dict[str, str] = {
     "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     "pdf": "application/pdf",
 }
+
+
+@app.get("/", include_in_schema=False)
+def index() -> RedirectResponse:
+    """Redirect the site root to the browser bench.
+
+    Returns
+    -------
+    fastapi.responses.RedirectResponse
+        A 307 redirect to ``/gui`` so opening the server root lands on the GUI.
+    """
+    return RedirectResponse(url="/gui")
+
+
+@app.get("/gui", response_class=HTMLResponse, tags=["meta"])
+def gui() -> HTMLResponse:
+    """Serve the minimal single-page conversion bench.
+
+    The page (defined in :mod:`md2star.gui`) is a build-step-free, self-contained
+    HTML document: drop a Markdown file, pick a format, and it POSTs to the same
+    ``/convert`` endpoint as the CLI and MCP surfaces. For the full editor with a
+    live PDF preview, run ``md2star gui`` instead.
+
+    Returns
+    -------
+    fastapi.responses.HTMLResponse
+        The conversion-bench page.
+    """
+    # Imported lazily so the (long) HTML string is only loaded when the route is
+    # actually hit, and so importing md2star.api stays cheap.
+    from .gui import GUI_HTML
+
+    return HTMLResponse(content=GUI_HTML)
 
 
 @app.get("/health")
