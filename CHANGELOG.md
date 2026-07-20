@@ -23,11 +23,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   live_stream=True, …)`, so `--verbose`/`--quiet`, the bare-message format, and
   pytest's `capsys`/`caplog` capture all work as before — with one less
   hand-rolled handler to maintain.
-- Kept deliberately on stdlib where `osh` can't yet fit without regressing
-  behaviour: remote **image** download (needs the response `Content-Type` to pick
-  the extension), the API request tempdir (deferred cleanup after streaming), the
-  GUI session dir (process-lifetime), and `alt_text`'s content hash (needs
-  None-on-error). Documented as future `osh` enhancement candidates.
+- **Completed the `os_helper` adoption by upstreaming the missing primitives**
+  (os-helper 1.7.0) rather than leaving md2star exceptions: `download_file` now
+  returns `{path, content_type, bytes}` and takes `check_url=False` (so the remote
+  **image** path picks its extension from the MIME type without a HEAD precheck
+  some CDNs reject); new `make_temporary_directory` (mkdtemp with caller-owned
+  cleanup) backs the **API** request tempdir and the **GUI** session dir;
+  `temporary_filename` gained a `directory=` arg, backing the CLI's
+  preprocessed-Markdown temp file (kept beside the input so relative images
+  resolve); and `alt_text`'s content hash now uses `osh.file_exists` +
+  `osh.hashfile`. Dep floor bumped to `os-helper>=1.7`.
 
 ### Fixed
 - **`minimal-gui/server.py` invoked a non-existent `md2star convert` CLI.** It now

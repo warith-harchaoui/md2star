@@ -47,7 +47,6 @@ import shutil
 import socket
 import subprocess
 import sys
-import tempfile
 import threading
 import urllib.parse
 import uuid
@@ -83,7 +82,7 @@ def _session_dir() -> Path:
     global _SESSION_DIR
     with _SESSION_TEMPLATE_LOCK:
         if _SESSION_DIR is None:
-            _SESSION_DIR = Path(tempfile.mkdtemp(prefix="md2star-gui-session-"))
+            _SESSION_DIR = Path(osh.make_temporary_directory(prefix="md2star-gui-session-"))
     return _SESSION_DIR
 
 

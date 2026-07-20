@@ -48,8 +48,9 @@ from __future__ import annotations
 
 import os
 import shutil
-import tempfile
 from pathlib import Path
+
+import os_helper as osh
 
 # FastAPI is an OPTIONAL dependency (the ``[api]`` extra). Importing this
 # module without it should fail with an actionable install hint rather than a
@@ -175,7 +176,7 @@ async def convert(
     # One temp dir per request holds the upload + the rendered output. We
     # register its cleanup as a background task so it runs AFTER FileResponse
     # has finished streaming — deleting it earlier would truncate the download.
-    work = tempfile.mkdtemp(prefix="md2star_api_")
+    work = osh.make_temporary_directory(prefix="md2star_api_")
     background.add_task(shutil.rmtree, work, ignore_errors=True)
 
     # md2star's converter is path-in / path-out; stage the upload on disk and

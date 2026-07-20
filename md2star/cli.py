@@ -47,7 +47,6 @@ import os
 import shutil
 import subprocess
 import sys
-import tempfile
 from importlib import resources
 from pathlib import Path
 
@@ -518,21 +517,18 @@ def _convert(fmt: str, argv: list[str]) -> int:
         processed = f"{processed}\n\n# {heading}\n"
 
     # 3. Write the preprocessed Markdown to a temp file in the SAME dir as
-    #    the input so any relative image paths still resolve.
-    fd, temp_name = tempfile.mkstemp(
-        dir=str(in_path.parent), suffix=".md", prefix=".preprocessed_"
-    )
-    temp_path = Path(temp_name)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(processed)
+    #    the input so any relative image paths still resolve. os_helper's
+    #    temporary_filename(directory=...) owns creation + cleanup of the file.
+    with osh.temporary_filename(
+        suffix=".md", prefix=".preprocessed_", directory=str(in_path.parent)
+    ) as temp_name:
+        temp_path = Path(temp_name)
+        Path(temp_path).write_text(processed, encoding="utf-8")
 
         # 4. Run pandoc → DOCX (always, even for PDF).
         rc = _run_pandoc(docx_fmt, temp_path, docx_path, reference_doc, pandoc_extras)
         if rc != 0:
             return rc
-    finally:
-        temp_path.unlink(missing_ok=True)
 
     # 5. DOCX-only postprocess: re-inject MyTable / MyTableSmall styles.
     if docx_fmt == "docx":

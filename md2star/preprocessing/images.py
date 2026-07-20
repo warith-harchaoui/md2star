@@ -30,7 +30,6 @@ import os
 import re
 import shutil
 import subprocess
-import urllib.request
 
 import os_helper as osh
 from PIL import Image
@@ -658,24 +657,24 @@ def download_remote_images(content: str, out_dir: str) -> str:  # noqa: ARG001
 
         if not os.path.exists(local_path):
             try:
-                req = urllib.request.Request(
-                    url,
-                    headers={"User-Agent": "Mozilla/5.0 (compatible; md2star/1.0)"},
-                )
-                with urllib.request.urlopen(req, timeout=15) as resp:
-                    data = resp.read()
-                    ct = resp.headers.get("Content-Type", "")
-                    if "jpeg" in ct or "jpg" in ct:
-                        ext = ".jpg"
-                    elif "gif" in ct:
-                        ext = ".gif"
-                    elif "webp" in ct:
-                        ext = ".webp"
-                    elif "svg" in ct:
-                        ext = ".svg"
-                    local_path = str(remote_cache / f"{url_hash}{ext}")
-                    with open(local_path, "wb") as f:
-                        f.write(data)
+                # Stream to a ``.part`` name first, then pick the real extension
+                # from the server's Content-Type (os_helper.download_file returns
+                # it). check_url=False skips the HEAD precheck that some image
+                # CDNs reject even when the GET succeeds.
+                tmp_dl = str(remote_cache / f"{url_hash}.part")
+                meta = osh.download_file(url, tmp_dl, progress=False, check_url=False)
+                ct = str(meta.get("content_type", ""))
+                if "jpeg" in ct or "jpg" in ct:
+                    ext = ".jpg"
+                elif "gif" in ct:
+                    ext = ".gif"
+                elif "webp" in ct:
+                    ext = ".webp"
+                elif "svg" in ct:
+                    ext = ".svg"
+                # Atomically move the finished download to its content-typed name.
+                local_path = str(remote_cache / f"{url_hash}{ext}")
+                os.replace(tmp_dl, local_path)
             except Exception as e:
                 # Download failed: leave the original remote reference in place
                 # so pandoc can still try (or the user can fix the URL).
