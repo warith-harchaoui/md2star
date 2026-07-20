@@ -38,9 +38,10 @@ dependencies = [
     "click>=8,<9",
     # os-helper is md2star's sibling in the same suite: it provides the hashing,
     # path/dir, temp-file, download, platform-detection, and named live-stream
-    # logging primitives the package is built on. >=1.7 for make_temporary_
-    # directory, temporary_filename(directory=), and download_file metadata. Core.
-    "os-helper>=1.7,<2",
+    # logging primitives the package is built on. >=1.7.1 for make_temporary_
+    # directory, temporary_filename(directory=), download_file metadata, and the
+    # named-logger convenience functions (no stray root basicConfig). Core dep.
+    "os-helper>=1.7.1,<2",
     "langdetect>=1.0.9,<2",
     # Pillow 12.x ships fixes for ~37 CVEs flagged on 11.3 by
     # pip-audit (PYSEC-2026-165, CVE-2026-25990, CVE-2026-40192,

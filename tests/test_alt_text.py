@@ -105,6 +105,24 @@ def test_broken_environment_is_a_quiet_skip(tmp_path, png_fixture) -> None:
             assert fill_empty_alt_text(md, base_dir=str(tmp_path)) == md, reason
 
 
+def test_run_surfaces_a_neutral_draft_summary(tmp_path, png_fixture, caplog) -> None:
+    """After drafting, an INFO summary lists each image → its alt text (seamless FYI).
+
+    The drafting stays seamless (nothing to approve), but the run is never silent:
+    a neutral summary at INFO surfaces exactly what went in, so ``--quiet`` hides
+    it while a default run shows it.
+    """
+    import logging
+
+    md = f"Intro prose about the picture below.\n\n![]({png_fixture})\n"
+    with _ollama_up("A blank canvas"), caplog.at_level(logging.INFO, logger="md2star"):
+        fill_empty_alt_text(md, base_dir=str(tmp_path))
+
+    assert "drafted alt text" in caplog.text
+    assert "A blank canvas" in caplog.text
+    assert str(png_fixture) in caplog.text
+
+
 def test_prompt_uses_detected_language_and_surrounding_context(tmp_path, png_fixture) -> None:
     """The per-image prompt is written in the document's detected language and
     carries the surrounding text as context.

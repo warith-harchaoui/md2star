@@ -310,6 +310,12 @@ def fill_empty_alt_text(
     # no configured default (English fallback when undetectable).
     lang_name = _detect_alt_language(content)
 
+    # Collect (src, alt) for every image we fill, so the run can surface a neutral
+    # summary of what was drafted — visible, seamless transparency (not a
+    # review-nag): the user sees the captions that went in without being asked to
+    # second-guess them.
+    drafted: list[tuple[str, str]] = []
+
     def _process(match: re.Match) -> str:
         """Draft (or reuse a cached) alt-text for one empty-alt image.
 
@@ -375,6 +381,8 @@ def fill_empty_alt_text(
                     f"md2star warning: could not cache alt-text for {path}: {e}"
                 )
 
+        # Record what we're applying (fresh or cached) for the run summary.
+        drafted.append((src, alt))
         # Escape any closing-bracket the model produced — would break the
         # Markdown image syntax otherwise.
         alt_clean = alt.replace("]", "\\]")
@@ -394,4 +402,14 @@ def fill_empty_alt_text(
             out_lines.append(line)
             continue
         out_lines.append(_EMPTY_ALT_RE.sub(_process, line))
+
+    # Surface a neutral, one-glance summary of the alt text that went in — so the
+    # drafting stays seamless (nothing to approve) but never invisible. INFO, so
+    # it shows by default and ``--quiet`` still hides it.
+    if drafted:
+        lines = "\n".join(f'  {src} → "{alt}"' for src, alt in drafted)
+        logger.info(
+            "md2star: drafted alt text (%s) for %d image(s):\n%s",
+            lang_name, len(drafted), lines,
+        )
     return "\n".join(out_lines)

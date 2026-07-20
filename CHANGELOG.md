@@ -17,7 +17,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   authorized multimodal model): the previous macOS default `gemma4:e2b-mlx` is a
   text-only MLX build that could not see images, so it produced empty/garbage
   captions. The per-image cache key now folds language + context so a re-run in a
-  different language re-drafts. `MD2STAR_ALT_TEXT_MODEL` still overrides.
+  different language re-drafts. `MD2STAR_ALT_TEXT_MODEL` still overrides. The pass
+  stays seamless (drafts embed directly, nothing to approve) but is no longer
+  silent: a neutral one-glance summary of every image → its drafted alt text is
+  logged at INFO (`--quiet` hides it).
 - **Adopted `os_helper` (md2star's sibling in the same suite) across the package.**
   Added `os-helper>=1.6,<2` as a core dependency and routed the hand-rolled
   primitives through it: cache-key hashing (`osh.hash_string` in `images.py` /
