@@ -7,6 +7,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Changed
+- **Alt-text drafting is now language-aware and context-aware** (aligned with the
+  suite's `front-vision` skill). The `--lint` empty-alt pass writes the alt text
+  in the **document's own language** — auto-detected from the surrounding prose,
+  any language, not a hardcoded EN/FR toggle (French doc → French alt text) — and
+  feeds each image's **surrounding text** (nearest heading + nearby prose) to the
+  model so it describes what the image *means* in place. The default vision model
+  changed from the shared text-lint tag to **`gemma3:4b`** (the suite's
+  authorized multimodal model): the previous macOS default `gemma4:e2b-mlx` is a
+  text-only MLX build that could not see images, so it produced empty/garbage
+  captions. The per-image cache key now folds language + context so a re-run in a
+  different language re-drafts. `MD2STAR_ALT_TEXT_MODEL` still overrides.
 - **Adopted `os_helper` (md2star's sibling in the same suite) across the package.**
   Added `os-helper>=1.6,<2` as a core dependency and routed the hand-rolled
   primitives through it: cache-key hashing (`osh.hash_string` in `images.py` /

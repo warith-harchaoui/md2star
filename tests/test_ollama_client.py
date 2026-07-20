@@ -119,5 +119,5 @@ def test_callers_route_through_client(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(_ollama_client, "OLLAMA", fake)
     img = tmp_path / "pic.png"
     img.write_bytes(b"not-a-real-png")
-    assert alt_text._generate_alt(str(img), "gemma4:e2b") == "A red bicycle."
+    assert alt_text._generate_alt(str(img), "gemma4:e2b", "describe it") == "A red bicycle."
     assert fake._captured["client"].generate_calls[0]["images"] == [str(img)]

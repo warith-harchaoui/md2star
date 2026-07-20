@@ -11,20 +11,24 @@ Gated by the same ``--lint`` flag as :mod:`md2star.preprocessing.lint`:
 * ``--lint`` + Ollama missing       → quiet skip (the lint pass already
                                       printed the install hint).
 
-The vision model defaults to ``llama3.2-vision``; override with the
-``MD2STAR_ALT_TEXT_MODEL`` env variable. The model is only auto-pulled when
-the lint daemon was already spawned by :mod:`lint`, so a user who only wants
-the text lint will not accidentally start a multi-gigabyte vision download.
+Language + context (aligned with the suite's ``front-vision`` skill):
 
-The vision model defaults to whatever the text lint already uses
-(``gemma4:e2b-mlx`` on macOS, ``gemma4:e2b`` elsewhere) — the gemma4
-family is multimodal, so one model pull powers both passes. Override
-with the ``MD2STAR_ALT_TEXT_MODEL`` env variable if you want to point
-the alt-text pass at a different vision model.
+* The alt text is written in the **document's own language**, auto-detected from
+  the surrounding prose (any language, not a hardcoded EN/FR toggle) — a French
+  document gets French alt text. English is the fallback when detection fails.
+* Each image's **surrounding text** (nearest heading + nearby prose) is passed
+  to the model so it describes what the image *means* in place, not just its
+  pixels.
 
-Per-image results are cached in ``$XDG_CACHE_HOME/md2star/alt-text/`` keyed
-by ``<image-md5>_<model>.txt`` so repeated runs over the same source tree
-do not re-query Ollama.
+The vision model defaults to ``gemma3:4b`` — the suite's authorized, reliably
+multimodal model (the same tag ``front-vision`` uses). We deliberately do NOT
+share the text-lint model: the macOS lint default ``gemma4:e2b-mlx`` is a
+text-only MLX build that cannot see images. Override with
+``MD2STAR_ALT_TEXT_MODEL``.
+
+Per-image results are cached in ``$XDG_CACHE_HOME/md2star/alt-text/`` keyed by
+``<image-md5>_<model>_<lang+context-hash>.txt`` so a re-run in a different
+language or surrounding context re-drafts rather than serving a stale caption.
 
 Like the text lint, the transport is transparent: the ``md2star[ai]`` extra
 routes through the official ``ollama`` client, and its absence falls back to
@@ -49,8 +53,8 @@ import os_helper as osh
 from ..cache import cache_dir
 from ..logging import get_logger
 from . import _ollama_client
+from .language import get_language_metadata
 from .lint import (
-    _default_lint_model,
     _ensure_model_pulled,
     _ping_ollama,
     is_ollama_installed,
@@ -68,28 +72,124 @@ _EMPTY_ALT_RE = re.compile(r"!\[(\s*)\]\(([^)]+)\)")
 # Schemes we cannot read off disk to feed a vision model.
 _URL_PREFIXES = ("http://", "https://", "//", "data:", "file://")
 
-_ALT_PROMPT = (
-    "Describe this image as concise alt-text for a screen reader. "
-    "Follow W3C alt-text guidance: under ~125 characters, no \"image of\" "
-    "or \"picture of\" prefix, describe the meaning and key information "
-    "the image conveys (not its visual style). Reply with the alt-text "
-    "only — no quotes, no markdown, no explanation."
-)
+# 2-letter code → English language name. Used to tell the model which language
+# to write the alt text in — ``"Write the alt text in French."`` — supporting ANY
+# detected language (not a bilingual EN/FR lock). Codes we can't name fall back
+# to English so a strange language never breaks the prompt.
+_LANG_NAMES: dict[str, str] = {
+    "en": "English", "fr": "French", "es": "Spanish", "de": "German",
+    "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "ru": "Russian",
+    "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "ar": "Arabic",
+    "hi": "Hindi", "tr": "Turkish", "pl": "Polish", "sv": "Swedish",
+    "no": "Norwegian", "da": "Danish", "fi": "Finnish", "cs": "Czech",
+    "el": "Greek", "he": "Hebrew", "id": "Indonesian", "uk": "Ukrainian",
+    "ro": "Romanian", "hu": "Hungarian", "vi": "Vietnamese", "th": "Thai",
+}
+
+
+def _build_alt_prompt(lang_name: str, context: str) -> str:
+    """Assemble the per-image W3C alt-text prompt in *lang_name*, biased by *context*.
+
+    Mirrors the front-vision skill's approach — write in the document's language,
+    lean on the surrounding text for meaning — kept as one lean self-contained
+    prompt rather than that skill's full per-purpose decision tree.
+
+    Parameters
+    ----------
+    lang_name : str
+        English name of the target output language (e.g. ``"French"``).
+    context : str
+        Surrounding document text (heading + nearby prose), or ``""``.
+
+    Returns
+    -------
+    str
+        The complete instruction sent to the vision model.
+    """
+    # Only add the context clause when we actually found surrounding text, and
+    # tell the model to use it for *meaning* — not to quote it back.
+    ctx_line = (
+        f" Surrounding document text (use it to judge what the image means "
+        f"in context — do not quote it): {context}"
+        if context else ""
+    )
+    return (
+        f"Write concise alt text for this image in {lang_name}, for a screen "
+        f"reader.{ctx_line} Follow W3C guidance: under ~125 characters; describe "
+        f"the meaning and key information the image conveys (not its visual "
+        f"style); do not start with \"image of\" / \"picture of\" or the "
+        f"equivalent in {lang_name}. Reply with the alt text only — no quotes, "
+        f"no markdown, no explanation."
+    )
+
+
+def _detect_alt_language(content: str) -> str:
+    """Return the English name of *content*'s language (auto-detected, ``English`` fallback).
+
+    Language is detected from the document body itself (no configured default),
+    so alt text comes out in the same language the surrounding prose is written
+    in. Degrades to English when ``langdetect`` is absent or the text is too
+    short to classify.
+    """
+    meta = get_language_metadata(content)
+    # get_language_metadata returns e.g. {"lang": "en-US"} / {"lang": "fr"} or
+    # None; take the 2-letter base and map it to a display name.
+    code = (meta or {}).get("lang", "en").split("-")[0].lower()[:2]
+    return _LANG_NAMES.get(code, "English")
+
+
+# Match a Markdown ATX heading line, used to prepend the nearest section title
+# to an image's surrounding-text context.
+_HEADING_RE = re.compile(r"^(#{1,6}\s+.+)$", re.MULTILINE)
+
+
+def _surrounding_context(content: str, src: str, window: int = 280) -> str:
+    """Return the document text around the image *src*, capped and heading-prefixed.
+
+    Finds where *src* is referenced in *content*, keeps ``window`` characters on
+    each side, strips Markdown image/link syntax to leave prose, and prepends the
+    nearest preceding heading so the model knows the section the image sits in.
+    Returns ``""`` when the reference cannot be located.
+    """
+    pos = content.find(src)
+    if pos == -1:
+        return ""
+    # Grab a window either side of the reference and drop the image/link syntax
+    # so the model sees prose, not URLs.
+    chunk = content[max(0, pos - window): pos + len(src) + window]
+    chunk = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", chunk)      # images → drop
+    chunk = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", chunk)    # links → label
+    chunk = re.sub(r"[#>*_`~]+", " ", chunk)                  # md punctuation
+    chunk = " ".join(chunk.split())
+
+    # Prepend the nearest heading before the image for section context.
+    heading = ""
+    for m in _HEADING_RE.finditer(content, 0, pos):
+        heading = m.group(1).strip("# ").strip()
+    prefix = f"{heading}. " if heading else ""
+    return (prefix + chunk).strip()[: 2 * window]
+
+
+# Default vision model for alt-text. ``gemma3:4b`` is the suite's authorized
+# vision model (the front-vision skill uses the same tag): a compact, reliably
+# multimodal build. We deliberately do NOT reuse the text-lint default here —
+# the macOS lint model ``gemma4:e2b-mlx`` is an MLX text build that does not
+# process images, so sharing it produced empty/garbage alt text. A separate
+# ``ollama pull`` for a model that can actually see is the right trade.
+_DEFAULT_ALT_MODEL = "gemma3:4b"
 
 
 def _default_alt_text_model() -> str:
     """Return the configured vision model tag.
 
-    Honours ``MD2STAR_ALT_TEXT_MODEL`` first; otherwise falls back to the
-    text lint's default (``gemma4:e2b-mlx`` on macOS, ``gemma4:e2b``
-    elsewhere). Gemma 4 e2b is multimodal, so reusing the lint model
-    means a single ``ollama pull`` covers both passes — no extra
-    multi-gigabyte download just to draft alt-text.
+    Honours ``MD2STAR_ALT_TEXT_MODEL`` first; otherwise uses the suite's
+    authorized vision model :data:`_DEFAULT_ALT_MODEL` (``gemma3:4b``), which —
+    unlike the text-lint default — actually processes images on every platform.
     """
     override = os.environ.get("MD2STAR_ALT_TEXT_MODEL")
     if override:
         return override
-    return _default_lint_model()
+    return _DEFAULT_ALT_MODEL
 
 
 DEFAULT_ALT_TEXT_MODEL = _default_alt_text_model()
@@ -111,21 +211,24 @@ def _hash_file(path: str) -> str | None:
         return None
 
 
-def _generate_alt(image_path: str, model: str, timeout: float = 60.0) -> str | None:
-    """Ask Ollama's vision model to describe *image_path* with *model*.
+def _generate_alt(
+    image_path: str, model: str, prompt: str, timeout: float = 60.0
+) -> str | None:
+    """Ask Ollama's vision model to describe *image_path* using *prompt*.
 
-    Returns the trimmed response on success, ``None`` on any failure — the
-    caller treats ``None`` as "leave the markdown unchanged". With the
-    ``md2star[ai]`` extra the request goes through the official client;
-    without it we base64-post to ``/api/generate`` ourselves. Both paths
-    share the quote/whitespace cleanup below.
+    *prompt* is the per-image instruction built by :func:`_build_alt_prompt`
+    (target language + surrounding-text context). Returns the trimmed response
+    on success, ``None`` on any failure — the caller treats ``None`` as "leave
+    the markdown unchanged". With the ``md2star[ai]`` extra the request goes
+    through the official client; without it we base64-post to ``/api/generate``
+    ourselves. Both paths share the quote/whitespace cleanup below.
     """
     if _ollama_client.OLLAMA is not None:
         # ``[ai]`` extra installed → hand the image *path* to the client, which
         # owns the read + base64 encoding. Any failure returns None (skip).
         alt = _ollama_client.generate(
             model,
-            _ALT_PROMPT,
+            prompt,
             images=[image_path],
             options={"temperature": 0.2},
             timeout=timeout,
@@ -144,7 +247,7 @@ def _generate_alt(image_path: str, model: str, timeout: float = 60.0) -> str | N
         # keeps alt-text deterministic-ish and on-task rather than creative.
         payload = json.dumps({
             "model": model,
-            "prompt": _ALT_PROMPT,
+            "prompt": prompt,
             "images": [img_b64],
             "stream": False,
             "options": {"temperature": 0.2},
@@ -202,6 +305,11 @@ def fill_empty_alt_text(
 
     cache = cache_dir("alt-text")
 
+    # Detect the document's language ONCE (not per image): alt text is written
+    # in the same language as the surrounding prose. Auto-detected from the body,
+    # no configured default (English fallback when undetectable).
+    lang_name = _detect_alt_language(content)
+
     def _process(match: re.Match) -> str:
         """Draft (or reuse a cached) alt-text for one empty-alt image.
 
@@ -237,17 +345,25 @@ def fill_empty_alt_text(
         img_hash = _hash_file(path)
         if img_hash is None:
             return match.group(0)
-        # Cache key = image content hash + model, so re-runs are free and a
-        # model swap re-generates. Sanitise ':' / '/' for a safe filename.
+
+        # Surrounding-document context (nearest heading + nearby prose) so the
+        # model describes what the image *means* in place, not just its pixels.
+        context = _surrounding_context(content, src)
+        prompt = _build_alt_prompt(lang_name, context)
+
+        # Cache key folds the image content, model, language, and a short hash of
+        # the context+language so a re-run in a different language or context
+        # re-drafts rather than serving a stale caption. Sanitise ':' / '/'.
         safe_model = model.replace(":", "_").replace("/", "_")
-        cache_file = cache / f"{img_hash}_{safe_model}.txt"
+        ctx_key = osh.hash_string(f"{lang_name}\x00{context}", 10)
+        cache_file = cache / f"{img_hash}_{safe_model}_{ctx_key}.txt"
 
         # Reuse a cached description when present; otherwise call the model and
         # persist the result. An empty generation → keep the original markdown.
         if cache_file.exists():
             alt = cache_file.read_text(encoding="utf-8").strip()
         else:
-            alt = _generate_alt(path, model)
+            alt = _generate_alt(path, model, prompt)
             if not alt:
                 return match.group(0)
             try:
