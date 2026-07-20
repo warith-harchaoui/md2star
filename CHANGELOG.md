@@ -6,6 +6,27 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Adopted `os_helper` (md2star's sibling in the same suite) across the package.**
+  Added `os-helper>=1.5,<2` as a core dependency and routed the hand-rolled
+  primitives through it: cache-key hashing (`osh.hash_string` in `images.py` /
+  `mermaid.py`), OS detection (`osh.macos()/linux()/windows()` in `cache.py`,
+  `lint.py`, `gui_server.py`), directory creation (`osh.make_directory`), and
+  temp folders (`osh.temporary_folder`). The standalone `minimal-gui` server now
+  logs through `osh.init_logging` / `osh.info` / `osh.warning` (incl. its LAN-bind
+  security banner). The CLI keeps its purpose-built stdlib logging (osh's logger
+  binds the stream at init, which would break the live-stderr capture the tests
+  and CLI UX rely on).
+
+### Fixed
+- **`minimal-gui/server.py` invoked a non-existent `md2star convert` CLI.** It now
+  calls the real `md2star <fmt> <input> -o <output>` interface (the old call
+  always failed and silently fell back to the PATH binary). Added the loud
+  LAN-bind warning banner it was missing, mirroring `md2star gui`.
+- **Comment density on `gui_server.py` (18.6% → 25.2%) and `click_cli.py`
+  (24.5% → 28.6%)** raised to the 25% target with substantive handler/option
+  documentation (both were already above the 15% CI floor).
+
 ### Added
 - **click CLI front-end (`md2star-x`).** A modern click-based command surface
   (`md2star-x docx|pptx|pdf|gui|doctor`) over the exact same conversion pipeline

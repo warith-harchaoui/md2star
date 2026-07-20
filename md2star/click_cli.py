@@ -108,6 +108,10 @@ def _shared_options(func):
     """
     # Declared in reverse of display order because click stacks decorators
     # bottom-up; the resulting --help lists them top-down as written here.
+    # ``type=click.Path(exists=True)`` on --bib / --reference-doc makes click
+    # reject a missing file with a usage error before the pipeline runs, and
+    # ``--lint/--no-lint`` defaults to None so the tri-state (unset vs. explicit
+    # on/off) survives into _argv_from_options.
     options = [
         click.option("-o", "--output", type=click.Path(), help="Output path."),
         click.option("--author", help="Document author metadata."),

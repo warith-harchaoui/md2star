@@ -25,13 +25,14 @@ Author
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import re
 import subprocess
 import zipfile
 from importlib import resources
+
+import os_helper as osh
 
 from ..cache import cache_dir
 
@@ -107,7 +108,7 @@ def _build_mermaid_config(font_family: str | None) -> tuple[str, str] | None:
     # Key the config file (and, upstream, the render cache) on the MD5 of the
     # *merged* config with sorted keys — so any palette edit, not just the
     # font, deterministically produces a new key and invalidates stale PNGs.
-    key = hashlib.md5(json.dumps(cfg, sort_keys=True).encode("utf-8")).hexdigest()[:12]
+    key = osh.hash_string(json.dumps(cfg, sort_keys=True), 12)
     resolved_path = str(cache_dir("mermaid") / f"config_{key}.json")
     # Write once per unique config; identical configs reuse the same file.
     if not os.path.exists(resolved_path):
@@ -145,9 +146,7 @@ def render_mermaid_local(content: str, out_dir: str) -> str:  # noqa: ARG001
 
     # Cache key folds in the body font *and* the resolved config hash, so
     # both template-font changes and palette edits invalidate stale renders.
-    cache_key = hashlib.md5(
-        (content + "|" + (body_font or "") + "|" + config_key).encode("utf-8")
-    ).hexdigest()
+    cache_key = osh.hash_string(content + "|" + (body_font or "") + "|" + config_key)
     mermaid_dir = cache_dir("mermaid")
     filepath = str(mermaid_dir / f"{cache_key}.png")
 

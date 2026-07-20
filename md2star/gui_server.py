@@ -57,6 +57,8 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+import os_helper as osh
+
 from . import __version__
 
 # Per-server-process cache-busting tag. We splice it into every static
@@ -174,7 +176,7 @@ def _native_folder_picker(prompt: str) -> Path | None:
     back to the in-page text input.
     """
     try:
-        if sys.platform == "darwin":
+        if osh.macos():
             script = (
                 f'POSIX path of (choose folder with prompt "{prompt}")'
             )
@@ -184,7 +186,7 @@ def _native_folder_picker(prompt: str) -> Path | None:
                 timeout=300,
             ).decode("utf-8", errors="replace").strip()
             return Path(out) if out else None
-        if sys.platform.startswith("linux"):
+        if osh.linux():
             if shutil.which("zenity"):
                 out = subprocess.check_output(
                     ["zenity", "--file-selection", "--directory",
@@ -199,7 +201,7 @@ def _native_folder_picker(prompt: str) -> Path | None:
                     stderr=subprocess.DEVNULL, timeout=300,
                 ).decode("utf-8", errors="replace").strip()
                 return Path(out) if out else None
-        if sys.platform == "win32":
+        if osh.windows():
             # PowerShell one-liner so we don't need a separate .ps1 asset.
             cmd = [
                 "powershell", "-NoProfile", "-Command",
@@ -394,6 +396,9 @@ class _Handler(BaseHTTPRequestHandler):
     # ─────────────────────────────────────────────────────────────────
 
     def do_POST(self) -> None:  # noqa: N802
+        # Every mutating action is a distinct POST path; dispatch on the path
+        # (query string stripped) to the matching handler. Unknown paths 404
+        # rather than silently succeeding.
         path = self.path.split("?", 1)[0]
         if path == "/render":
             return self._handle_render()
@@ -403,6 +408,8 @@ class _Handler(BaseHTTPRequestHandler):
             return self._handle_template_clear()
         if path == "/draft":
             return self._handle_draft_save()
+        # ``/fs/*`` is the folder-browser API; each verb is path-confined by
+        # _safe_within_root inside its handler (see the module security note).
         if path == "/fs/open":
             return self._handle_fs_open()
         if path == "/fs/close":
@@ -418,6 +425,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_error(404, f"unknown path {self.path!r}")
 
     def _read_json(self) -> dict[str, Any]:
+        # Read exactly Content-Length bytes (0 → empty body → empty dict). A
+        # malformed body is a client error (400), not a server crash.
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
             return {}
@@ -429,6 +438,8 @@ class _Handler(BaseHTTPRequestHandler):
             return {}
 
     def _handle_render(self) -> None:
+        # The browser posts the editor buffer + a format + an options blob;
+        # default to PDF (the live-preview format) when unspecified.
         payload = self._read_json()
         markdown: str = payload.get("markdown") or ""
         fmt: str = (payload.get("format") or "pdf").lower()
@@ -441,11 +452,15 @@ class _Handler(BaseHTTPRequestHandler):
         # not pay the import cost of pandoc / lua-filter resolution.
         from .cli import _convert
 
-        with tempfile.TemporaryDirectory(prefix="md2star-gui-") as workdir:
+        # Each render runs in a throwaway folder (auto-removed on exit) so the
+        # user's disk stays clean and concurrent renders can't collide.
+        with osh.temporary_folder(prefix="md2star-gui-") as workdir:
             md_path = Path(workdir) / "input.md"
             out_path = Path(workdir) / f"output.{fmt}"
             md_path.write_text(markdown, encoding="utf-8")
 
+            # Translate the JSON options blob into the same argv the CLI takes,
+            # appending each flag only when the option was actually supplied.
             argv: list[str] = [str(md_path), "-o", str(out_path)]
             if opts.get("author"):
                 argv.extend(["--author", str(opts["author"])])
@@ -457,6 +472,7 @@ class _Handler(BaseHTTPRequestHandler):
                 argv.extend(["--bibliography-name", str(opts["bibliography_name"])])
             if opts.get("lint"):
                 argv.append("--lint")
+            # Per-phase skips let the UI turn off e.g. mermaid or image embedding.
             for phase in opts.get("skip_phases") or []:
                 argv.extend(["--skip-phase", str(phase)])
 
@@ -486,6 +502,8 @@ class _Handler(BaseHTTPRequestHandler):
                 rc = 1
                 stderr_buf.captured += f"\nmd2star gui: unexpected error: {exc}\n"
 
+            # Failure (non-zero exit or no output file) → a JSON 500 carrying the
+            # captured stderr so the editor can show *why* the render failed.
             if rc != 0 or not out_path.exists():
                 err_body = json.dumps({
                     "ok": False,
@@ -499,6 +517,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self.wfile.write(err_body)
                 return
 
+            # Success → stream the rendered bytes inline with the right MIME so
+            # PDF.js can preview a PDF and DOCX/PPTX download cleanly.
             data = out_path.read_bytes()
             self.send_response(200)
             self.send_header("Content-Type", _OUTPUT_MIME[fmt])
@@ -530,6 +550,7 @@ class _Handler(BaseHTTPRequestHandler):
         frontend infers from the file extension); we fall back to peeking
         inside the OOXML zip if the header is missing or invalid.
         """
+        # Reject an empty body up front (nothing to save).
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
             return self.send_error(400, "empty upload")
@@ -538,12 +559,16 @@ class _Handler(BaseHTTPRequestHandler):
         if length > 50 * 1024 * 1024:
             return self.send_error(413, "upload exceeds 50 MB cap")
 
+        # Every OOXML file is a zip, so a missing ``PK\x03\x04`` magic means the
+        # body is not a .docx/.pptx — reject before writing anything to disk.
         data = self.rfile.read(length)
         if not data.startswith(b"PK\x03\x04"):
             return self.send_error(
                 415, "body does not look like a .docx/.pptx (no OOXML zip header)"
             )
 
+        # Trust the frontend's format header, but verify by peeking inside the
+        # zip if it is missing or bogus (docx vs pptx changes where it is used).
         fmt = (self.headers.get("X-Md2star-Format") or "").strip().lower()
         if fmt not in ("docx", "pptx"):
             fmt = _sniff_ooxml_format(data) or ""
@@ -552,6 +577,8 @@ class _Handler(BaseHTTPRequestHandler):
                 415, "could not determine format (expected .docx or .pptx)"
             )
 
+        # Persist under the per-process session dir; the next /render for this
+        # format picks it up via _session_template.
         target = _session_dir() / f"template.{fmt}"
         target.write_bytes(data)
         body = json.dumps({
@@ -575,6 +602,7 @@ class _Handler(BaseHTTPRequestHandler):
         except Exception:
             fmt = ""
 
+        # Clear just the named format, or both when none was specified.
         cleared: list[str] = []
         candidates = (fmt,) if fmt in ("docx", "pptx") else ("docx", "pptx")
         for f in candidates:
@@ -635,6 +663,8 @@ class _Handler(BaseHTTPRequestHandler):
         }
 
     def _json_ok(self, payload: dict[str, Any]) -> None:
+        # Shared 200-JSON responder for the /fs/* verbs; no-store so the browser
+        # never caches a stale directory listing.
         body = json.dumps(payload).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -644,6 +674,8 @@ class _Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _handle_fs_status(self) -> None:
+        # Report whether a folder is open (and which) so the UI can show the
+        # browser pane or the "open a folder" prompt.
         root = _folder_root()
         self._json_ok({
             "open": root is not None,
@@ -652,6 +684,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def _handle_fs_open(self) -> None:
         """Pick a folder (native dialog) or use a caller-supplied path."""
+        # A caller-supplied path wins (headless / scripted use); otherwise pop a
+        # native OS folder chooser.
         payload = self._read_json()
         supplied = (payload.get("path") or "").strip()
         if supplied:
@@ -683,6 +717,9 @@ class _Handler(BaseHTTPRequestHandler):
         target = root if rel in ("", ".") else _safe_within_root(rel)
         if target is None or not target.exists() or not target.is_dir():
             return self.send_error(404, f"not a directory: {rel!r}")
+        # Sort directories first, then files, each alphabetically — the ordering
+        # the file-tree UI expects. Paths are returned relative to the root so
+        # the client never learns the absolute filesystem layout.
         dirs, files = [], []
         try:
             for entry in sorted(
@@ -706,6 +743,8 @@ class _Handler(BaseHTTPRequestHandler):
         return self._json_ok({"path": rel, "dirs": dirs, "files": files})
 
     def _handle_fs_read(self) -> None:
+        # Confine the path, then only ever hand back Markdown — the editor has no
+        # business reading arbitrary binaries out of the opened folder.
         q = self._query()
         rel = q.get("path", "")
         target = _safe_within_root(rel)
@@ -733,7 +772,9 @@ class _Handler(BaseHTTPRequestHandler):
             return self.send_error(404, f"path is outside the open folder: {rel!r}")
         if target.suffix.lower() not in (".md", ".markdown"):
             return self.send_error(415, "only .md/.markdown files can be saved")
-        target.parent.mkdir(parents=True, exist_ok=True)
+        # Atomic write: stage to a sibling ``.tmp`` then rename, so a crash
+        # mid-write never truncates the user's real file.
+        osh.make_directory(str(target.parent))
         tmp = target.with_suffix(target.suffix + ".tmp")
         tmp.write_text(content, encoding="utf-8")
         tmp.replace(target)
@@ -751,7 +792,7 @@ class _Handler(BaseHTTPRequestHandler):
             return self.send_error(415, "filename must end in .md or .markdown")
         if target.exists():
             return self.send_error(409, f"file already exists: {rel!r}")
-        target.parent.mkdir(parents=True, exist_ok=True)
+        osh.make_directory(str(target.parent))
         target.write_text(seed if isinstance(seed, str) else "", encoding="utf-8")
         return self._json_ok({"ok": True, "path": rel})
 
@@ -761,6 +802,9 @@ class _Handler(BaseHTTPRequestHandler):
         paths = payload.get("paths") or []
         if not isinstance(paths, list):
             return self.send_error(400, "paths must be a list")
+        # Delete is best-effort per path: anything that fails the confinement,
+        # existence, or .md-only checks is reported under ``skipped`` rather than
+        # aborting the whole batch — so one bad entry can't block the rest.
         deleted, skipped = [], []
         for raw in paths:
             if not isinstance(raw, str):

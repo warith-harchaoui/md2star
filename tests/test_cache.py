@@ -78,6 +78,9 @@ def test_platform_cache_root(tmp_path, monkeypatch) -> None:
     """
     fake_home = tmp_path / "home"
     monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home))
+    # Platform is detected via os_helper.macos()/windows() now, so we stub those
+    # (name → (macos?, windows?)) rather than sys.platform.
+    os_flags = {"darwin": (True, False), "win32": (False, True), "linux": (False, False)}
     for platform, env, expected_parts in [
         ("linux", {"XDG_CACHE_HOME": "/xdg/cache"}, "/xdg/cache"),
         ("darwin", {"XDG_CACHE_HOME": "/xdg/cache"}, "/xdg/cache"),
@@ -87,7 +90,9 @@ def test_platform_cache_root(tmp_path, monkeypatch) -> None:
         ("linux", {}, (".cache",)),
     ]:
         # Neutralize the boundaries so only this case's variables pick the branch.
-        monkeypatch.setattr(cache.sys, "platform", platform)
+        is_mac, is_win = os_flags[platform]
+        monkeypatch.setattr(cache.osh, "macos", lambda _m=is_mac: _m)
+        monkeypatch.setattr(cache.osh, "windows", lambda _w=is_win: _w)
         for var in ("MD2STAR_CACHE_DIR", "XDG_CACHE_HOME", "LOCALAPPDATA"):
             monkeypatch.delenv(var, raising=False)
         for key, value in env.items():

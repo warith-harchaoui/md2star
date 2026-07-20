@@ -40,8 +40,9 @@ from __future__ import annotations
 
 import os
 import shutil
-import sys
 from pathlib import Path
+
+import os_helper as osh
 
 _APP_NAME = "md2star"
 
@@ -62,11 +63,12 @@ def _platform_cache_root() -> Path:
 
     # macOS keeps per-user caches under ~/Library/Caches (Apple convention);
     # putting them in ~/.cache would work but violates platform expectations.
-    if sys.platform == "darwin":
+    # os_helper.macos()/windows() centralise the OS check for the whole suite.
+    if osh.macos():
         return Path.home() / "Library" / "Caches"
     # Windows: %LOCALAPPDATA% is the roaming-excluded per-user store. Fall
     # back to its documented default only if the env var is somehow unset.
-    if sys.platform == "win32":
+    if osh.windows():
         local = os.environ.get("LOCALAPPDATA")
         if local:
             return Path(local)
@@ -86,8 +88,9 @@ def cache_dir(subdir: str | None = None) -> Path:
     root = Path(override) if override else (_platform_cache_root() / _APP_NAME)
     target = root / subdir if subdir else root
     # Create eagerly (parents + idempotent) so callers can write immediately
-    # without each having to guard existence.
-    target.mkdir(parents=True, exist_ok=True)
+    # without each having to guard existence — os_helper.make_directory wraps
+    # the mkdir(parents=True, exist_ok=True) idiom for the whole suite.
+    osh.make_directory(str(target))
     return target
 
 

@@ -24,13 +24,15 @@ through) only because we need to interleave the conversion with the
 HTTP lifecycle — the server stays a single Python process and
 talks to soffice via ``subprocess``.
 
-Why stdlib only
----------------
+Dependencies
+------------
 
-The skill ecosystem's invariant: no third-party deps in the front-*
-helper scripts. The server uses :mod:`http.server`,
-:mod:`subprocess`, :mod:`tempfile`, :mod:`json`, :mod:`pathlib`.
-Run with ``python3 server.py``; nothing to ``pip install``.
+The HTTP layer is pure standard library (:mod:`http.server`,
+:mod:`subprocess`, :mod:`tempfile`, :mod:`json`, :mod:`pathlib`). Logging,
+warnings and OS detection go through :mod:`os_helper` — md2star's sibling in
+the same suite — so this demo stays consistent with the packaged tool. Since
+it already shells out to ``md2star`` / ``md2docx``, having the suite installed
+(which pulls in ``os_helper``) is a given.
 
 Usage
 -----
@@ -74,6 +76,8 @@ import threading
 from http import HTTPStatus
 from pathlib import Path
 from typing import Any
+
+import os_helper as osh
 
 
 # ── Module-level state ────────────────────────────────────────────────
@@ -166,12 +170,9 @@ def render_markdown_to_pdf(markdown: str, fmt: str = "docx") -> bytes:
     # ── md2{docx,pptx} ─────────────────────────────────────────────
     out_path: Path = job_dir / f"input.{fmt}"
     md_proc = subprocess.run(
-        [
-            sys.executable, "-m", "md2star", "convert",
-            "--format", fmt,
-            "--input", str(md_path),
-            "--output", str(out_path),
-        ],
+        # md2star's real CLI is ``md2star <fmt> <input> -o <output>`` (there is
+        # no ``convert --format`` interface); ``-m md2star`` runs it in-tree.
+        [sys.executable, "-m", "md2star", fmt, str(md_path), "-o", str(out_path)],
         cwd=PROJECT_DIR,
         capture_output=True,
         text=True,
@@ -240,7 +241,7 @@ class OverleafHandler(http.server.BaseHTTPRequestHandler):
 
     # Silence default-stdlib access log; we re-emit a slimmer line.
     def log_message(self, fmt: str, *args: Any) -> None:  # noqa: D401
-        logging.info("%s — %s", self.address_string(), fmt % args)
+        osh.info("%s — %s", self.address_string(), fmt % args)
 
     # ── GET ────────────────────────────────────────────────────────
     def do_GET(self) -> None:  # noqa: N802 (HTTP method case)
@@ -393,36 +394,52 @@ def main(argv: list[str] | None = None) -> int:
     )
     args: argparse.Namespace = parser.parse_args(argv)
 
-    logging.basicConfig(
+    # os_helper owns logging setup for the whole suite; --quiet drops to WARNING.
+    osh.init_logging(
         level=logging.WARNING if args.quiet else logging.INFO,
-        format="%(asctime)s %(levelname)s  %(message)s",
-        datefmt="%H:%M:%S",
+        stdout=False,
+        date_format="%H:%M:%S",
     )
 
     # Sanity-check soffice before binding the port — saves a confused
     # user a debugging round-trip.
     if _find_soffice() is None:
-        sys.stderr.write(
-            "\n  ⚠  LibreOffice (soffice) not found. The /render route "
-            "will return 503 until you install it:\n"
-            "      brew install --cask libreoffice    # macOS\n"
-            "      sudo apt install libreoffice       # Debian / Ubuntu\n\n"
+        osh.warning(
+            "LibreOffice (soffice) not found. The /render route will return 503 "
+            "until you install it: `brew install --cask libreoffice` (macOS) or "
+            "`sudo apt install libreoffice` (Debian/Ubuntu)."
+        )
+
+    # A non-loopback bind exposes an unauthenticated server that runs md2docx on
+    # any markdown a client sends — the same footgun md2star's packaged GUI
+    # guards. Print a loud, unmissable banner (no prompt, so scripted runs are
+    # not blocked) naming the exact risk, mirroring md2star/gui_server.py.
+    if args.bind != "127.0.0.1":
+        bar = "═" * 64
+        osh.warning(
+            "\n" + bar +
+            "\n  This preview server is bound to a NON-LOOPBACK address." +
+            f"\n     URL: http://{args.bind}:{args.port}/" +
+            "\n  It has NO AUTHENTICATION and runs md2docx against any markdown" +
+            "\n     a client sends — anyone who can reach this port can drive" +
+            "\n     LibreOffice on this machine." +
+            "\n  Appropriate ONLY for trusted local-network use. Otherwise bind" +
+            "\n     127.0.0.1 (the default) and use SSH port-forwarding." +
+            "\n" + bar
         )
 
     server: http.server.ThreadingHTTPServer = http.server.ThreadingHTTPServer(
         (args.bind, args.port), OverleafHandler,
     )
     url: str = f"http://{args.bind}:{args.port}/"
-    sys.stderr.write(
-        f"\n  md2star Overleaf-style editor — serving on {url}\n"
-        f"  static dir:  {STATIC_DIR}\n"
-        f"  work dir:    {WORK_DIR}\n"
-        f"  Ctrl-C to stop.\n\n"
+    osh.info(
+        "md2star minimal GUI — serving on %s (static: %s, work: %s). Ctrl-C to stop.",
+        url, STATIC_DIR, WORK_DIR,
     )
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        sys.stderr.write("\n  Shutting down.\n")
+        osh.info("Shutting down.")
         return 0
     finally:
         server.server_close()

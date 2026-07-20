@@ -52,6 +52,8 @@ import urllib.request
 from importlib import resources
 from pathlib import Path
 
+import os_helper as osh
+
 from . import __version__
 from .cache import cache_dir, clear_cache
 from .errors import (
@@ -610,7 +612,7 @@ def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> int:
     # the exact output name, only its directory. We render into a tempdir
     # and move the result to the user's requested path so the API stays
     # "input → output" with no surprises.
-    with tempfile.TemporaryDirectory(prefix="md2pdf-") as workdir:
+    with osh.temporary_folder(prefix="md2pdf-") as workdir:
         cmd = [
             soffice,
             "--headless",
@@ -639,7 +641,7 @@ def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> int:
                 f"stderr: {proc.stderr.decode(errors='replace')!r}"
             )
             return 1
-        pdf_path.parent.mkdir(parents=True, exist_ok=True)
+        osh.make_directory(str(pdf_path.parent))
         shutil.move(str(produced), str(pdf_path))
     return 0
 

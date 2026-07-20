@@ -26,13 +26,13 @@ Author
 
 from __future__ import annotations
 
-import hashlib
 import os
 import re
 import shutil
 import subprocess
 import urllib.request
 
+import os_helper as osh
 from PIL import Image
 
 from ..cache import cache_dir
@@ -71,7 +71,7 @@ _URL_PREFIXES = ("http://", "https://", "//", "data:", "file://")
 
 def _hash_path(path: str) -> str:
     """Stable 12-char hex digest of an absolute path; used as a cache key."""
-    return hashlib.md5(os.fspath(path).encode("utf-8")).hexdigest()[:12]
+    return osh.hash_string(os.fspath(path), 12)
 
 
 def resize_image_for_cell(src: str, base_dir: str, max_px: int = 400) -> str:
@@ -645,7 +645,7 @@ def download_remote_images(content: str, out_dir: str) -> str:  # noqa: ARG001
         url = match.group(2)           # https://...
         attrs = match.group(3) or ""   # {width=85%} or empty
 
-        url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()[:12]
+        url_hash = osh.hash_string(url, 12)
 
         ext = ".png"
         url_path = url.split("?")[0].split("#")[0]

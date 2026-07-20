@@ -47,9 +47,10 @@ import json
 import os
 import shutil
 import subprocess
-import sys
 import time
 import urllib.request
+
+import os_helper as osh
 
 from ..logging import get_logger
 from . import _ollama_client
@@ -66,7 +67,7 @@ def _default_lint_model() -> str:
     override = os.environ.get("MD2STAR_LINT_MODEL")
     if override:
         return override
-    return "gemma4:e2b-mlx" if sys.platform == "darwin" else "gemma4:e2b"
+    return "gemma4:e2b-mlx" if osh.macos() else "gemma4:e2b"
 
 
 DEFAULT_LINT_MODEL = _default_lint_model()

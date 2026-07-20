@@ -36,6 +36,10 @@ dependencies = [
     # ubiquitous CLI library kept in the core deps so that command is always
     # available alongside the argparse wrappers.
     "click>=8,<9",
+    # os-helper is md2star's sibling in the same suite: it provides the hashing,
+    # path/dir, temp-file, download, and platform-detection primitives the
+    # package uses instead of hand-rolling stdlib calls. Kept a core dependency.
+    "os-helper>=1.5,<2",
     "langdetect>=1.0.9,<2",
     # Pillow 12.x ships fixes for ~37 CVEs flagged on 11.3 by
     # pip-audit (PYSEC-2026-165, CVE-2026-25990, CVE-2026-40192,
