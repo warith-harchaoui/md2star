@@ -20,8 +20,6 @@ debug.lua
 assets/nexton-template.pptx
 
 # Generated positioning-map inputs (rebuilt from LANDSCAPE.md / PAYSAGE.md)
-assets/landscape.csv
-assets/paysage.csv
 
 # Template adaptation temp files
 pptx-templates/_extracted/

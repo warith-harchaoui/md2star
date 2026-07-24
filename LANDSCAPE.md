@@ -20,6 +20,7 @@ date.
 
 ## At a glance
 
+<!-- TABLE:START -->
 | Markdown Conversion | MD-src | WYSIWYG | DOCX | PPTX | PDF | Cite | Diagrams | Math | Local-LLM | Offline | OSS | RT-collab | Git-async | Mobile |
 | --- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **md2star** | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐ | ⭐⭐ |
@@ -39,14 +40,17 @@ date.
 | Google Docs | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐ | ⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐⭐ |
 | Overleaf | ⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐ | ⭐⭐ | ⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐ |
 | MS Word / Office | ⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐ | ⭐ | ⭐⭐⭐⭐ |
+<!-- TABLE:END -->
 
 ## Positioning map
 
+<!-- FIGURE:START -->
 2D representation of the table above.
 
 ![Positioning map](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/landscape.png)
 
-The map is a 2-D summary of the fourteen criteria, so read it as a shape, not a scoreboard. `md2star` is at the top-right corner. The axes read **Horizontal — Collab ↔ Src** and **Vertical — Mobile ↔ Docx**.
+The map is a 2-D summary of the fourteen criteria, so read it as a shape, not a scoreboard. `md2star` is at the top-right corner. The axes read **Horizontal — Innovative ↔ Adaptive** and **Vertical — Practical ↔ Comprehensive**.
+<!-- FIGURE:END -->
 
 ## Column legend
 
