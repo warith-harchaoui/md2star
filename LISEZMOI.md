@@ -14,30 +14,30 @@
 ![logo](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/logo.png)
 
 `md2star` est un outil en ligne de commande multiplateforme qui
-enveloppe **Pandoc** d'une couche de style soignée. Il prend en charge
-les détails que Pandoc seul rate — espacement des listes, injection
-de bibliographie, formules LaTeX, diagrammes Mermaid, embarquement
-d'images, largeurs de colonnes, isolation de diapositives PPTX — pour
-vous garder dans Markdown sans ouvrir Word pour corriger la mise en
-page.
+habille **Pandoc** d'une couche de style. Il gère les détails que
+Pandoc seul laisse passer : espacement des listes, injection de
+bibliographie, formules LaTeX, diagrammes Mermaid, embarquement
+d'images, largeurs de colonnes, isolation des diapositives PPTX. Vous
+restez dans Markdown, sans jamais ouvrir Word pour rattraper la mise
+en page.
 
 ## La promesse
 
-**Local d'abord, par conception.** md2star fonctionne entièrement sur votre
-machine — le Markdown est converti en DOCX/PPTX/PDF localement via
-Pandoc/LibreOffice ; vos documents ne sont jamais téléversés vers un service
-tiers, aucune télémétrie, aucun compte, aucune dépendance au cloud. Fait partie
-de la suite [AI Helpers](https://github.com/warith-harchaoui/ai-helpers) :
-la souveraineté sur vos données grâce à l'Open Source local d'abord.
+**Local d'abord, par conception.** md2star tourne entièrement sur votre
+machine : le Markdown devient DOCX/PPTX/PDF localement via
+Pandoc/LibreOffice. Vos documents ne partent jamais vers un service
+tiers ; pas de télémétrie, pas de compte, aucune dépendance au cloud. Il
+fait partie de la suite [AI Helpers](https://github.com/warith-harchaoui/ai-helpers) :
+vos données vous appartiennent, grâce à de l'Open Source local d'abord.
 
 *La seule réserve honnête :* le **contenu** de votre document reste local. Deux
-commodités optionnelles et clairement signalées peuvent toucher le réseau — et
-seulement si vous les y autorisez : le template par défaut est téléchargé une
-fois depuis `deraison.ai` si vous n'avez pas de `--reference-doc` local (passez
-`--offline` pour forcer le template embarqué et ne jamais rien contacter), et les
-images distantes `![](https://…)` ne sont intégrées que si vous passez
-`--allow-remote-images`. Ni l'une ni l'autre n'envoie jamais votre Markdown où
-que ce soit.
+commodités optionnelles, clairement signalées, peuvent toucher le réseau, et
+uniquement si vous les y autorisez. Le template par défaut est téléchargé une
+fois depuis `deraison.ai` à défaut de `--reference-doc` local (passez
+`--offline` pour forcer le template embarqué et ne rien contacter), et les
+images distantes `![](https://…)` ne sont intégrées qu'avec
+`--allow-remote-images`. Dans les deux cas, votre Markdown ne quitte
+jamais votre machine.
 
 
 *Mode DOCX — algorithme d'ingénierie de Musk rendu en direct:*
@@ -69,14 +69,13 @@ que ce soit.
 
 ## Pourquoi md2star ?
 
-Pandoc seul est puissant mais agnostique : il produit un DOCX brut,
-sans template, sans date localisée, sans largeurs de tableau
-raisonnables, sans rendu Mermaid. Le résultat demande d'être retouché
-dans Word avant d'être partageable.
+Pandoc seul est capable mais neutre : il sort un DOCX brut, sans
+template, sans date localisée, sans largeurs de tableau raisonnables,
+sans rendu Mermaid. Le résultat passe encore par Word avant d'être
+partageable.
 
 `md2star` s'intercale entre vous et Pandoc. Vous écrivez en Markdown ;
-vous obtenez un DOCX / PPTX / PDF qui ressemble à un document
-délibéré.
+vous récupérez un DOCX / PPTX / PDF qui a l'air d'un document voulu.
 
 ## Démarrage rapide
 
@@ -89,10 +88,10 @@ md2pdf  article.md            # markdown → PDF (nécessite LibreOffice)
 md2star gui                   # éditeur navigateur local, aperçu PDF en direct
 ```
 
-Vous préférez `pip` ? Deux fichiers `requirements` reflètent les profils
-d'installation : `pip install -r requirements.txt` pour la CLI, et
-`pip install -r requirements-gui.txt` pour la CLI + la GUI (même wheel —
-la GUI n'ajoute aucune dépendance Python supplémentaire).
+Vous préférez `pip` ? Deux fichiers `requirements` correspondent aux
+profils d'installation : `pip install -r requirements.txt` pour la CLI,
+`pip install -r requirements-gui.txt` pour la CLI + la GUI (même wheel,
+la GUI n'ajoute aucune dépendance Python).
 
 Vous préférez HTTP ou MCP ? md2star embarque aussi une surface FastAPI et un
 serveur MCP :
@@ -113,11 +112,11 @@ md2star-mcp                    # mêmes outils (doctor / convert) via MCP
 > PDF en direct).
 
 Vous préférez click ? `md2star-x docx|pptx|pdf|gui|doctor` est une façade click
-au-dessus du même pipeline (fournie avec l'installation cœur). Et md2star se
+au-dessus du même pipeline (fournie avec l'installation cœur). md2star se
 distribue aussi comme **Claude Skill / OpenCode skill** pour qu'un agent le
-pilote — voir [`skills/md2star/`](skills/md2star/SKILL.md) et
-[`skills/README.md`](skills/README.md). Le catalogue complet de ce qui doit
-déclencher md2star (formulations, commandes, situations de fichier) vit dans
+pilote : voir [`skills/md2star/`](skills/md2star/SKILL.md) et
+[`skills/README.md`](skills/README.md). Le catalogue complet de ce qui
+déclenche md2star (formulations, commandes, situations de fichier) vit dans
 **[TRIGGERS.md](TRIGGERS.md)**.
 
 Voir **[docs/installation.md](docs/installation.md)** pour la matrice
@@ -132,12 +131,12 @@ de dépendances par fonctionnalité et le guide de dépannage.
 | PPTX   | Beta   | Pandoc                            | `md2pptx fichier.md`      |
 | PDF    | Beta   | Pandoc + LibreOffice (`soffice`)  | `md2pdf  fichier.md`      |
 
-« Beta » signifie : le format fonctionne pour les cas courants,
-dispose d'une couverture de tests automatisée, et a déjà servi à
-produire de vrais documents. Le bug de rendu des tableaux qui
-hantait la v1.x côté PDF (cellules empilées en colonne au lieu de
-former une grille) est corrigé en v2.0.0 — le template embarqué
-a été reconstruit sur une base Pandoc-propre.
+« Beta » signifie : le format marche pour les cas courants, dispose
+de tests automatisés, et a déjà servi à produire de vrais documents.
+Le bug de rendu des tableaux qui plombait la v1.x côté PDF (cellules
+empilées en colonne au lieu de former une grille) est corrigé en
+v2.0.0 ; le template embarqué a été reconstruit sur une base Pandoc
+propre.
 
 ## Exemples (les plus parlants)
 
@@ -149,8 +148,8 @@ md2docx rapport.md --author "Ada Lovelace"
 
 Vous obtenez `rapport.docx` avec les polices / marges / styles de
 titres du template intégré, le premier `# Titre` promu en titre du
-document, la date du jour localisée selon la langue détectée et
-l'auteur rendu dans le sous-titre.
+document, la date du jour localisée d'après la langue détectée et
+l'auteur reporté dans le sous-titre.
 
 **2. Article scientifique avec bibliographie**
 
@@ -161,8 +160,8 @@ md2docx article.md --author "Dr. R. Chercheur" \
 ```
 
 Le `citeproc` de Pandoc résout les références `[@einstein1905]`
-contre le fichier BibTeX et ajoute une section « Références » à la
-fin.
+depuis le fichier BibTeX et ajoute une section « Références » en fin
+de document.
 
 **3. PDF qui colle exactement au DOCX**
 
@@ -171,7 +170,7 @@ md2pdf article.md --author "Dr. R. Chercheur" --bib references.bib
 ```
 
 Le DOCX est rendu via LibreOffice headless, donc le PDF hérite de
-tous les soins md2star — template brandé, PNG Mermaid, styles de
+tout le travail de md2star : template brandé, PNG Mermaid, styles de
 tableaux, dates localisées.
 
 Un livre de recettes complet vit dans **[EXAMPLES.md](EXAMPLES.md)**.
@@ -180,9 +179,9 @@ Un livre de recettes complet vit dans **[EXAMPLES.md](EXAMPLES.md)**.
 
 ## GUI locale (`md2star gui`)
 
-Vous préférez un navigateur à un terminal ? `md2star gui` lance un
+Vous préférez le navigateur au terminal ? `md2star gui` lance un
 éditeur local façon Overleaf : le Markdown à gauche, un **aperçu PDF
-en direct** à droite, et des téléchargements DOCX / PPTX / PDF en un
+en direct** à droite, et le téléchargement DOCX / PPTX / PDF en un
 clic.
 
 ```bash
@@ -192,20 +191,20 @@ md2star gui --port 9000       # choisit un port (repli auto si occupé)
 md2star gui --no-browser      # affiche juste l'URL, sans ouvrir le navigateur
 ```
 
-> `md2star[gui]` résout vers le **même wheel** que `md2star` : la GUI est incluse
+> `md2star[gui]` pointe vers le **même wheel** que `md2star` : la GUI est incluse
 > et n'ajoute aucune dépendance Python, donc `pip install md2star` la contient
-> déjà. La forme `[gui]` n'est qu'une façon plus claire de dire « je viens pour
+> déjà. La forme `[gui]` dit juste plus clairement « je viens pour
 > l'éditeur ».
 
 Ce qu'elle apporte :
 
-- **Aperçu PDF en direct** rendu dans la page via PDF.js — sans
-  détour par Word ou un lecteur PDF.
+- **Aperçu PDF en direct** rendu dans la page via PDF.js, sans détour
+  par Word ni un lecteur PDF.
 - **Explorateur de dossier** confiné au dossier que vous ouvrez, pour
   éditer tous les `.md` d'un projet (ouvrir / lire / enregistrer /
   créer / supprimer) sans quitter la page.
 - **Template de référence en session** : glissez un `template.docx` /
-  `template.pptx` et cette session brande sa sortie avec.
+  `template.pptx` et la session brande sa sortie avec.
 - **Sauvegarde automatique des brouillons** dans le cache, pour ne
   jamais perdre votre texte après un crash du navigateur ou un
   redémarrage.
@@ -213,32 +212,32 @@ Ce qu'elle apporte :
 Elle est **locale d'abord et hors-ligne** : le serveur n'écoute que
 sur `127.0.0.1`, tout le frontend (PDF.js, CodeMirror, Tailwind,
 polices) est embarqué dans le paquet, et elle appelle exactement le
-même convertisseur que la CLI — aucune donnée ne quitte votre machine.
-Depuis la v2.6.0, la GUI est incluse dans le wheel principal : rien de
-plus à installer.
+même convertisseur que la CLI. Aucune donnée ne quitte votre machine.
+Depuis la v2.6.0, la GUI est dans le wheel principal : rien de plus à
+installer.
 
 ---
 
 ## Fonctionnalités
 
-- **Conversion sans friction** : Écrivez en Markdown avec votre éditeur préféré (`emacs`, `vim`, `Sublime Text`, `Obsidian`, …) et produisez des `.docx`, `.pptx`, `.pdf` stylés.
-- **GUI locale** (`md2star gui`) : un éditeur navigateur hors-ligne (localhost uniquement) avec aperçu PDF en direct, explorateur de dossier confiné, upload de template en session et sauvegarde automatique des brouillons. Incluse dans le wheel principal — rien de plus à installer. Voir [GUI locale](#gui-locale-md2star-gui).
-- **Support LaTeX** : Rendu robuste de formules complexes dans les documents et les diapositives.
+- **Conversion sans friction** : écrivez en Markdown avec votre éditeur préféré (`emacs`, `vim`, `Sublime Text`, `Obsidian`, …) et produisez des `.docx`, `.pptx`, `.pdf` stylés.
+- **GUI locale** (`md2star gui`) : un éditeur navigateur hors-ligne (localhost uniquement) avec aperçu PDF en direct, explorateur de dossier confiné, upload de template en session et sauvegarde automatique des brouillons. Incluse dans le wheel principal, rien de plus à installer. Voir [GUI locale](#gui-locale-md2star-gui).
+- **Support LaTeX** : rendu solide des formules complexes dans les documents comme dans les diapositives.
 - **Diagrammes Mermaid** : les blocs ` ```mermaid ` sont rendus localement en PNG via la CLI officielle Mermaid et intégrés automatiquement (nécessite Node.js ≥16).
 - **Métadonnées intelligentes** :
   - **Extraction automatique du titre** depuis votre premier `# Titre`.
-  - **Injection de sous-titre** combinant l'Auteur et la Date localisée.
-  - **Détection de la langue** via `langdetect` : formats de date livrés pour 10 langues (anglais, français, espagnol, allemand, italien, portugais, néerlandais, russe, japonais, chinois), avec noms de jours/mois traduits pour 7 (fr, es, de, it, pt, nl, ru) — par exemple `dimanche 10 mai 2026` au lieu de `Sunday May 10, 2026`.
-- **Prêt pour la recherche** : Intégration **BibTeX** native via `citeproc` de Pandoc, pour des documents avec une bibliographie gérée.
-- **Notes de bas de page natives** : les footnotes Markdown (`texte[^1]` + `[^1]: …`) traversent directement l'extension `footnotes` de Pandoc et deviennent de vraies notes Word — le DOCX obtient de vraies notes en bas de page, le PPTX les regroupe en notes par diapositive. Aucune syntaxe spéciale, aucun prétraitement. Voir [EXAMPLES.md §10](EXAMPLES.md#10-footnotes).
-- **Nettoyages automatiques** (qualité de vie discrète) : téléchargement des images `http(s)://` pour l'embarquement (opt-in), conversion des `<table>` HTML en pipe-tables Pandoc, et isolation des images sur leur propre diapositive PPTX lorsqu'elles cohabiteraient avec un tableau (sinon Pandoc les supprime).
-- **Réversible par conception** : la sortie DOCX de md2star est un rendu *fidèle et récupérable*, pas une impasse à sens unique. Relisez-la vers du Markdown avec n'importe quel lecteur DOCX (Pandoc, [kreuzberg](https://github.com/Goldziher/kreuzberg)) et vos titres, votre emphase `**gras**`/`*italique*`/`` `code` ``, vos tableaux et vos listes reviennent intacts — et les conversions répétées convergent vers un **point fixe stable** au lieu de dériver. Voir [Fidélité de l'aller-retour](#fidélité-de-laller-retour).
-- **Résolution gracieuse des chemins d'images** : URLs, chemins absolus et chemins relatifs « marchent comme on s'y attend ». Une référence relative `![](images/foo.png)` est résolue par rapport au dossier du fichier source.
-- **Identité visuelle zéro-config** : déposez un `template.docx` / `template.pptx` à côté de votre Markdown, md2star le détecte automatiquement comme `--reference-doc`. Si aucun n'existe, md2star télécharge par défaut (depuis v2.5.0) le template `deraison.ai` et le met en cache ; passez `--no-remote-templates` / `--offline` pour utiliser le template embarqué à la place.
-- **CLI auto-documentée** : chaque wrapper supporte `--help` / `-h` et affiche d'abord les options spécifiques à md2star puis `pandoc --help`. Essayez `md2docx --help`, `md2pptx --help` ou `md2star --help`.
-- **Linter LLM opt-in** : une passe locale Ollama corrige les erreurs de syntaxe (liens d'images cassés, fences non fermées, pipes mal formés) **avant** que Pandoc lise le fichier. **Désactivé par défaut** ; ajoutez `--lint` pour l'activer. Le wrapper lance alors `ollama serve` et `ollama pull` le modèle par défaut à la demande — `gemma4:e2b-mlx` sur macOS (build MLX optimisé Apple Silicon) ou `gemma4:e2b` sur Linux/Windows. La passe fonctionne **sans dépendance Python** (via `urllib` de la stdlib) ; l'extra optionnel `md2star[ai]` bascule sur le client officiel `ollama` pour une API plus ergonomique, sans changer le comportement.
-- **Texte alternatif rédigé par IA** : avec `--lint`, chaque `![](src)` au texte alternatif vide reçoit une description générée par modèle de vision (même modèle `gemma4:e2b`, cache par image). Surchargez le modèle via `MD2STAR_ALT_TEXT_MODEL`.
-- **Compagnon : Adaptateur de Templates IA** : pour brander un template PPTX
+  - **Injection d'un sous-titre** combinant l'auteur et la date localisée.
+  - **Détection de la langue** via `langdetect` : formats de date fournis pour 10 langues (anglais, français, espagnol, allemand, italien, portugais, néerlandais, russe, japonais, chinois), avec noms de jours et mois traduits pour 7 d'entre elles (fr, es, de, it, pt, nl, ru). Par exemple `dimanche 10 mai 2026` au lieu de `Sunday May 10, 2026`.
+- **Prêt pour la recherche** : intégration **BibTeX** native via le `citeproc` de Pandoc, pour des documents à bibliographie gérée.
+- **Notes de bas de page natives** : les footnotes Markdown (`texte[^1]` + `[^1]: …`) passent directement par l'extension `footnotes` de Pandoc et deviennent de vraies notes Word. Le DOCX obtient de vraies notes en bas de page, le PPTX les regroupe en notes par diapositive. Aucune syntaxe spéciale, aucun prétraitement. Voir [EXAMPLES.md §10](EXAMPLES.md#10-footnotes).
+- **Nettoyages automatiques** (petit confort discret) : téléchargement des images `http(s)://` pour l'embarquement (opt-in), conversion des `<table>` HTML en pipe-tables Pandoc, et isolation des images sur leur propre diapositive PPTX quand elles cohabiteraient avec un tableau (sinon Pandoc les supprime).
+- **Réversible par conception** : la sortie DOCX de md2star est un rendu *fidèle et récupérable*, pas une impasse à sens unique. Relisez-la vers du Markdown avec n'importe quel lecteur DOCX (Pandoc, [kreuzberg](https://github.com/Goldziher/kreuzberg)) : vos titres, votre emphase `**gras**`/`*italique*`/`` `code` ``, vos tableaux et vos listes reviennent intacts, et les conversions répétées convergent vers un **point fixe stable** au lieu de dériver. Voir [Fidélité de l'aller-retour](#fidélité-de-laller-retour).
+- **Résolution souple des chemins d'images** : URLs, chemins absolus et chemins relatifs se comportent comme prévu. Une référence relative `![](images/foo.png)` est résolue par rapport au dossier du fichier source.
+- **Identité visuelle zéro-config** : déposez un `template.docx` / `template.pptx` à côté de votre Markdown, md2star le détecte automatiquement comme `--reference-doc`. À défaut, md2star télécharge par défaut (depuis v2.5.0) le template `deraison.ai` et le met en cache ; passez `--no-remote-templates` / `--offline` pour utiliser le template embarqué.
+- **CLI auto-documentée** : chaque wrapper accepte `--help` / `-h` et affiche d'abord les options propres à md2star, puis `pandoc --help`. Essayez `md2docx --help`, `md2pptx --help` ou `md2star --help`.
+- **Linter LLM opt-in** : une passe locale Ollama corrige les erreurs de syntaxe (liens d'images cassés, fences non fermées, pipes mal formés) **avant** que Pandoc lise le fichier. **Désactivé par défaut** ; ajoutez `--lint` pour l'activer. Le wrapper lance alors `ollama serve` et fait un `ollama pull` du modèle par défaut à la demande : `gemma4:e2b-mlx` sur macOS (build MLX optimisé Apple Silicon) ou `gemma4:e2b` sur Linux/Windows. La passe fonctionne **sans dépendance Python** (via `urllib` de la stdlib) ; l'extra optionnel `md2star[ai]` bascule sur le client officiel `ollama` pour une API plus ergonomique, à comportement identique.
+- **Texte alternatif rédigé par IA** : avec `--lint`, chaque `![](src)` au texte alternatif vide reçoit une description générée par un modèle de vision (même modèle `gemma4:e2b`, cache par image). Surchargez le modèle via `MD2STAR_ALT_TEXT_MODEL`.
+- **Compagnon : adaptateur de templates IA** : pour brander un template PPTX
   d'entreprise dont les noms de mises en page ne suivent pas la convention
   Pandoc, utilisez l'outil compagnon
   [md2star-adapt](https://github.com/warith-harchaoui/md2star-adapt).
@@ -248,11 +247,11 @@ plus à installer.
 ## Installation
 
 `md2star` est un package Python distribué sur PyPI. L'installation via
-[pipx](https://pipx.pypa.io/) est recommandée — elle isole le package
+[pipx](https://pipx.pypa.io/) est recommandée : elle isole le package
 dans son propre venv et met les quatre CLI (`md2star`, `md2docx`,
 `md2pptx`, `md2pdf`) sur votre PATH. Pandoc est la seule dépendance
-système obligatoire ; LibreOffice n'est requis que pour `md2pdf` ;
-Node.js que pour Mermaid ; Ollama que pour `--lint`.
+système obligatoire ; LibreOffice n'est requis que pour `md2pdf`,
+Node.js que pour Mermaid, Ollama que pour `--lint`.
 
 - macOS 🍎 : `brew install pandoc pipx`
   (installez `brew` grâce à [brew.sh](https://brew.sh/)) — ou lancez le
@@ -304,9 +303,9 @@ cd md2star
 make install            # vérifie les deps, lance `pipx install .`
 ```
 
-Deux fichiers de dépendances pip vivent à la racine pour un chemin
-d'installation sans `make` (le `pyproject.toml` reste la source de
-vérité — ces fichiers installent le package en éditable et héritent
+Deux fichiers de dépendances pip vivent à la racine pour une
+installation sans `make` (le `pyproject.toml` reste la source de
+vérité : ces fichiers installent le package en éditable et héritent
 donc de ses pins) :
 
 - `requirements.txt` — **runtime** : installe `-e .` (soit
@@ -384,7 +383,7 @@ md2docx brouillon.md --lint
 md2docx brouillon.md --no-lint
 ```
 
-Lorsque vous passez `--lint`, une passe locale Ollama (modèle texte `gemma4:e2b-mlx` sur macOS, `gemma4:e2b` sur Linux/Windows) corrige liens d'images cassés, fences non fermées et pipes de tables mal formés avant que Pandoc lise le fichier. Le même `--lint` remplit aussi les `![](src)` vides en utilisant un modèle de vision local (`MD2STAR_ALT_TEXT_MODEL` pour surcharger). Le wrapper démarre le démon à la demande (`ollama serve`) et tire le modèle par défaut au premier usage. Si `--lint` est passé mais qu'Ollama n'est pas installé, md2star affiche un avertissement et continue avec le Markdown original. Par défaut la requête passe par `urllib` (stdlib, aucune dépendance Python) ; installez l'extra `md2star[ai]` — `pip install 'md2star[ai]'` ou `pipx inject md2star ollama` — pour utiliser le client officiel `ollama` à la place (même modèles, même sortie, mêmes garanties de repli).
+Avec `--lint`, une passe locale Ollama (modèle texte `gemma4:e2b-mlx` sur macOS, `gemma4:e2b` sur Linux/Windows) corrige les liens d'images cassés, les fences non fermées et les pipes de tables mal formés avant que Pandoc lise le fichier. Le même `--lint` remplit aussi les `![](src)` vides via un modèle de vision local (`MD2STAR_ALT_TEXT_MODEL` pour surcharger). Le wrapper démarre le démon à la demande (`ollama serve`) et tire le modèle par défaut au premier usage. Si vous passez `--lint` sans avoir Ollama installé, md2star affiche un avertissement et continue avec le Markdown original. Par défaut la requête passe par `urllib` (stdlib, aucune dépendance Python) ; installez l'extra `md2star[ai]` (`pip install 'md2star[ai]'` ou `pipx inject md2star ollama`) pour utiliser le client officiel `ollama` (mêmes modèles, même sortie, mêmes garanties de repli).
 
 ---
 
@@ -393,15 +392,14 @@ Lorsque vous passez `--lint`, une passe locale Ollama (modèle texte `gemma4:e2b
 Pour les templates PPTX d'entreprise dont les noms de mises en page ne
 suivent pas la convention Pandoc, utilisez l'outil compagnon
 [md2star-adapt](https://github.com/warith-harchaoui/md2star-adapt). Il
-extrait thème/logo/formes du PPTX, classe chaque mise en page via un
-modèle de vision locale (Ollama) en confrontant le PDF associé, puis
-assemble un document de référence compatible Pandoc — vous obtenez un
-`branded_ref.pptx` à passer à md2star via `--reference-doc`.
+extrait thème, logo et formes du PPTX, classe chaque mise en page via
+un modèle de vision local (Ollama) en la confrontant au PDF associé,
+puis assemble un document de référence compatible Pandoc : vous
+obtenez un `branded_ref.pptx` à passer à md2star via `--reference-doc`.
 
 Il vit dans son propre dépôt parce que ses dépendances (PyMuPDF, lxml,
-python-pptx, requests + un Ollama VLM en cours d'exécution) sont
-nettement plus lourdes que ce dont le pipeline de conversion de base
-a besoin.
+python-pptx, requests, plus un Ollama VLM en cours d'exécution) sont
+nettement plus lourdes que celles du pipeline de conversion de base.
 
 ---
 
@@ -456,12 +454,12 @@ cd tests/examples
 
 ## Qualité & Fiabilité
 
-`md2star` est conçu pour la fiabilité. La suite de tests automatisée couvre :
+La fiabilité est un objectif de conception. La suite de tests automatisée couvre :
 - [x] **Précision des métadonnées** : extraction du titre, injection de l'auteur, composition du sous-titre.
 - [x] **Rendu bibliographique** : pipeline citeproc contre le snapshot [references.bib](assets/references.bib).
-- [x] **Localisation des dates** : rendu des jours/mois en français et injection du format de date.
+- [x] **Localisation des dates** : rendu des jours et mois en français, injection du format de date.
 - [x] **Invariants du préprocesseur** : espacement des listes, préservation des blocs de code, conversion des `<table>` HTML, injection de largeur d'image, détection de langue, fallback Mermaid, math-in-code, isolation PPTX.
-- [x] **Mode hors-ligne** : toutes les phases avec accès réseau refusent de tourner avec `--offline`.
+- [x] **Mode hors-ligne** : toutes les phases à accès réseau refusent de tourner sous `--offline`.
 
 ### Tests d'intégration (shell)
 
@@ -481,7 +479,7 @@ python -m pytest tests/ -v
 
 Convertir en `.docx` n'enferme pas votre contenu dans un format binaire. La
 sortie de md2star est un **rendu fidèle et réversible** de votre Markdown :
-relisez le `.docx` avec n'importe quel lecteur DOCX et le contenu source
+relisez le `.docx` avec n'importe quel lecteur DOCX, et le contenu source
 revient.
 
 **Ce qui survit à l'aller-retour `md → docx → md`** :
@@ -496,17 +494,17 @@ revient.
 | Paragraphes                      | ✅ |
 
 **Il atteint un point fixe.** L'aller-retour est idempotent au sens
-mathématique — l'exécuter deux fois donne le même document qu'une seule fois
+mathématique : l'exécuter deux fois donne le même document qu'une seule fois
 (`g(g(x)) == g(x)`), donc les conversions répétées *convergent* au lieu
 d'accumuler des scories. C'est vérifié en CI par
 [`tests/test_roundtrip.py`](tests/test_roundtrip.py), qui convertit un
-échantillon en DOCX, le relit avec le lecteur natif de Pandoc, et vérifie à la
+échantillon en DOCX, le relit avec le lecteur natif de Pandoc, et contrôle à la
 fois la survie du contenu et la propriété de point fixe.
 
-La seule chose que md2star *ajoute* à chaque exécution — par conception — est
+La seule chose que md2star *ajoute* à chaque exécution, par conception, est
 un **sous-titre de date** localisé, ré-estampillé à la date du jour ; cela (et
-des détails cosmétiques comme le retour à la ligne ou le nombre exact de tirets
-dans un séparateur de tableau, sans valeur sémantique) est normalisé avant la
+des détails cosmétiques sans valeur sémantique comme le retour à la ligne ou le
+nombre exact de tirets dans un séparateur de tableau) est normalisé avant la
 vérification d'idempotence. Rien d'autre ne dérive.
 
 **Reproduisez-le vous-même** (n'importe quel lecteur DOCX fonctionne ; la voie
@@ -533,7 +531,7 @@ en CI avec la chaîne complète LibreOffice + kreuzberg. Elle tient pour :
 
 Ce qu'un PDF ne peut pas rendre, c'est le balisage qu'il n'a jamais stocké :
 l'emphase en ligne, les *niveaux* de titres et la structure des tableaux deviennent
-du texte brut — les mots survivent, pas le balisage. Ce balisage structuré est
+du texte brut ; les mots survivent, pas le balisage. Ce balisage structuré est
 précisément ce que le lecteur DOCX ci-dessus récupère, si bien que les deux sens
 couvrent ensemble tout le document.
 
@@ -564,12 +562,12 @@ Deux niveaux de personnalisation :
 **Par projet** (recommandé) : déposez un `template.docx` ou
 `template.pptx` à côté de votre Markdown. Tous les wrappers md2star
 le détectent et le passent en `--reference-doc`. Committez-le avec
-vos sources pour que collaborateurs et CI produisent rigoureusement
-le même rendu.
+vos sources pour que collaborateurs et CI produisent exactement le
+même rendu.
 
-Si ni `template.docx` (préféré) ni l'ancien `.pandoc-reference.docx`
-n'existent, md2star télécharge **par défaut** (depuis v2.5.0) le
-template `deraison.ai` et le met en cache (XDG) :
+À défaut de `template.docx` (préféré) ou de l'ancien
+`.pandoc-reference.docx`, md2star télécharge **par défaut** (depuis
+v2.5.0) le template `deraison.ai` et le met en cache (XDG) :
 
 ```
 https://deraison.ai/template.docx
@@ -579,12 +577,12 @@ https://deraison.ai/template.pptx
 Passez `--no-remote-templates` (ou le commutateur `--offline`) pour
 sauter ce téléchargement et utiliser le template embarqué dans le
 wheel. Un échec de téléchargement (pas de réseau, 404, timeout)
-retombe aussi sur le template embarqué : une conversion n'échoue
+retombe lui aussi sur le template embarqué : une conversion n'échoue
 jamais parce que `deraison.ai` est injoignable.
 
-**Global** (modifie le défaut embarqué) : modifiez les modèles dans
+**Global** (modifie le défaut embarqué) : éditez les modèles dans
 `md2star/data/` pour changer polices, marges ou logos. Relancez
-`make reinstall` ensuite pour que les changements prennent effet.
+ensuite `make reinstall` pour que les changements prennent effet.
 
 ---
 
@@ -618,13 +616,13 @@ jamais parce que `deraison.ai` est injoignable.
 
 ## Sécurité & mode hors-ligne
 
-Aucun `.md` que vous traitez ne peut faire d'appel réseau de son
+Aucun `.md` que vous traitez ne peut déclencher d'appel réseau de son
 propre chef. Les images distantes restent opt-in via
 `--allow-remote-images`. Depuis v2.5.0, le template de référence
-`deraison.ai` est téléchargé par défaut quand aucun
-`template.{docx,pptx}` local n'existe (mis en cache XDG, repli sur le
-template embarqué en cas d'échec) ; `--no-remote-templates` le saute.
-Le commutateur `--offline` est le coupe-circuit dur qui interdit tout
+`deraison.ai` est téléchargé par défaut à défaut de
+`template.{docx,pptx}` local (mis en cache XDG, repli sur le template
+embarqué en cas d'échec) ; `--no-remote-templates` le saute. Le
+commutateur `--offline` est le coupe-circuit dur : il interdit tout
 accès réseau et rend le refus explicite dans les scripts. Modèle de
 sécurité complet : **[SECURITY.md](SECURITY.md)**.
 

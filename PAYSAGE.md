@@ -4,19 +4,18 @@
 
 Comparaison concurrentielle honnête dans l'espace « Markdown →
 document soigné », mesurée face à `md2star`. Les notes vont de ⭐ (1)
-à ⭐⭐⭐⭐⭐ (5), évaluées sur la tâche visée par `md2star` — partir
+à ⭐⭐⭐⭐⭐ (5), évaluées sur la tâche visée par `md2star` : partir
 d'une source Markdown de référence et produire un DOCX / PPTX / PDF à
-l'allure délibérée, hors ligne par défaut, avec des diffs propres et
+l'allure voulue, hors ligne par défaut, avec des diffs propres et
 compatibles git. Un outil optimisé pour un tout autre usage (co-édition
-en temps réel, écriture nativement LaTeX) n'est pas pénalisé — la note
+en temps réel, écriture nativement LaTeX) n'est pas pénalisé ; la note
 reflète seulement l'adéquation à *ce* créneau. Choisir le bon outil
 compte plus que choisir le nôtre : si votre équipe co-édite en temps
-réel, Google Docs bat md2star et nous le disons.
+réel, Google Docs bat md2star, et nous le disons.
 
-Nous nous notons honnêtement — `md2star` n'obtient pas 5 étoiles sur
-chaque ligne. Ce document est maintenu à la main et reflète l'état de
-chaque projet à la mi-2026 ; ouvrez une issue si quelque chose est
-dépassé.
+Nous nous notons honnêtement : `md2star` n'a pas 5 étoiles sur chaque
+ligne. Ce document est maintenu à la main et reflète l'état de chaque
+projet à la mi-2026 ; ouvrez une issue si quelque chose est dépassé.
 
 ## En un coup d'œil
 
@@ -88,9 +87,9 @@ comme « pas fait pour cette dimension ».
 `md2star` se place volontairement à l'intersection d'une **source
 Markdown de référence** (diffs en texte brut, archive grepable, aucun
 risque de format propriétaire) et d'une **sortie de document soignée**
-(un DOCX, PPTX ou PDF à l'allure délibérée, pas un export brut). Il ne
-cherche délibérément **pas** à concurrencer Google Docs sur la
-co-édition en temps réel, Overleaf sur l'écriture nativement LaTeX, ou
+(un DOCX, PPTX ou PDF à l'allure voulue, pas un export brut). Il ne
+cherche volontairement **pas** à concurrencer Google Docs sur la
+co-édition en temps réel, Overleaf sur l'écriture nativement LaTeX, ni
 MS Word sur la fidélité de rendu native.
 
 Choisissez `md2star` quand **toutes** ces conditions sont réunies :
@@ -109,7 +108,7 @@ Choisissez `md2star` quand **toutes** ces conditions sont réunies :
 Là où `md2star` ne concourt délibérément pas :
 
 1. **Collab temps réel** — 1 étoile, volontairement. Ajouter présence
-   + CRDT en ferait un autre produit. Si le temps réel voit le jour,
+   et CRDT en ferait un autre produit. Si le temps réel voit le jour,
    ce sera un produit Premium hébergé, pas une fonction de l'édition
    Communautaire.
 2. **WYSIWYG** — 3 étoiles. L'aperçu en volet séparé garde la source
@@ -118,7 +117,7 @@ Là où `md2star` ne concourt délibérément pas :
    unique reste une piste, pas un engagement.
 3. **Mobile** — 2 étoiles. La GUI web locale écoute sur `127.0.0.1` et
    suppose un poste de bureau ; une coque mobile est dans la file à
-   long terme, non promise.
+   long terme, sans promesse.
 
 ## Quand choisir quoi
 
@@ -158,7 +157,7 @@ Là où `md2star` ne concourt délibérément pas :
 - Contrôle de biais : quand `md2star` hésite entre deux notes, nous
   prenons la **plus basse** ; quand un concurrent hésite, nous prenons
   la note que son utilisateur type défendrait. Nous ne relèverons pas
-  l'auto-évaluation de md2star sans confirmation indépendante.
-- Si une note vous semble erronée, ouvrez une issue avec l'outil, la
+  notre auto-évaluation sans confirmation indépendante.
+- Si une note vous semble fausse, ouvrez une issue avec l'outil, la
   colonne, la note actuelle et proposée, et une raison concrète (lien
   vers une fonctionnalité, un benchmark, un document représentatif).
