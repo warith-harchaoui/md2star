@@ -633,9 +633,6 @@ sécurité complet : **[SECURITY.md](SECURITY.md)**.
 - Voir **[ROADMAP.md](ROADMAP.md)** pour ce qui arrive et ce qui n'est
   explicitement pas dans le périmètre.
 - Voir **[CHANGELOG.md](CHANGELOG.md)** pour le diff par version.
-- Voir **[PAYSAGE.md](PAYSAGE.md)** pour un comparatif de md2star face
-  aux outils voisins, avec une carte de positionnement (la version
-  anglaise est **[LANDSCAPE.md](LANDSCAPE.md)**).
 
 ## Contribuer
 

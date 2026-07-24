@@ -73,11 +73,6 @@ editing in Word before it's shareable.
 `md2star` sits between you and Pandoc. You write Markdown; you get a
 DOCX / PPTX / PDF that looks like a deliberate document.
 
-Curious how it stacks up against Pandoc alone, Quarto, Marp, Typora,
-Word itself, and other Markdown-to-document tools? See
-**[LANDSCAPE.md](LANDSCAPE.md)** for the honest competitive comparison,
-with a positioning map.
-
 ## Quick start
 
 ```bash
