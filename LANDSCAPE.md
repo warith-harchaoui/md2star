@@ -49,7 +49,7 @@ date.
 
 ![Positioning map](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/landscape.png)
 
-The map is a 2-D summary of the fourteen criteria, so read it as a shape, not a scoreboard. `md2star` is at the top-right corner. The axes read **Horizontal — Innovative ↔ Adaptive** and **Vertical — Practical ↔ Comprehensive**.
+The map is a 2-D summary of the fourteen criteria, so read it as a shape, not a scoreboard. `md2star` is at the top-right corner. The axes read **Horizontal — Collaborative ↔ Open** and **Vertical — Mobile ↔ Documented**.
 <!-- FIGURE:END -->
 
 ## Column legend

@@ -20,10 +20,9 @@ Language + context (aligned with the suite's ``front-vision`` skill):
   to the model so it describes what the image *means* in place, not just its
   pixels.
 
-The vision model defaults to ``gemma3:4b`` — the suite's authorized, reliably
-multimodal model (the same tag ``front-vision`` uses). We deliberately do NOT
-share the text-lint model: the macOS lint default ``gemma4:e2b-mlx`` is a
-text-only MLX build that cannot see images. Override with
+The vision model defaults to the suite's single LLM — ``osh.llm_model()``
+(``qwen2.5vl:7b``), a multimodal (vision + text) build that covers both the
+alt-text (vision) and lint (text) passes. Override with
 ``MD2STAR_ALT_TEXT_MODEL``.
 
 Per-image results are cached in ``$XDG_CACHE_HOME/md2star/alt-text/`` keyed by
@@ -170,21 +169,18 @@ def _surrounding_context(content: str, src: str, window: int = 280) -> str:
     return (prefix + chunk).strip()[: 2 * window]
 
 
-# Default vision model for alt-text. ``gemma3:4b`` is the suite's authorized
-# vision model (the front-vision skill uses the same tag): a compact, reliably
-# multimodal build. We deliberately do NOT reuse the text-lint default here —
-# the macOS lint model ``gemma4:e2b-mlx`` is an MLX text build that does not
-# process images, so sharing it produced empty/garbage alt text. A separate
-# ``ollama pull`` for a model that can actually see is the right trade.
-_DEFAULT_ALT_MODEL = "gemma3:4b"
+# Default vision model for alt-text: the suite's single LLM, ``osh.llm_model()``
+# (``qwen2.5vl:7b``). It is multimodal (vision + text), so the same tag backs
+# both the alt-text and lint passes — one model to pull, everywhere.
+_DEFAULT_ALT_MODEL = osh.llm_model()
 
 
 def _default_alt_text_model() -> str:
     """Return the configured vision model tag.
 
-    Honours ``MD2STAR_ALT_TEXT_MODEL`` first; otherwise uses the suite's
-    authorized vision model :data:`_DEFAULT_ALT_MODEL` (``gemma3:4b``), which —
-    unlike the text-lint default — actually processes images on every platform.
+    Honours ``MD2STAR_ALT_TEXT_MODEL`` first; otherwise uses the suite's single
+    LLM :data:`_DEFAULT_ALT_MODEL` (``osh.llm_model()`` → ``qwen2.5vl:7b``),
+    which is multimodal and processes images on every platform.
     """
     override = os.environ.get("MD2STAR_ALT_TEXT_MODEL")
     if override:

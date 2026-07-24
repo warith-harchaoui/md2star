@@ -346,7 +346,7 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
         help=(
             "Opt in to the Ollama LLM linter (off by default). Also fills "
             "empty image alt text with a vision-model description, reusing "
-            "the same gemma4:e2b model (override: MD2STAR_ALT_TEXT_MODEL)."
+            "the suite's LLM (qwen2.5vl:7b) (override: MD2STAR_ALT_TEXT_MODEL)."
         ),
     )
     lint_group.add_argument(

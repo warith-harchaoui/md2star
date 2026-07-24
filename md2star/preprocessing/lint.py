@@ -21,12 +21,11 @@ the original). Any failure (network error, suspicious output, pull failure)
 falls back to the original content unchanged — the lint is never
 load-bearing for a successful conversion.
 
-The default model is a small text-only Gemma 4 variant — ``gemma4:e2b-mlx``
-on macOS (Apple-Silicon-optimized MLX build) and ``gemma4:e2b`` everywhere
-else. Both are tiny enough to fit on most laptops without breaking a sweat.
-Set the ``MD2STAR_LINT_MODEL`` env variable to override the default tag
-without editing code (useful on private registries or for trying a larger
-model).
+The default model is the suite's single LLM — ``osh.llm_model()``
+(``qwen2.5vl:7b``), a multimodal (vision + text) build shared with the
+alt-text pass, so there is one model to pull for the whole suite. Set the
+``MD2STAR_LINT_MODEL`` env variable to override the default tag without
+editing code (useful on private registries or for trying a larger model).
 
 Transport is transparent: with the optional ``md2star[ai]`` extra installed
 the request goes through the official ``ollama`` Python client (via
@@ -62,12 +61,12 @@ logger = get_logger(__name__)
 def _default_lint_model() -> str:
     """Return the default Ollama tag, honoring ``MD2STAR_LINT_MODEL`` if set."""
     # Explicit override wins (lets users pin a bigger/smaller model). Otherwise
-    # pick the MLX build on macOS — it's the Apple-Silicon-optimised variant —
-    # and the plain build everywhere else.
+    # use the suite's single LLM — one multimodal model everywhere, no macOS/MLX
+    # distinction.
     override = os.environ.get("MD2STAR_LINT_MODEL")
     if override:
         return override
-    return "gemma4:e2b-mlx" if osh.macos() else "gemma4:e2b"
+    return osh.llm_model()
 
 
 DEFAULT_LINT_MODEL = _default_lint_model()
@@ -148,7 +147,7 @@ def _model_present(model: str, timeout: float = 2.0) -> bool:
     if model in names:
         return True
     # Ollama stores untagged pulls as ``name:latest``; tolerate that form so a
-    # user who ran ``ollama pull gemma4:e2b`` isn't told it's missing.
+    # user who ran ``ollama pull qwen2.5vl:7b`` isn't told it's missing.
     if ":" not in model and f"{model}:latest" in names:
         return True
     return False
