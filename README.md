@@ -55,6 +55,14 @@ you pass `--allow-remote-images`. Neither ever sends your Markdown anywhere.
 | ![md2star GUI — light](assets/gui-light.png) | ![md2star GUI — dark](assets/gui-dark.png) |
 
 
+## Documentation
+
+[💻 Documentation](https://harchaoui.org/warith/ai-helpers/docs/md2star-doc/)
+
+[🗺️ Landscape](https://github.com/warith-harchaoui/md2star/blob/main/LANDSCAPE.md)
+
+[📋 Examples](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md)
+
 ## Why md2star?
 
 Pandoc by itself is powerful but unopinionated: it gives you a
@@ -67,7 +75,8 @@ DOCX / PPTX / PDF that looks like a deliberate document.
 
 Curious how it stacks up against Pandoc alone, Quarto, Marp, Typora,
 Word itself, and other Markdown-to-document tools? See
-**[LANDSCAPE.md](LANDSCAPE.md)** for the honest competitive comparison.
+**[LANDSCAPE.md](LANDSCAPE.md)** for the honest competitive comparison,
+with a positioning map.
 
 ## Quick start
 

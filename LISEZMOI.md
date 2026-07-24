@@ -59,6 +59,14 @@ que ce soit.
 |---|---|
 | ![md2star GUI — light](assets/gui-light.png) | ![md2star GUI — dark](assets/gui-dark.png) |
 
+## Documentation
+
+[💻 Documentation](https://harchaoui.org/warith/ai-helpers/docs/md2star-doc/)
+
+[🗺️ Paysage](https://github.com/warith-harchaoui/md2star/blob/main/PAYSAGE.md)
+
+[📋 Exemples](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md)
+
 ## Pourquoi md2star ?
 
 Pandoc seul est puissant mais agnostique : il produit un DOCX brut,
@@ -625,8 +633,9 @@ sécurité complet : **[SECURITY.md](SECURITY.md)**.
 - Voir **[ROADMAP.md](ROADMAP.md)** pour ce qui arrive et ce qui n'est
   explicitement pas dans le périmètre.
 - Voir **[CHANGELOG.md](CHANGELOG.md)** pour le diff par version.
-- Voir **[LANDSCAPE.md](LANDSCAPE.md)** pour un comparatif de md2star
-  face aux outils voisins (en anglais).
+- Voir **[PAYSAGE.md](PAYSAGE.md)** pour un comparatif de md2star face
+  aux outils voisins, avec une carte de positionnement (la version
+  anglaise est **[LANDSCAPE.md](LANDSCAPE.md)**).
 
 ## Contribuer
 
