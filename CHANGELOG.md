@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.9.0] — 2026-07-31
+
+### Changed
+- **Alt-text and lint models are single-sourced from the suite config.** The
+  default vision/text model is now read from `os_helper.llm_model()`
+  (`qwen2.5vl:7b`) instead of being hard-coded (`gemma3:4b`), so the whole
+  AI Helpers suite shares one model tag. This raises the floor dependency to
+  **`os-helper>=1.8.0`** (the release that introduces `llm_model()`). Explicit
+  `MD2STAR_ALT_TEXT_MODEL` / `MD2STAR_LINT_MODEL` overrides still win.
+- **Landscape docs regenerated** from the CSV source of truth (star table,
+  positioning map, commentary) and the French `LISEZMOI.md` / `PAYSAGE.md`
+  reworded for a more idiomatic, natural tone.
+
 ## [2.8.0] — 2026-07-20
 
 ### Added

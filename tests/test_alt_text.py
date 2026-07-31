@@ -162,15 +162,19 @@ def test_prompt_uses_detected_language_and_surrounding_context(tmp_path, png_fix
 
 
 def test_model_resolution_precedence(monkeypatch) -> None:
-    """Alt-text model = MD2STAR_ALT_TEXT_MODEL override, else the gemma3:4b vision default.
+    """Alt-text model = MD2STAR_ALT_TEXT_MODEL override, else the suite LLM default.
 
-    The alt-text model is now decoupled from the text-lint model: it defaults to a
-    model that actually processes images (``gemma3:4b``) and ignores
-    ``MD2STAR_LINT_MODEL``, which only steers the text lint.
+    The default vision model is single-sourced from the suite config via
+    ``osh.llm_model()`` (multimodal, e.g. ``qwen2.5vl:7b``) — not hard-coded here,
+    so bumping the suite model does not break this test. An explicit
+    ``MD2STAR_ALT_TEXT_MODEL`` still wins, and ``MD2STAR_LINT_MODEL`` (text lint)
+    must never influence the alt-text model.
     """
+    import os_helper as osh
+
     from md2star.preprocessing.alt_text import _DEFAULT_ALT_MODEL, _default_alt_text_model
 
-    assert _DEFAULT_ALT_MODEL == "gemma3:4b"
+    assert _DEFAULT_ALT_MODEL == osh.llm_model()
     for alt_env, expected in [
         (None, _DEFAULT_ALT_MODEL),          # no override → the vision default
         ("moondream:v2", "moondream:v2"),    # explicit override wins
