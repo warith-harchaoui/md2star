@@ -21,6 +21,9 @@ Exposed surface:
   --json`` (which tools are present, per-format feature status).
 - ``POST /convert`` — upload a ``.md`` file, pick a target format
   (``docx`` / ``pptx`` / ``pdf``), and stream back the rendered document.
+- ``POST /extract`` — the reverse direction: upload a ``.docx`` / ``.pptx`` /
+  ``.pdf`` and get its Markdown back as JSON. Needs the optional ``[ocr]`` extra
+  (Kreuzberg); returns 503 with an install hint when it is absent.
 
 Install the extra to get the runtime dependencies::
 
@@ -166,7 +169,17 @@ def doctor() -> dict:
         },
         # True when a core tool is missing — a quick top-level red/green flag.
         "core_failing": report.core_failing(),
+        # Reverse direction (DOCX/PPTX/PDF → Markdown) needs the optional [ocr]
+        # extra; report it so a client can show/hide the /extract action.
+        "reverse_available": _reverse_available(),
     }
+
+
+def _reverse_available() -> bool:
+    """Return whether the optional reverse-conversion engine is importable."""
+    from .reverse import reverse_available
+
+    return reverse_available()
 
 
 @app.post("/convert", response_model=None)
@@ -254,6 +267,67 @@ async def convert(
     return FileResponse(
         out_path, media_type=_FORMAT_MEDIA[fmt], filename=os.path.basename(out_path)
     )
+
+
+@app.post("/extract", response_model=None)
+async def extract(
+    background: BackgroundTasks,
+    file: UploadFile = File(..., description="A .docx, .pptx or .pdf document."),
+) -> dict[str, str]:
+    """Read an uploaded DOCX/PPTX/PDF back into Markdown (the reverse direction).
+
+    Delegates to :func:`md2star.reverse.to_markdown` (Kreuzberg), so a finished
+    document can be recovered as an editable Markdown source.
+
+    Parameters
+    ----------
+    background : fastapi.BackgroundTasks
+        Deletes the temp working directory after the request completes.
+    file : fastapi.UploadFile
+        The document to read back; extension must be docx / pptx / pdf.
+
+    Returns
+    -------
+    dict
+        ``{"filename": <stem>.md, "markdown": <text>}``.
+
+    Raises
+    ------
+    fastapi.HTTPException
+        400 for an unsupported extension, 503 when the optional ``[ocr]`` extra
+        (Kreuzberg) is not installed, 500 on any extraction failure.
+    """
+    from .reverse import ReverseUnavailable, is_supported, to_markdown
+
+    stem = Path(file.filename or "document").stem or "document"
+    suffix = Path(file.filename or "").suffix.lower()
+    # Validate the extension up front so an unsupported upload fails fast with a
+    # 400 instead of reaching the engine.
+    if not is_supported(file.filename or ""):
+        raise HTTPException(
+            status_code=400,
+            detail=f"unsupported input {suffix!r}; expected .docx, .pptx or .pdf",
+        )
+
+    # Stage the upload on disk (Kreuzberg is path-in) and clean up after streaming.
+    work = osh.make_temporary_directory(prefix="md2star_api_")
+    background.add_task(shutil.rmtree, work, ignore_errors=True)
+    in_path = os.path.join(work, f"{stem}{suffix}")
+    with open(in_path, "wb") as f:
+        f.write(await file.read())
+
+    try:
+        markdown = to_markdown(in_path)
+    except ReverseUnavailable as exc:
+        # Optional feature not installed — an environment problem, so 503 tells
+        # the caller to provision `pip install 'md2star[ocr]'` and retry.
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (ValueError, FileNotFoundError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    return {"filename": f"{stem}.md", "markdown": markdown}
 
 
 def main() -> None:

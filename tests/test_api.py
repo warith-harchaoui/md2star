@@ -17,9 +17,12 @@ Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
 
 from __future__ import annotations
 
+import importlib.util
 import shutil
 
 import pytest
+
+_HAS_KREUZBERG = importlib.util.find_spec("kreuzberg") is not None
 
 # FastAPI + httpx live in the [api] / [dev] extras — skip cleanly otherwise.
 pytest.importorskip("fastapi")
@@ -65,7 +68,7 @@ def test_root_redirects_to_gui(client: TestClient) -> None:
 def test_openapi_exposes_expected_routes(client: TestClient) -> None:
     """The OpenAPI schema must list the documented endpoints (drift guard)."""
     paths = client.get("/openapi.json").json()["paths"]
-    assert {"/health", "/doctor", "/convert"} <= set(paths)
+    assert {"/health", "/doctor", "/convert", "/extract"} <= set(paths)
 
 
 def test_doctor_reports_features(client: TestClient) -> None:
@@ -74,6 +77,8 @@ def test_doctor_reports_features(client: TestClient) -> None:
     assert "checks" in body and isinstance(body["checks"], list)
     assert {"docx", "pptx", "pdf", "mermaid"} <= set(body["features"])
     assert isinstance(body["core_failing"], bool)
+    # The reverse-conversion availability flag drives the /extract UI.
+    assert isinstance(body["reverse_available"], bool)
 
 
 def test_convert_rejects_unknown_format(client: TestClient) -> None:
@@ -108,3 +113,40 @@ def test_convert_markdown_to_docx(
     # A .docx is a ZIP container — its magic bytes are "PK".
     assert r.content[:2] == b"PK"
     assert len(r.content) > 1000
+
+
+def test_extract_rejects_unsupported_format(client: TestClient) -> None:
+    """``/extract`` refuses a non-document upload with a 400 (not a 500)."""
+    r = client.post(
+        "/extract",
+        files={"file": ("note.md", "# Hi\n", "text/markdown")},
+    )
+    assert r.status_code == 400
+
+
+@pytest.mark.skipif(
+    shutil.which("pandoc") is None or not _HAS_KREUZBERG,
+    reason="reverse round-trip needs pandoc (forward) + kreuzberg (reverse)",
+)
+def test_extract_docx_roundtrips_to_markdown(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DOCX produced by /convert is read back to Markdown by /extract."""
+    monkeypatch.setattr("md2star.cli._TEMPLATE_URLS", {}, raising=True)
+    # Forward: Markdown → DOCX.
+    fwd = client.post(
+        "/convert?fmt=docx",
+        files={"file": ("note.md", "# Heading One\n\nA **bold** word.\n", "text/markdown")},
+    )
+    assert fwd.status_code == 200, fwd.text
+    # Reverse: DOCX → Markdown.
+    rev = client.post(
+        "/extract",
+        files={"file": ("note.docx", fwd.content,
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+    )
+    assert rev.status_code == 200, rev.text
+    body = rev.json()
+    assert body["filename"] == "note.md"
+    assert "Heading One" in body["markdown"]
+    assert "bold" in body["markdown"]

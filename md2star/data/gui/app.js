@@ -541,6 +541,77 @@ function replaceDoc(text) {
   scheduleRender();
 }
 
+// ── Import: DOCX / PPTX / PDF → Markdown (reverse direction) ──────────
+// The counterpart to Render: pick a finished document and read it back into
+// the editor as Markdown via POST /extract (Kreuzberg). The picker is a hidden
+// <input>; the button just triggers it, and the change handler uploads the raw
+// bytes with an X-Md2star-Ext header the server uses to choose the reader.
+const btnImport  = $("#btn-import");
+const importFile = $("#import-file");
+const btnAiLint  = $("#btn-ailint");
+
+btnImport?.addEventListener("click", () => importFile?.click());
+
+importFile?.addEventListener("change", async () => {
+  const file = importFile.files?.[0];
+  importFile.value = "";  // reset so re-picking the same file still fires
+  if (!file) return;
+  const ext = (file.name.match(/\.[^.]+$/) || [""])[0].toLowerCase();
+  if (![".docx", ".pptx", ".pdf"].includes(ext)) {
+    setStatus("error", `Import expects .docx / .pptx / .pdf, got ${file.name}`);
+    return;
+  }
+  setStatus("busy", `Importing ${file.name}…`);
+  try {
+    const resp = await fetch("/extract", {
+      method: "POST",
+      headers: { "X-Md2star-Ext": ext, "Content-Type": "application/octet-stream" },
+      body: await file.arrayBuffer(),
+    });
+    if (!resp.ok) throw new Error((await resp.text()) || `HTTP ${resp.status}`);
+    const j = await resp.json();
+    replaceDoc(j.markdown || "");
+    setStatus("ok", `Imported ${file.name} → Markdown`);
+  } catch (err) {
+    // A 501 here means the server lacks the optional [ocr] extra; the message
+    // carries the exact `pip install 'md2star[ocr]'` hint.
+    setStatus("error", `Import failed: ${err.message || err}`);
+  }
+});
+
+// ── AI Lint: syntax-only repair of the buffer via POST /lint (Ollama) ─
+// Mirrors the CLI --lint pass. The server never rewrites prose (repairs only)
+// and returns the buffer unchanged when Ollama or the model is unavailable, so
+// this button is always safe to press — worst case it reports "no change".
+btnAiLint?.addEventListener("click", async () => {
+  const text = editor.state.doc.toString();
+  if (!text.trim()) { setStatus("error", "Nothing to lint."); return; }
+  const label = btnAiLint.textContent;
+  btnAiLint.disabled = true;
+  btnAiLint.textContent = "Linting…";
+  setStatus("busy", "AI linting the Markdown…");
+  try {
+    const resp = await fetch("/lint", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markdown: text }),
+    });
+    if (!resp.ok) throw new Error((await resp.text()) || `HTTP ${resp.status}`);
+    const j = await resp.json();
+    if (j.changed) {
+      replaceDoc(j.markdown || text);
+      setStatus("ok", "AI lint applied syntax fixes.");
+    } else {
+      setStatus("ok", "AI lint: already clean (or Ollama unavailable).");
+    }
+  } catch (err) {
+    setStatus("error", `AI lint failed: ${err.message || err}`);
+  } finally {
+    btnAiLint.disabled = false;
+    btnAiLint.textContent = label;
+  }
+});
+
 // ── Theme cycler: Light → Dark → Auto ────────────────────────────────
 // Default is Auto (follows system prefers-color-scheme). The choice is
 // persisted in localStorage so the next page load remembers it. We

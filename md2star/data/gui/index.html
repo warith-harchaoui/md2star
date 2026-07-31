@@ -488,6 +488,27 @@
                       dark:text-label-secondary-dark">
             <span id="editor-filename">editor.md</span>
             <div class="flex items-center gap-2">
+              <!-- Reverse direction: pick a finished document and read it back
+                   into the editor as Markdown (POST /extract, Kreuzberg). -->
+              <input id="import-file" type="file"
+                     accept=".docx,.pptx,.pdf" hidden>
+              <button id="btn-import" type="button"
+                      class="rounded px-2 py-1 hover:bg-surface-tertiary
+                             dark:hover:bg-surface-tertiary-dark
+                             focus:outline-none focus-visible:ring-2
+                             focus-visible:ring-brand-blue"
+                      title="Import a .docx / .pptx / .pdf back into Markdown">
+                Import
+              </button>
+              <!-- AI syntax-lint the current buffer (POST /lint, Ollama). -->
+              <button id="btn-ailint" type="button"
+                      class="rounded px-2 py-1 hover:bg-surface-tertiary
+                             dark:hover:bg-surface-tertiary-dark
+                             focus:outline-none focus-visible:ring-2
+                             focus-visible:ring-brand-blue"
+                      title="AI syntax-lint the Markdown (repairs only, needs Ollama)">
+                AI&nbsp;Lint
+              </button>
               <button id="btn-open" type="button"
                       class="rounded px-2 py-1 hover:bg-surface-tertiary
                              dark:hover:bg-surface-tertiary-dark

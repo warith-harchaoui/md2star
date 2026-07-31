@@ -88,6 +88,15 @@ mcp = [
 ai = [
     "ollama>=0.4,<1",
 ]
+# Reverse conversion (DOCX/PPTX/PDF → Markdown) via Kreuzberg — the same engine
+# the round-trip OCR test uses, now exposed as a runtime feature: the API's
+# `POST /extract` and the full GUI's "Import" button both read a finished
+# document back into Markdown. Heavy (Rust core + OCR), so it is opt-in and
+# every surface degrades gracefully when it is absent:
+#   pip install 'md2star[ocr]'
+ocr = [
+    "kreuzberg>=4,<5",
+]
 # The local GUI (`md2star gui`) ships bundled in this same wheel and needs no
 # extra Python packages — its frontend (PDF.js, CodeMirror, Tailwind, fonts) is
 # fully vendored and the server is pure stdlib. This extra exists so

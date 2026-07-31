@@ -6,6 +6,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.10.0] — 2026-07-31
+
+### Added
+- **Reverse conversion — DOCX / PPTX / PDF → Markdown.** A new
+  `md2star.reverse` module reads a finished document back into an editable
+  Markdown source, powered by [Kreuzberg](https://github.com/Goldziher/kreuzberg)
+  (OCR included, so scanned PDFs work). It is an opt-in extra —
+  `pip install 'md2star[ocr]'` — and every surface degrades gracefully with a
+  clear install hint when it is absent.
+  - **Full GUI (`md2star gui`)** gains an **Import** button: pick a
+    `.docx` / `.pptx` / `.pdf` and its Markdown loads straight into the editor
+    (`POST /extract`).
+  - **API (`md2star-api`)** gains **`POST /extract`** (upload a document → JSON
+    `{filename, markdown}`); `GET /doctor` now reports `reverse_available`.
+- **Full GUI: AI Lint button.** Runs the same syntax-only LLM repair pass as the
+  CLI `--lint` (`POST /lint`, backed by `lint_with_llm`) over the editor buffer
+  and applies the fix in place. Repairs only — never rewrites prose — and is a
+  safe no-op when Ollama or the model is unavailable.
+
 ## [2.9.0] — 2026-07-31
 
 ### Changed

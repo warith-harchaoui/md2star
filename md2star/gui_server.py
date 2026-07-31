@@ -401,6 +401,10 @@ class _Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path == "/render":
             return self._handle_render()
+        if path == "/extract":
+            return self._handle_extract()
+        if path == "/lint":
+            return self._handle_lint()
         if path == "/template":
             return self._handle_template_upload()
         if path == "/template/clear":
@@ -613,6 +617,93 @@ class _Handler(BaseHTTPRequestHandler):
         body = json.dumps({
             "ok": True, "cleared": cleared,
             "session_status": _session_template_status(),
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    # ─────────────────────────────────────────────────────────────────
+    # POST /extract — reverse direction: DOCX/PPTX/PDF → Markdown (Kreuzberg)
+    # ─────────────────────────────────────────────────────────────────
+
+    def _handle_extract(self) -> None:
+        """Read an uploaded DOCX/PPTX/PDF body back into Markdown for the editor.
+
+        The frontend sends the raw file bytes with an ``X-Md2star-Ext`` header
+        (``.docx`` / ``.pptx`` / ``.pdf``, inferred from the picked file). We
+        stage the bytes on disk and hand them to :func:`md2star.reverse.to_markdown`,
+        returning the recovered Markdown as JSON so the editor can load it.
+        """
+        from .reverse import ReverseUnavailable, is_supported, to_markdown
+
+        length = int(self.headers.get("Content-Length", "0") or "0")
+        if length <= 0:
+            return self.send_error(400, "empty upload")
+        # Cap at 50 MB — larger than any document this GUI is meant to import.
+        if length > 50 * 1024 * 1024:
+            return self.send_error(413, "upload exceeds 50 MB cap")
+
+        # The extension decides the reader path; reject anything we don't read
+        # back before spending bytes on disk or importing the heavy engine.
+        ext = (self.headers.get("X-Md2star-Ext") or "").strip().lower()
+        if not ext.startswith("."):
+            ext = "." + ext if ext else ""
+        if not is_supported("x" + ext):
+            return self.send_error(415, "expected a .docx, .pptx or .pdf upload")
+
+        data = self.rfile.read(length)
+
+        # One throwaway file per import (auto-removed with the folder), so a
+        # concurrent import can't collide and the disk stays clean.
+        with osh.temporary_folder(prefix="md2star-gui-extract-") as workdir:
+            src = Path(workdir) / f"upload{ext}"
+            src.write_bytes(data)
+            try:
+                markdown = to_markdown(src)
+            except ReverseUnavailable as exc:
+                # Optional [ocr] extra missing — 501 (not implemented on this
+                # install) with the exact install hint the exception carries.
+                return self.send_error(501, str(exc))
+            except (ValueError, FileNotFoundError) as exc:
+                return self.send_error(400, str(exc))
+            except RuntimeError as exc:
+                return self.send_error(500, str(exc))
+
+        body = json.dumps({
+            "ok": True, "markdown": markdown, "bytes": len(data), "ext": ext,
+        }).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    # ─────────────────────────────────────────────────────────────────
+    # POST /lint — AI syntax-lint the editor's Markdown (Ollama, opt-in)
+    # ─────────────────────────────────────────────────────────────────
+
+    def _handle_lint(self) -> None:
+        """Run the AI Markdown syntax-linter over the editor buffer, return the fix.
+
+        Mirrors the CLI ``--lint`` pass: :func:`lint_with_llm` sends the Markdown
+        to a local Ollama model for *syntax-only* repairs and returns the
+        original untouched on any failure (Ollama absent, model missing, network
+        error, or a length-guard trip). The response reports whether anything
+        actually changed so the UI can say "already clean" vs "fixed".
+        """
+        from .preprocessing.lint import lint_with_llm
+
+        payload = self._read_json()
+        markdown: str = payload.get("markdown") or ""
+        model = payload.get("model") or None
+
+        # lint_with_llm is self-guarding: it never raises and degrades to the
+        # input on any failure, so a missing Ollama simply yields "no change".
+        fixed = lint_with_llm(markdown, model=model)
+        body = json.dumps({
+            "ok": True, "markdown": fixed, "changed": fixed != markdown,
         }).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
