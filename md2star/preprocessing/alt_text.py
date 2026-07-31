@@ -20,9 +20,10 @@ Language + context (aligned with the suite's ``front-vision`` skill):
   to the model so it describes what the image *means* in place, not just its
   pixels.
 
-The vision model defaults to the suite's single LLM — ``osh.llm_model()``
-(``qwen2.5vl:7b``), a multimodal (vision + text) build that covers both the
-alt-text (vision) and lint (text) passes. Override with
+The vision model is chosen by the suite's model picker,
+``best_engine_ai_helper.vision_model()`` — the VLM selected by
+``best-engine-ai-helper pull`` for this machine, or a safe multimodal default
+(``qwen3-vl:8b``) when detection has never run. Override with
 ``MD2STAR_ALT_TEXT_MODEL``.
 
 Per-image results are cached in ``$XDG_CACHE_HOME/md2star/alt-text/`` keyed by
@@ -47,6 +48,7 @@ import os
 import re
 import urllib.request
 
+import best_engine_ai_helper as beh
 import os_helper as osh
 
 from ..cache import cache_dir
@@ -169,18 +171,19 @@ def _surrounding_context(content: str, src: str, window: int = 280) -> str:
     return (prefix + chunk).strip()[: 2 * window]
 
 
-# Default vision model for alt-text: the suite's single LLM, ``osh.llm_model()``
-# (``qwen2.5vl:7b``). It is multimodal (vision + text), so the same tag backs
-# both the alt-text and lint passes — one model to pull, everywhere.
-_DEFAULT_ALT_MODEL = osh.llm_model()
+# Default vision model for alt-text: the VLM chosen by the suite's model picker,
+# ``beh.vision_model()``. It resolves the model selected for this machine (or a
+# safe multimodal default), so alt-text runs on hardware-appropriate weights
+# without md2star hard-coding a tag.
+_DEFAULT_ALT_MODEL = beh.vision_model()
 
 
 def _default_alt_text_model() -> str:
     """Return the configured vision model tag.
 
-    Honours ``MD2STAR_ALT_TEXT_MODEL`` first; otherwise uses the suite's single
-    LLM :data:`_DEFAULT_ALT_MODEL` (``osh.llm_model()`` → ``qwen2.5vl:7b``),
-    which is multimodal and processes images on every platform.
+    Honours ``MD2STAR_ALT_TEXT_MODEL`` first; otherwise uses the suite picker's
+    choice :data:`_DEFAULT_ALT_MODEL` (``beh.vision_model()``), a multimodal
+    build that processes images on every platform.
     """
     override = os.environ.get("MD2STAR_ALT_TEXT_MODEL")
     if override:

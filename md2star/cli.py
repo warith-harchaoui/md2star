@@ -345,8 +345,9 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
         "--lint", action="store_true",
         help=(
             "Opt in to the Ollama LLM linter (off by default). Also fills "
-            "empty image alt text with a vision-model description, reusing "
-            "the suite's LLM (qwen2.5vl:7b) (override: MD2STAR_ALT_TEXT_MODEL)."
+            "empty image alt text with a vision-model description, using the "
+            "model chosen by best-engine-ai-helper (override: "
+            "MD2STAR_ALT_TEXT_MODEL)."
         ),
     )
     lint_group.add_argument(

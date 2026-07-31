@@ -21,11 +21,12 @@ the original). Any failure (network error, suspicious output, pull failure)
 falls back to the original content unchanged — the lint is never
 load-bearing for a successful conversion.
 
-The default model is the suite's single LLM — ``osh.llm_model()``
-(``qwen2.5vl:7b``), a multimodal (vision + text) build shared with the
-alt-text pass, so there is one model to pull for the whole suite. Set the
-``MD2STAR_LINT_MODEL`` env variable to override the default tag without
-editing code (useful on private registries or for trying a larger model).
+The default model is chosen by the suite's model picker,
+``best_engine_ai_helper.text_model()`` — it returns the text model persisted by
+``best-engine-ai-helper pull`` for this machine, or a safe multimodal default
+(``qwen3-vl:8b``) when detection has never run. Set the ``MD2STAR_LINT_MODEL``
+env variable to override the default tag without editing code (useful on
+private registries or for trying a larger model).
 
 Transport is transparent: with the optional ``md2star[ai]`` extra installed
 the request goes through the official ``ollama`` Python client (via
@@ -49,7 +50,7 @@ import subprocess
 import time
 import urllib.request
 
-import os_helper as osh
+import best_engine_ai_helper as beh
 
 from ..logging import get_logger
 from . import _ollama_client
@@ -61,12 +62,12 @@ logger = get_logger(__name__)
 def _default_lint_model() -> str:
     """Return the default Ollama tag, honoring ``MD2STAR_LINT_MODEL`` if set."""
     # Explicit override wins (lets users pin a bigger/smaller model). Otherwise
-    # use the suite's single LLM — one multimodal model everywhere, no macOS/MLX
-    # distinction.
+    # defer the choice to the suite's model picker, which resolves the text
+    # model selected for this machine (or a safe default) without probing here.
     override = os.environ.get("MD2STAR_LINT_MODEL")
     if override:
         return override
-    return osh.llm_model()
+    return beh.text_model()
 
 
 DEFAULT_LINT_MODEL = _default_lint_model()
@@ -147,7 +148,7 @@ def _model_present(model: str, timeout: float = 2.0) -> bool:
     if model in names:
         return True
     # Ollama stores untagged pulls as ``name:latest``; tolerate that form so a
-    # user who ran ``ollama pull qwen2.5vl:7b`` isn't told it's missing.
+    # user who ran ``ollama pull qwen3-vl:8b`` isn't told it's missing.
     if ":" not in model and f"{model}:latest" in names:
         return True
     return False

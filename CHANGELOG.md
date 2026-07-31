@@ -9,12 +9,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [2.9.0] — 2026-07-31
 
 ### Changed
-- **Alt-text and lint models are single-sourced from the suite config.** The
-  default vision/text model is now read from `os_helper.llm_model()`
-  (`qwen2.5vl:7b`) instead of being hard-coded (`gemma3:4b`), so the whole
-  AI Helpers suite shares one model tag. This raises the floor dependency to
-  **`os-helper>=1.8.0`** (the release that introduces `llm_model()`). Explicit
-  `MD2STAR_ALT_TEXT_MODEL` / `MD2STAR_LINT_MODEL` overrides still win.
+- **Model choice is delegated to the suite's model picker,
+  `best-engine-ai-helper`.** The lint (text) pass now reads
+  `best_engine_ai_helper.text_model()` and the alt-text (vision) pass reads
+  `best_engine_ai_helper.vision_model()`, instead of hard-coding a tag or
+  routing through `os_helper.llm_model()`. Those resolvers return the model
+  selected for the current machine by `best-engine-ai-helper pull`, or a safe
+  multimodal default (`qwen3-vl:8b`) when detection has never run — cheaply and
+  deterministically, without probing hardware at conversion time. Explicit
+  `MD2STAR_LINT_MODEL` / `MD2STAR_ALT_TEXT_MODEL` overrides still win.
+- **Dependencies.** Added `best-engine-ai-helper>=0.3.0` (light: click / psutil
+  / pyyaml / requests). Relaxed the `os-helper` floor back to `>=1.7.2` — its
+  `llm_model()` is no longer used now that model choice lives in
+  `best-engine-ai-helper`.
 - **Landscape docs regenerated** from the CSV source of truth (star table,
   positioning map, commentary) and the French `LISEZMOI.md` / `PAYSAGE.md`
   reworded for a more idiomatic, natural tone.
