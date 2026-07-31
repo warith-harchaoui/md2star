@@ -26,6 +26,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   positioning map, commentary) and the French `LISEZMOI.md` / `PAYSAGE.md`
   reworded for a more idiomatic, natural tone.
 
+### Fixed
+- **MCP surface pinned below the breaking `mcp` 2.0.0.** `fastapi-mcp` 0.4.0
+  declares only `mcp>=1.12` with no upper bound, so a fresh install pulled the
+  new `mcp` 2.0.0 whose low-level `Server.__init__` signature change broke
+  `fastapi-mcp` at import (`Server.__init__() takes 2 positional arguments but
+  3 were given`). The `mcp` and `dev` extras now cap `mcp<2`.
+
 ## [2.8.0] — 2026-07-20
 
 ### Added
