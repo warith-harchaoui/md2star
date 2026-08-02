@@ -18,7 +18,10 @@ Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
 from __future__ import annotations
 
 import importlib.util
+import io
 import shutil
+import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -122,6 +125,56 @@ def test_extract_rejects_unsupported_format(client: TestClient) -> None:
         files={"file": ("note.md", "# Hi\n", "text/markdown")},
     )
     assert r.status_code == 400
+
+
+def _fake_twin(path, out_dir, *, image_handler=None, **_kw):  # noqa: ANN001, ANN202
+    """Stand-in for ``to_markdown_twin``: write a <stem>.md + one asset, offline.
+
+    Lets the twin endpoints be tested without Kreuzberg — it mirrors the real
+    contract (a Markdown file plus an ``assets/`` sibling, returning the md path)
+    so the zip / sidebar assertions exercise the wiring, not the OCR engine.
+    """
+    out = Path(out_dir)
+    (out / "assets").mkdir(parents=True, exist_ok=True)
+    (out / "assets" / "image_1.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    md = out / f"{Path(path).stem}.md"
+    md.write_text("# Twin\n\n![](assets/image_1.png)\n", encoding="utf-8")
+    return md
+
+
+def test_extract_text_only_returns_json(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Default ``/extract`` (no twin) returns ``{filename, markdown}`` JSON."""
+    # Fake the engine so the JSON contract is locked without Kreuzberg installed.
+    monkeypatch.setattr("md2star.reverse.to_markdown", lambda _p: "# Recovered\n", raising=True)
+    r = client.post(
+        "/extract",
+        files={"file": ("note.docx", b"fake-docx",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body == {"filename": "note.md", "markdown": "# Recovered\n"}
+
+
+def test_extract_twin_returns_zip(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``/extract`` with ``twin=true`` streams a zip of <stem>.md + assets/."""
+    monkeypatch.setattr("md2star.reverse.to_markdown_twin", _fake_twin, raising=True)
+    r = client.post(
+        "/extract",
+        files={"file": ("note.docx", b"fake-docx",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        data={"twin": "true"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.headers["content-type"] == "application/zip"
+    # The zip must carry both the recovered markdown and the scraped asset, with
+    # the assets/ prefix preserved so the archived links keep resolving.
+    names = set(zipfile.ZipFile(io.BytesIO(r.content)).namelist())
+    assert names == {"note.md", "assets/image_1.png"}
 
 
 @pytest.mark.skipif(

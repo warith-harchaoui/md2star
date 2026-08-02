@@ -6,6 +6,38 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.12.0] — 2026-08-02
+
+### Added
+- **The Markdown *twin* reaches the GUI and the API — feature parity with the
+  CLI `md2star twin`.** The reverse path that recovers an *editable* document
+  (prose + GFM tables + scraped images, optionally re-authored Mermaid diagrams)
+  is no longer CLI-only:
+  - **Full GUI (`md2star gui`).** The editor's **Import** control gains two
+    toggles — **Twin** (keep scraped images) and **Mermaid** (re-author
+    node-and-edge figures via the local VLM; implies Twin). Twin mode writes
+    `<stem>.md` **plus an `assets/` folder into the open folder root** (so the
+    recovered image links resolve on re-render) and refreshes the sidebar; the
+    `.md` name is sanitised and de-duplicated so an import never clobbers an
+    existing file. Twin mode requires an open folder (assets need a home) and
+    returns a clear 409 otherwise; plain **Import** stays a zero-side-effect
+    text load that needs no folder. `POST /extract` now reads `X-Md2star-Twin` /
+    `X-Md2star-Diagrams` / `X-Md2star-Name` headers.
+  - **API (`md2star-api`).** `POST /extract` gains `twin` / `diagrams` form
+    fields (`diagrams` implies `twin`). Text-only mode still returns
+    `{filename, markdown}` JSON; twin mode returns a **zip of `<stem>.md` +
+    `assets/`** (`application/zip`) so the recovered twin travels as one
+    self-contained, re-renderable unit.
+  - **Graceful degradation preserved**: no `[ai]` stack / Ollama / `mmdc` → the
+    Mermaid pass degrades to plain scraped PNGs; no `[ocr]` engine → the same
+    501/503 install hint as before. No new runtime dependencies (the zip uses
+    stdlib `zipfile`).
+  - Docs: `TRIGGERS.md`, the agent skill (`skills/md2star/SKILL.md` +
+    `references/triggers.md`) now advertise the reverse/twin direction and drop
+    the stale "md2star does not extract documents" SKIP. Covered offline by new
+    cases in `tests/test_api.py` and `tests/test_gui_reverse_lint.py` (injected
+    fakes — no Kreuzberg needed).
+
 ## [2.11.0] — 2026-08-01
 
 ### Added

@@ -9,9 +9,11 @@ machine-checked superset that `scripts/check_triggers.py` enforces).
 
 `md2star` converts **Markdown → DOCX / PPTX / PDF** via Pandoc with a curated
 styling layer (branded templates, BibTeX citations, footnotes, Mermaid
-diagrams, LaTeX math, image embedding). It is local-first: the document content
-never leaves your machine. It does **not** read/extract existing DOCX/PDF files,
-generate websites, or run a LaTeX-native workflow.
+diagrams, LaTeX math, image embedding). It also runs the **reverse direction** —
+read a finished PDF/DOCX/PPTX back into an editable Markdown *twin* (prose +
+tables + scraped images, optionally re-authoring diagrams as Mermaid). It is
+local-first: the document content never leaves your machine. It does **not**
+generate websites or run a LaTeX-native workflow.
 
 ## The conversions → how to invoke
 
@@ -21,6 +23,7 @@ generate websites, or run a LaTeX-native workflow.
 | Markdown → PowerPoint (.pptx) | `md2pptx slides.md` | `md2star pptx slides.md` | `POST /convert?fmt=pptx` |
 | Markdown → PDF (needs LibreOffice) | `md2pdf paper.md` | `md2star pdf paper.md` | `POST /convert?fmt=pdf` |
 | Full browser editor (live PDF preview) | — | `md2star gui` | — |
+| Document → editable Markdown *twin* (reverse) | — | `md2star twin file.pdf [--diagrams]` | `POST /extract` |
 | Environment diagnostic | — | `md2star doctor [--json]` | `GET /doctor` |
 
 Every conversion is also reachable through the click CLI (`md2star-x
@@ -43,6 +46,10 @@ docx|pptx|pdf|gui|doctor`, same delegation), the FastAPI HTTP surface
   "render this Mermaid diagram into a PDF/DOCX", "LaTeX math in DOCX/PPTX/PDF".
 - **Preview / editor**: "local Overleaf-style markdown editor", "live PDF
   preview of my markdown", "a browser editor for markdown → PDF".
+- **Reverse / twin**: "turn this PDF/Word back into Markdown", "recover the
+  Markdown from this document", "make an editable Markdown twin of this file",
+  "extract the tables and images from this PDF into Markdown", "reverse-engineer
+  this doc", `md2star twin file.pdf`, `--diagrams` (re-author figures as Mermaid).
 - **Surfaces**: "run the md2star API / MCP server", "open the md2star GUI",
   "install md2star".
 
@@ -57,8 +64,6 @@ docx|pptx|pdf|gui|doctor`, same delegation), the FastAPI HTTP surface
 
 ## When NOT to use md2star (SKIP)
 
-- Reading / extracting text from an existing `.docx` / `.pdf` — that is
-  extraction, not conversion (use a document parser / OCR tool).
 - "Just run pandoc with these flags" — the user wants raw Pandoc control.
 - Building a website / static HTML from Markdown → use a site generator.
 - LaTeX-native PDF authoring → Overleaf / latexmk.

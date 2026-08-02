@@ -548,9 +548,20 @@ function replaceDoc(text) {
 // bytes with an X-Md2star-Ext header the server uses to choose the reader.
 const btnImport  = $("#btn-import");
 const importFile = $("#import-file");
+const twImages   = $("#tw-images");
+const twDiagrams = $("#tw-diagrams");
 const btnAiLint  = $("#btn-ailint");
 
 btnImport?.addEventListener("click", () => importFile?.click());
+
+// "Mermaid" implies "Twin": you can't reconstruct diagrams without keeping the
+// images, so ticking Mermaid auto-ticks Twin, and untucking Twin clears Mermaid.
+twDiagrams?.addEventListener("change", () => {
+  if (twDiagrams.checked && twImages) twImages.checked = true;
+});
+twImages?.addEventListener("change", () => {
+  if (!twImages.checked && twDiagrams) twDiagrams.checked = false;
+});
 
 importFile?.addEventListener("change", async () => {
   const file = importFile.files?.[0];
@@ -561,20 +572,42 @@ importFile?.addEventListener("change", async () => {
     setStatus("error", `Import expects .docx / .pptx / .pdf, got ${file.name}`);
     return;
   }
-  setStatus("busy", `Importing ${file.name}…`);
+  // Twin mode keeps scraped images (assets/); Mermaid additionally reconstructs
+  // diagrams. Both are opt-in via the header flags the server reads.
+  const twin = !!twImages?.checked;
+  const diagrams = !!twDiagrams?.checked;
+  const headers = {
+    "X-Md2star-Ext": ext,
+    "X-Md2star-Name": file.name,
+    "Content-Type": "application/octet-stream",
+  };
+  if (twin) headers["X-Md2star-Twin"] = "1";
+  if (diagrams) headers["X-Md2star-Diagrams"] = "1";
+  const label = twin ? (diagrams ? "twin + Mermaid" : "twin") : "text";
+  setStatus("busy", `Importing ${file.name} (${label})…`);
   try {
     const resp = await fetch("/extract", {
       method: "POST",
-      headers: { "X-Md2star-Ext": ext, "Content-Type": "application/octet-stream" },
+      headers,
       body: await file.arrayBuffer(),
     });
     if (!resp.ok) throw new Error((await resp.text()) || `HTTP ${resp.status}`);
     const j = await resp.json();
     replaceDoc(j.markdown || "");
-    setStatus("ok", `Imported ${file.name} → Markdown`);
+    if (j.twin) {
+      // The server wrote <stem>.md + assets/ into the open folder — surface the
+      // asset count and refresh the sidebar so the new files show up.
+      const n = j.assets || 0;
+      setStatus("ok",
+        `Imported ${file.name} → ${j.filename || "Markdown"} ` +
+        `(${n} image${n === 1 ? "" : "s"} in assets/)`);
+      _refreshSidebar();
+    } else {
+      setStatus("ok", `Imported ${file.name} → Markdown`);
+    }
   } catch (err) {
-    // A 501 here means the server lacks the optional [ocr] extra; the message
-    // carries the exact `pip install 'md2star[ocr]'` hint.
+    // A 501 here means the server lacks the optional [ocr] extra; a 409 means
+    // twin mode was asked for with no folder open. Both messages are actionable.
     setStatus("error", `Import failed: ${err.message || err}`);
   }
 });

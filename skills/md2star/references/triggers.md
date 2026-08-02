@@ -32,10 +32,17 @@ host model actually sees, this file is the human-reviewable superset.
 - "local Overleaf-style markdown editor", "live PDF preview of my markdown"
 - "a browser editor for markdown → PDF", "minimal preview server for markdown"
 
+**Reverse / twin (document → editable Markdown)**
+- "turn this PDF / Word back into Markdown", "recover the Markdown from this doc"
+- "make an editable Markdown twin of this file", "reverse-engineer this document"
+- "extract the tables and images from this PDF into Markdown"
+- `md2star twin file.pdf`, `--diagrams` (re-author node-and-edge figures as Mermaid)
+
 ## Do NOT fire (negative triggers / SKIP)
 
-- Reading or editing an existing `.docx`/`.pdf` (that is extraction/parsing,
-  not conversion) — e.g. "extract text from this PDF", "read this Word file".
+- Wanting only raw text/parsing out of a document with no intent to get an
+  editable Markdown source back — use a plain parser / OCR tool. (The twin path
+  is for round-trippable Markdown, not one-shot text extraction.)
 - "just run pandoc with these flags" — the user wants raw Pandoc control.
 - "build a website / static HTML site from these markdown files" → site generator.
 - "I write in LaTeX / need a LaTeX-native PDF" → Overleaf/latexmk.

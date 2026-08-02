@@ -22,8 +22,10 @@ Exposed surface:
 - ``POST /convert`` — upload a ``.md`` file, pick a target format
   (``docx`` / ``pptx`` / ``pdf``), and stream back the rendered document.
 - ``POST /extract`` — the reverse direction: upload a ``.docx`` / ``.pptx`` /
-  ``.pdf`` and get its Markdown back as JSON. Needs the optional ``[ocr]`` extra
-  (Kreuzberg); returns 503 with an install hint when it is absent.
+  ``.pdf`` and get its Markdown back as JSON, or pass ``twin=true`` (optionally
+  ``diagrams=true``) to receive a zip of ``<stem>.md`` + an ``assets/`` folder —
+  a self-contained, re-renderable Markdown twin. Needs the optional ``[ocr]``
+  extra (Kreuzberg); returns 503 with an install hint when it is absent.
 
 Install the extra to get the runtime dependencies::
 
@@ -57,6 +59,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import zipfile
 from pathlib import Path
 
 import os_helper as osh
@@ -65,7 +68,7 @@ import os_helper as osh
 # module without it should fail with an actionable install hint rather than a
 # bare ModuleNotFoundError, so we re-raise with the exact pip command.
 try:
-    from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Query, UploadFile
+    from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, UploadFile
     from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
@@ -273,11 +276,29 @@ async def convert(
 async def extract(
     background: BackgroundTasks,
     file: UploadFile = File(..., description="A .docx, .pptx or .pdf document."),
-) -> dict[str, str]:
+    twin: bool = Form(
+        False,
+        description="Recover an editable twin (prose + tables + scraped images) "
+        "and return a zip of <stem>.md + assets/ instead of plain JSON.",
+    ),
+    diagrams: bool = Form(
+        False,
+        description="With twin=true, re-author node-and-edge figures as Mermaid "
+        "via the local AI (needs the [ai] stack + Ollama); implies twin.",
+    ),
+) -> dict[str, str] | FileResponse:
     """Read an uploaded DOCX/PPTX/PDF back into Markdown (the reverse direction).
 
-    Delegates to :func:`md2star.reverse.to_markdown` (Kreuzberg), so a finished
-    document can be recovered as an editable Markdown source.
+    Two modes:
+
+    * **text-only** (default) — delegate to :func:`md2star.reverse.to_markdown`
+      (Kreuzberg) and return ``{"filename": <stem>.md, "markdown": <text>}``.
+    * **twin** (``twin=true``, or ``diagrams=true`` which implies it) — delegate
+      to :func:`md2star.reverse.to_markdown_twin`, which writes ``<stem>.md`` plus
+      an ``assets/`` folder; the response is a **zip** of both so the caller
+      receives a self-contained, re-renderable Markdown source. With
+      ``diagrams=true`` and the ``[ai]`` stack present, node-and-edge figures are
+      re-authored as Mermaid; otherwise every image degrades to a scraped PNG.
 
     Parameters
     ----------
@@ -285,11 +306,16 @@ async def extract(
         Deletes the temp working directory after the request completes.
     file : fastapi.UploadFile
         The document to read back; extension must be docx / pptx / pdf.
+    twin : bool, default False
+        Return the full editable twin (zip) rather than text-only JSON.
+    diagrams : bool, default False
+        Reconstruct diagrams as Mermaid during a twin extraction (implies twin).
 
     Returns
     -------
-    dict
-        ``{"filename": <stem>.md, "markdown": <text>}``.
+    dict or fastapi.responses.FileResponse
+        Text-only mode: ``{"filename": <stem>.md, "markdown": <text>}``.
+        Twin mode: a ``application/zip`` file response (``<stem>.zip``).
 
     Raises
     ------
@@ -297,7 +323,7 @@ async def extract(
         400 for an unsupported extension, 503 when the optional ``[ocr]`` extra
         (Kreuzberg) is not installed, 500 on any extraction failure.
     """
-    from .reverse import ReverseUnavailable, is_supported, to_markdown
+    from .reverse import ReverseUnavailable, is_supported, to_markdown, to_markdown_twin
 
     stem = Path(file.filename or "document").stem or "document"
     suffix = Path(file.filename or "").suffix.lower()
@@ -316,8 +342,25 @@ async def extract(
     with open(in_path, "wb") as f:
         f.write(await file.read())
 
+    # diagrams can't happen without keeping the images, so it implies twin.
+    want_twin = twin or diagrams
+
     try:
-        markdown = to_markdown(in_path)
+        if not want_twin:
+            markdown = to_markdown(in_path)
+            return {"filename": f"{stem}.md", "markdown": markdown}
+
+        # Only build the AI handler when diagrams are requested AND the stack is
+        # live; otherwise reconstruction degrades to plain scraped PNGs.
+        handler = None
+        if diagrams:
+            from .reverse_diagrams import diagrams_available, make_diagram_handler
+
+            if diagrams_available(None):
+                handler = make_diagram_handler()
+
+        out_dir = os.path.join(work, "twin")
+        md_path = to_markdown_twin(in_path, out_dir, image_handler=handler)
     except ReverseUnavailable as exc:
         # Optional feature not installed — an environment problem, so 503 tells
         # the caller to provision `pip install 'md2star[ocr]'` and retry.
@@ -327,7 +370,18 @@ async def extract(
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-    return {"filename": f"{stem}.md", "markdown": markdown}
+    # Bundle <stem>.md + assets/ into one zip so the twin travels as a unit.
+    zip_path = os.path.join(work, f"{stem}.zip")
+    assets_dir = Path(out_dir) / "assets"
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.write(md_path, arcname=md_path.name)
+        if assets_dir.is_dir():
+            # Preserve the assets/ prefix so the archived links keep resolving.
+            for asset in sorted(assets_dir.rglob("*")):
+                if asset.is_file():
+                    zf.write(asset, arcname=str(Path("assets") / asset.relative_to(assets_dir)))
+
+    return FileResponse(zip_path, media_type="application/zip", filename=f"{stem}.zip")
 
 
 def main() -> None:

@@ -43,6 +43,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -59,6 +60,12 @@ from typing import Any
 import os_helper as osh
 
 from . import __version__
+from .logging import get_logger
+
+# Module logger — child of the package "md2star" logger. The GUI mostly speaks
+# to the user via the browser, but server-side notices (e.g. a twin diagram
+# pass degrading to PNGs) belong on stderr where the operator can see them.
+logger = get_logger(__name__)
 
 # Per-server-process cache-busting tag. We splice it into every static
 # asset URL in the served index.html so a stale browser is forced to
@@ -164,6 +171,22 @@ def _safe_within_root(rel: str) -> Path | None:
     except ValueError:
         return None
     return candidate
+
+
+def _safe_stem(name: str) -> str:
+    """Reduce a client-supplied filename to a safe bare stem (no path, no ext).
+
+    Twin mode writes ``<stem>.md`` directly into the open folder root, so the
+    stem must not carry directory separators or characters that could steer the
+    write outside it. We take the basename, drop the extension, and collapse
+    anything outside ``[word . - space]`` to ``_`` — a bare, root-relative name.
+    """
+    # Normalise Windows separators first so the basename step can't be fooled.
+    base = Path(name.replace("\\", "/")).name
+    stem = Path(base).stem
+    cleaned = re.sub(r"[^\w.\- ]+", "_", stem).strip(" .")
+    # Cap the length so a pathological filename can't produce an unwieldy path.
+    return cleaned[:80]
 
 
 def _native_folder_picker(prompt: str) -> Path | None:
@@ -632,11 +655,21 @@ class _Handler(BaseHTTPRequestHandler):
         """Read an uploaded DOCX/PPTX/PDF body back into Markdown for the editor.
 
         The frontend sends the raw file bytes with an ``X-Md2star-Ext`` header
-        (``.docx`` / ``.pptx`` / ``.pdf``, inferred from the picked file). We
-        stage the bytes on disk and hand them to :func:`md2star.reverse.to_markdown`,
-        returning the recovered Markdown as JSON so the editor can load it.
+        (``.docx`` / ``.pptx`` / ``.pdf``, inferred from the picked file). Two
+        modes, selected by ``X-Md2star-Twin``:
+
+        * **text-only** (default) — hand the bytes to
+          :func:`md2star.reverse.to_markdown` and return the recovered Markdown
+          as JSON. Zero side effects; no folder need be open.
+        * **twin** (``X-Md2star-Twin: 1``) — call
+          :func:`md2star.reverse.to_markdown_twin`, which writes ``<stem>.md`` +
+          an ``assets/`` folder into the *open folder root* so scraped images
+          survive and their links resolve on re-render. With
+          ``X-Md2star-Diagrams: 1`` and the ``[ai]`` stack present, node-and-edge
+          figures are re-authored as Mermaid; otherwise every image degrades to a
+          plain scraped PNG. Requires an open folder (assets need a home).
         """
-        from .reverse import ReverseUnavailable, is_supported, to_markdown
+        from .reverse import ReverseUnavailable, is_supported, to_markdown, to_markdown_twin
 
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
@@ -653,32 +686,87 @@ class _Handler(BaseHTTPRequestHandler):
         if not is_supported("x" + ext):
             return self.send_error(415, "expected a .docx, .pptx or .pdf upload")
 
+        # A header flag toggles the twin path; anything else is a plain text load.
+        def _truthy(h: str) -> bool:
+            return (self.headers.get(h) or "").strip().lower() in ("1", "true", "yes")
+
+        twin = _truthy("X-Md2star-Twin")
+        diagrams = _truthy("X-Md2star-Diagrams")
+
         data = self.rfile.read(length)
 
-        # One throwaway file per import (auto-removed with the folder), so a
-        # concurrent import can't collide and the disk stays clean.
+        # ── text-only path: no assets, no folder needed (v2.10 behaviour) ──
+        if not twin:
+            # One throwaway file per import (auto-removed with the folder), so a
+            # concurrent import can't collide and the disk stays clean.
+            with osh.temporary_folder(prefix="md2star-gui-extract-") as workdir:
+                src = Path(workdir) / f"upload{ext}"
+                src.write_bytes(data)
+                try:
+                    markdown = to_markdown(src)
+                except ReverseUnavailable as exc:
+                    # Optional [ocr] extra missing — 501 (not implemented on this
+                    # install) with the exact install hint the exception carries.
+                    return self.send_error(501, str(exc))
+                except (ValueError, FileNotFoundError) as exc:
+                    return self.send_error(400, str(exc))
+                except RuntimeError as exc:
+                    return self.send_error(500, str(exc))
+            return self._json_ok({
+                "ok": True, "markdown": markdown, "bytes": len(data),
+                "ext": ext, "twin": False, "assets": 0,
+            })
+
+        # ── twin path: scraped assets need a persistent, confined home ──
+        root = _folder_root()
+        if root is None:
+            # Nowhere safe to drop assets/ — steer the user to open a folder, and
+            # remind them plain Import still works for a text-only load.
+            return self.send_error(
+                409,
+                "Open a folder first (Folder > Open) so the twin's assets/ "
+                "can be written, or use plain Import for a text-only load.",
+            )
+
+        # Derive a safe, non-clobbering <stem>.md name inside the open folder.
+        stem = _safe_stem(self.headers.get("X-Md2star-Name") or "") or "twin"
+        final_stem, n = stem, 1
+        while (root / f"{final_stem}.md").exists():
+            final_stem, n = f"{stem}-{n}", n + 1
+
+        # Only build the AI handler when diagrams are requested AND the stack is
+        # live; otherwise fall through with None → every image stays a PNG.
+        handler = None
+        if diagrams:
+            from .reverse_diagrams import diagrams_available, make_diagram_handler
+
+            if diagrams_available(None):
+                handler = make_diagram_handler()
+            else:
+                logger.warning(
+                    "md2star gui: --diagrams requested but the AI stack is "
+                    "unavailable; keeping scraped images as PNGs."
+                )
+
         with osh.temporary_folder(prefix="md2star-gui-extract-") as workdir:
-            src = Path(workdir) / f"upload{ext}"
+            src = Path(workdir) / f"{final_stem}{ext}"
             src.write_bytes(data)
             try:
-                markdown = to_markdown(src)
+                md_path = to_markdown_twin(src, root, image_handler=handler)
             except ReverseUnavailable as exc:
-                # Optional [ocr] extra missing — 501 (not implemented on this
-                # install) with the exact install hint the exception carries.
                 return self.send_error(501, str(exc))
             except (ValueError, FileNotFoundError) as exc:
                 return self.send_error(400, str(exc))
             except RuntimeError as exc:
                 return self.send_error(500, str(exc))
 
-        body = json.dumps({
+        markdown = md_path.read_text(encoding="utf-8")
+        assets_dir = root / "assets"
+        n_assets = sum(1 for _ in assets_dir.iterdir()) if assets_dir.is_dir() else 0
+        return self._json_ok({
             "ok": True, "markdown": markdown, "bytes": len(data), "ext": ext,
-        }).encode("utf-8")
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+            "twin": True, "assets": n_assets, "filename": md_path.name,
+        })
 
     # ─────────────────────────────────────────────────────────────────
     # POST /lint — AI syntax-lint the editor's Markdown (Ollama, opt-in)

@@ -80,6 +80,54 @@ def test_extract_rejects_unsupported_extension(server: str) -> None:
     assert status == 415
 
 
+def _fake_twin(path, out_dir, *, image_handler=None, **_kw):  # noqa: ANN001, ANN202
+    """Offline stand-in for ``to_markdown_twin`` (see tests/test_api.py)."""
+    from pathlib import Path as _P
+
+    out = _P(out_dir)
+    (out / "assets").mkdir(parents=True, exist_ok=True)
+    (out / "assets" / "image_1.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    md = out / f"{_P(path).stem}.md"
+    md.write_text("# Twin\n", encoding="utf-8")
+    return md
+
+
+def test_extract_twin_requires_open_folder(server: str) -> None:
+    """Twin mode with no folder open is refused with a 409 (assets need a home)."""
+    gui_server._set_folder_root(None)
+    status, _ = _post(
+        server + "/extract", data=b"fake-doc",
+        headers={"X-Md2star-Ext": ".docx", "X-Md2star-Twin": "1",
+                 "X-Md2star-Name": "note.docx"},
+    )
+    assert status == 409
+
+
+def test_extract_twin_writes_assets_and_markdown(
+    server: str, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Twin mode writes <stem>.md + assets/ into the open folder and reports them."""
+    monkeypatch.setattr("md2star.reverse.to_markdown_twin", _fake_twin, raising=True)
+    gui_server._set_folder_root(tmp_path)
+    try:
+        status, body = _post(
+            server + "/extract", data=b"fake-doc",
+            headers={"X-Md2star-Ext": ".docx", "X-Md2star-Twin": "1",
+                     "X-Md2star-Name": "My Report.docx"},
+        )
+    finally:
+        gui_server._set_folder_root(None)
+
+    assert status == 200, body
+    result = json.loads(body)
+    assert result["twin"] is True
+    assert result["assets"] == 1
+    # The client name is sanitised to a bare, root-relative stem for the .md.
+    assert result["filename"] == "My Report.md"
+    assert (tmp_path / "My Report.md").exists()
+    assert (tmp_path / "assets" / "image_1.png").is_file()
+
+
 @pytest.mark.skipif(
     not (_HAS_PANDOC and _HAS_KREUZBERG),
     reason="round-trip needs pandoc (forward) + kreuzberg (reverse)",

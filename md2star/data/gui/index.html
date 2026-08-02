@@ -492,12 +492,28 @@
                    into the editor as Markdown (POST /extract, Kreuzberg). -->
               <input id="import-file" type="file"
                      accept=".docx,.pptx,.pdf" hidden>
+              <!-- Twin toggles. "Twin" keeps scraped images (writes an assets/
+                   folder → needs an open folder); "Mermaid" additionally
+                   re-authors node-and-edge figures via the local AI. Both ride
+                   on the same Import button through X-Md2star-* headers. -->
+              <label id="lbl-twin"
+                     class="flex items-center gap-1 select-none cursor-pointer"
+                     title="Twin: recover embedded images too, writing an assets/ folder (needs an open folder)">
+                <input id="tw-images" type="checkbox" class="accent-brand-blue">
+                <span>Twin</span>
+              </label>
+              <label id="lbl-diagrams"
+                     class="flex items-center gap-1 select-none cursor-pointer"
+                     title="Re-author node-and-edge figures as Mermaid via the local AI (needs the [ai] stack + Ollama); implies Twin">
+                <input id="tw-diagrams" type="checkbox" class="accent-brand-blue">
+                <span>Mermaid</span>
+              </label>
               <button id="btn-import" type="button"
                       class="rounded px-2 py-1 hover:bg-surface-tertiary
                              dark:hover:bg-surface-tertiary-dark
                              focus:outline-none focus-visible:ring-2
                              focus-visible:ring-brand-blue"
-                      title="Import a .docx / .pptx / .pdf back into Markdown">
+                      title="Import a .docx / .pptx / .pdf back into Markdown (see Twin/Mermaid)">
                 Import
               </button>
               <!-- AI syntax-lint the current buffer (POST /lint, Ollama). -->

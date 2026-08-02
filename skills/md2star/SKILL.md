@@ -17,10 +17,15 @@ description: >-
   Word ("resolve [@key] against my .bib", "BibTeX to Word", "citeproc"),
   footnotes, a Mermaid diagram rendered into a document, or LaTeX-style math in
   DOCX/PPTX/PDF; the user asks for a local "Overleaf-style" Markdown→PDF preview
-  editor; the user asks how to install/run any of the above or says "md2star".
+  editor; the user wants the reverse direction — read a finished PDF/DOCX/PPTX
+  back into an editable Markdown *twin* ("turn this PDF/Word back into Markdown",
+  "recover the Markdown", "make an editable twin of this doc", `md2star twin`,
+  optionally `--diagrams` to re-author figures as Mermaid); the user asks how to
+  install/run any of the above or says "md2star".
 
-  SKIP when: the source is not Markdown (e.g. a raw .docx/.pdf to be read or
-  edited — that is extraction, not conversion); the user explicitly wants to run
+  SKIP when: the user wants only raw text/parsing out of a document with no
+  intent to get an editable Markdown source back (use a plain parser/OCR — the
+  twin path is for round-trippable Markdown); the user explicitly wants to run
   Pandoc directly with their own flags; the target is a static website/HTML
   (use a site generator) or a LaTeX-native workflow (use Overleaf/latexmk). For
   drafting alt-text or captions as content, prefer the dedicated front-vision /

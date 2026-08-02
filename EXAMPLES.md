@@ -287,3 +287,32 @@ flowchart LR
 > Because a reconstructed diagram is Mermaid (which the forward path
 > renders natively), the round-trip `md → doc → twin → doc` keeps
 > diagrams as code the whole way.
+
+### The twin in the GUI and over HTTP
+
+The twin is not CLI-only. In the full editor (`md2star gui`), the
+**Import** control has two toggles:
+
+- **Twin** — keep scraped images. The recovered `<stem>.md` **and** an
+  `assets/` folder are written into the folder you have open (so the
+  image links resolve when you re-render), and the sidebar refreshes.
+  Requires an open folder; plain **Import** stays a text-only load.
+- **Mermaid** — additionally re-author node-and-edge figures via the
+  local VLM (needs the `[ai]` stack + Ollama). Implies **Twin**.
+
+Over the HTTP API (`md2star-api`), `POST /extract` takes the same
+options as form fields — text-only returns JSON, twin returns a zip of
+`<stem>.md` + `assets/`:
+
+```bash
+# Text-only (JSON: {"filename": "report.md", "markdown": "..."})
+curl -sF file=@report.pdf http://localhost:8000/extract
+
+# Full twin (a report.zip containing report.md + assets/)
+curl -sF file=@report.pdf -F twin=true \
+     -o report.zip http://localhost:8000/extract
+
+# Twin + AI diagram reconstruction (implies twin; needs the [ai] stack)
+curl -sF file=@architecture.pdf -F diagrams=true \
+     -o architecture.zip http://localhost:8000/extract
+```
