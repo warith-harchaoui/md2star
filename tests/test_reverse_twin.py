@@ -113,6 +113,16 @@ class TestDiagramParsing:
     def test_extract_mermaid_none_on_empty(self) -> None:
         assert reverse_diagrams._extract_mermaid("") is None
 
+    def test_extract_svg_from_element(self) -> None:
+        # The <svg> element is pulled out regardless of surrounding prose/fences.
+        got = reverse_diagrams._extract_svg('Sure:\n```svg\n<svg viewBox="0 0 1 1"><rect/></svg>\n```')
+        assert got == '<svg viewBox="0 0 1 1"><rect/></svg>'
+
+    def test_extract_svg_none_without_element(self) -> None:
+        # No <svg> element → unusable (unlike Mermaid, there is no bare fallback).
+        assert reverse_diagrams._extract_svg("no vector here") is None
+        assert reverse_diagrams._extract_svg("") is None
+
     def test_parse_verdict_true(self) -> None:
         v = reverse_diagrams._parse_verdict('{"matches": true, "discrepancies": ""}')
         assert v.matches is True
@@ -165,6 +175,27 @@ class TestEyeballLoop:
         )
         assert src is None
 
+    def test_reconstruct_svg_converges(self) -> None:
+        # The same loop drives SVG: draft → compare (fail) → revise → match.
+        state = {"compares": 0}
+
+        def vlm(prompt: str, images: list[str]) -> str:
+            if "self-contained SVG" in prompt:
+                return '<svg viewBox="0 0 2 2"><circle r="1"/></svg>'
+            if "FIRST image" in prompt:
+                state["compares"] += 1
+                if state["compares"] == 1:
+                    return '{"matches": false, "discrepancies": "wrong colour"}'
+                return '{"matches": true, "discrepancies": ""}'
+            if "Fix the SVG" in prompt:
+                return '<svg viewBox="0 0 2 2"><circle r="1" fill="red"/></svg>'
+            return ""
+
+        src = reverse_diagrams.reconstruct_svg(
+            "target.png", vlm=vlm, render=lambda _k, _s: "cand.png", max_iterations=3
+        )
+        assert src is not None and 'fill="red"' in src
+
 
 class TestDiagramHandler:
     """Photo-vs-diagram routing via make_diagram_handler with fakes."""
@@ -185,6 +216,36 @@ class TestDiagramHandler:
         assert "```mermaid" in md and "X-->Y" in md
         assert "<!-- source figure:" in md  # PNG fallback preserved
         assert (tmp_path / "assets" / "img-p1-0.png").exists()
+
+    def test_figure_emits_svg_and_keeps_png(self, tmp_path: Path) -> None:
+        def vlm(prompt: str, images: list[str]) -> str:
+            if "triaging" in prompt:
+                return "FIGURE"
+            if "self-contained SVG" in prompt:
+                return '<svg viewBox="0 0 4 4"><rect width="4" height="4"/></svg>'
+            if "FIRST image" in prompt:
+                return '{"matches": true, "discrepancies": ""}'
+            return ""
+
+        handler = reverse_diagrams.make_diagram_handler(vlm=vlm, render=lambda _k, _s: "c.png")
+        img = reverse.TwinImage(data=b"PNG", format="png", image_index=0, page_number=1)
+        md = handler(img, tmp_path / "assets")
+        # The vector is linked as the primary asset; the scraped PNG rides along.
+        assert "![](assets/img-p1-0.svg)" in md
+        assert "<!-- source figure:" in md
+        assert (tmp_path / "assets" / "img-p1-0.svg").read_text().startswith("<svg")
+        assert (tmp_path / "assets" / "img-p1-0.png").exists()
+
+    def test_figure_falls_back_to_png_when_no_svg(self, tmp_path: Path) -> None:
+        # Classified FIGURE but the model never emits an <svg> → keep the PNG.
+        def vlm(prompt: str, images: list[str]) -> str:
+            return "FIGURE" if "triaging" in prompt else "sorry, no vector"
+
+        handler = reverse_diagrams.make_diagram_handler(vlm=vlm, render=lambda _k, _s: "c.png")
+        img = reverse.TwinImage(data=b"PNG", format="png", image_index=2, page_number=3)
+        md = handler(img, tmp_path / "assets")
+        assert md == "![](assets/img-p3-2.png)"
+        assert not (tmp_path / "assets" / "img-p3-2.svg").exists()
 
     def test_photo_keeps_png_only(self, tmp_path: Path) -> None:
         handler = reverse_diagrams.make_diagram_handler(

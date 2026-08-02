@@ -6,6 +6,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.13.0] — 2026-08-02
+
+### Added
+- **Twin diagram reconstruction now covers *free figures*, not just node-and-edge
+  diagrams — via an editable SVG that joins the same Ralph Eyeball Loop.** The
+  `--diagrams` pass (`md2star twin --diagrams`, GUI **Mermaid** toggle, API
+  `diagrams=true`) gains a second reconstructable kind:
+  - The classifier is now three-way — **DIAGRAM** (→ Mermaid, unchanged),
+    **FIGURE** (a chart / plot / logo / icon / line drawing → **SVG**), and
+    **PHOTO** (kept as a scraped PNG). A figure is re-authored as a
+    self-contained `<svg>` written **alongside** the scraped raster
+    (`assets/<name>.svg`) and linked as the primary asset, with the PNG kept as a
+    commented fallback — the same "verified, not trusted, never lose the ground
+    truth" contract the Mermaid path uses.
+  - **Same target-matching eyeball loop, generalised**: `reconstruct_mermaid` and
+    the new `reconstruct_svg` are thin wrappers over one shared render → compare →
+    revise loop. SVG candidates are rasterised for comparison by a detected
+    rasteriser — `cairosvg` if importable, else `rsvg-convert` / `inkscape` /
+    ImageMagick (`magick` / `convert`) — and the render is content-addressed and
+    cached like the Mermaid render. No rasteriser present → the figure degrades to
+    the scraped PNG, exactly like a missing `mmdc`.
+  - `RECONSTRUCTABLE_KINDS` is now `{"mermaid", "svg"}`. No new **required**
+    runtime dependency: the SVG rasteriser is any tool already on the host, and
+    `cairosvg` is used only if present. New offline tests in
+    `tests/test_reverse_twin.py` (injected fakes — no rasteriser needed) cover the
+    SVG parse, the SVG eyeball loop, and the FIGURE → SVG / fallback handler
+    routing.
+
 ## [2.12.0] — 2026-08-02
 
 ### Added

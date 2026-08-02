@@ -255,13 +255,17 @@ md2star twin report.pdf --no-images
 ```
 
 Add `--diagrams` (opt-in, needs `[ai]` + a local Ollama) and md2star
-classifies each scraped image with a local vision model: **photos stay
-as PNGs**, while **node-and-edge figures are re-authored as Mermaid**.
-Each Mermaid candidate is verified by a *target-matching eyeball loop*
-— render it with the same `mmdc` the forward path uses, compare it
-against the scraped original with the VLM, and iterate until it
-matches. The original PNG is always kept as a commented fallback, so a
-reconstruction is never a lossy dead end.
+classifies each scraped image with a local vision model into three
+buckets: **photos stay as PNGs**, **node-and-edge diagrams are
+re-authored as Mermaid**, and other **vector figures** (charts, plots,
+logos, icons, line drawings) are re-authored as an editable **SVG**
+written beside the raster. Every candidate — Mermaid or SVG — is
+verified by the same *target-matching eyeball loop*: render it (the
+same `mmdc` the forward path uses for Mermaid; a detected rasteriser —
+`cairosvg` / `rsvg-convert` / `inkscape` / ImageMagick — for SVG),
+compare it against the scraped original with the VLM, and iterate until
+it matches. The original PNG is always kept as a commented fallback, so
+a reconstruction is never a lossy dead end.
 
 ```bash
 # diagrams become editable Mermaid; photos stay PNGs
