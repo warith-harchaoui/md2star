@@ -7,7 +7,7 @@
 ![Status: beta](https://img.shields.io/badge/status-beta-orange.svg)
 [![Local-first](https://img.shields.io/badge/privacy-local--first-2f6f5e.svg)](#the-promise)
 
-> 🇫🇷 *Version française : **[LISEZMOI.md](LISEZMOI.md)**.*
+> 🇫🇷 *Version française : **[LISEZMOI.md](https://github.com/warith-harchaoui/md2star/blob/main/LISEZMOI.md)**.*
 
 **Convert Markdown into professional DOCX, PPTX and PDF documents
 using Pandoc, branded templates, and practical automation.**
@@ -39,20 +39,20 @@ you pass `--allow-remote-images`. Neither ever sends your Markdown anywhere.
 
 | Light | Dark |
 |---|---|
-| ![md2star DOCX — light](assets/light.png) | ![md2star DOCX — dark](assets/dark.png) |
+| ![md2star DOCX — light](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/light.png) | ![md2star DOCX — dark](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/dark.png) |
 
 *PPTX mode — Kawasaki's 10/20/30 pitch deck rendered live:*
 
 | Light | Dark |
 |---|---|
-| ![md2star PPTX — light](assets/pptx-light.png) | ![md2star PPTX — dark](assets/pptx-dark.png) |
+| ![md2star PPTX — light](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/pptx-light.png) | ![md2star PPTX — dark](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/pptx-dark.png) |
 
 *GUI mode — the local Overleaf-style editor with live PDF preview
 (`md2star gui`):*
 
 | Light | Dark |
 |---|---|
-| ![md2star GUI — light](assets/gui-light.png) | ![md2star GUI — dark](assets/gui-dark.png) |
+| ![md2star GUI — light](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/gui-light.png) | ![md2star GUI — dark](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/gui-dark.png) |
 
 
 ## Documentation
@@ -76,7 +76,7 @@ build yourself. It sits *on top of* Pandoc — it never asks you to give Pandoc 
 The full case — the styling gaps raw `pandoc report.md -o report.docx` leaves on
 your desk, the one place "just use Pandoc" has no answer (the reverse path +
 round-trip guarantee), and where Pandoc really is the right tool — is in
-**[WHY_MD2STAR_OVER_PANDOC.md](WHY_MD2STAR_OVER_PANDOC.md)**.
+**[WHY_MD2STAR_OVER_PANDOC.md](https://github.com/warith-harchaoui/md2star/blob/main/WHY_MD2STAR_OVER_PANDOC.md)**.
 
 ## Quick start
 
@@ -113,11 +113,11 @@ md2star-mcp                    # same tools (doctor / convert) over MCP
 Prefer click? `md2star-x docx|pptx|pdf|gui|doctor` is a click front-end over
 the same pipeline (ships with the core install). And md2star packages itself as
 a **Claude Skill / OpenCode skill** so an agent can drive it — see
-[`skills/md2star/`](skills/md2star/SKILL.md) and [`skills/README.md`](skills/README.md).
+[`skills/md2star/`](https://github.com/warith-harchaoui/md2star/blob/main/skills/md2star/SKILL.md) and [`skills/README.md`](https://github.com/warith-harchaoui/md2star/blob/main/skills/README.md).
 The full catalogue of what should invoke md2star (phrasings, commands, file
-situations) lives in **[TRIGGERS.md](TRIGGERS.md)**.
+situations) lives in **[TRIGGERS.md](https://github.com/warith-harchaoui/md2star/blob/main/TRIGGERS.md)**.
 
-See **[docs/installation.md](docs/installation.md)** for the full
+See **[docs/installation.md](https://github.com/warith-harchaoui/md2star/blob/main/docs/installation.md)** for the full
 per-OS matrix (macOS / Ubuntu / Fedora / Arch / Windows), feature-
 by-feature dependency table, verification recipe, and the
 troubleshooting guide.
@@ -171,7 +171,7 @@ every md2star polish — branded template, Mermaid PNGs, table
 styles, localized dates.
 
 A self-contained cookbook with more recipes lives at
-**[EXAMPLES.md](EXAMPLES.md)**.
+**[EXAMPLES.md](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md)**.
 
 ---
 
@@ -226,7 +226,7 @@ same wheel, not a separate download).
   - Smart **Subtitle Injection** combining Author and localized Date.
   - **Language Detection** via `langdetect`: date formats ship for 10 languages (English, French, Spanish, German, Italian, Portuguese, Dutch, Russian, Japanese, Chinese), with translated weekday/month names in 7 (fr, es, de, it, pt, nl, ru).
 - **Scientific-Ready**: Native **BibTeX** integration via Pandoc's `citeproc`, for documents with managed reference libraries.
-- **Native Footnotes**: Markdown footnotes (`text[^1]` + `[^1]: …`) pass straight through Pandoc's `footnotes` extension to real Word footnotes — DOCX gets true bottom-of-page footnotes, PPTX collects them into per-slide notes. No special syntax, no preprocessing. See [EXAMPLES.md §10](EXAMPLES.md#10-footnotes).
+- **Native Footnotes**: Markdown footnotes (`text[^1]` + `[^1]: …`) pass straight through Pandoc's `footnotes` extension to real Word footnotes — DOCX gets true bottom-of-page footnotes, PPTX collects them into per-slide notes. No special syntax, no preprocessing. See [EXAMPLES.md §10](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#10-footnotes).
 - **Automatic Cleanups** (quiet quality-of-life): remote `http(s)://` images downloaded for embedding (opt-in), HTML `<table>` blocks converted to Pandoc pipe-tables, and standalone images split off PPTX slides that contain a table (Pandoc otherwise drops them).
 - **Reversible by Design**: md2star's output is a *faithful, recoverable* rendering, not a one-way dead end. Read the DOCX back with Pandoc and your headings, `**bold**`/`*italic*`/`` `code` `` emphasis, tables, and lists come back intact; render all the way to PDF and read it back with [kreuzberg](https://github.com/Goldziher/kreuzberg) and the `md → docx → pdf → text` round-trip is the exact identity `g(f(x)) = x` for prose, bullet lists, multi-page docs, and footnotes (CI-enforced). Repeated conversions converge to a **stable fixed point** rather than drifting. See [Round-trip fidelity](#round-trip-fidelity).
 - **Markdown twin (reverse direction)**: `md2star twin <file>` reads **any PDF — or anything LibreOffice can convert to one** — back into an *editable* `<stem>.md` **plus an `assets/` folder**. Tables return as GFM pipe tables and every embedded image is scraped out and re-linked. Add `--diagrams` (opt-in, needs `[ai]` + a local Ollama) and node-and-edge figures are **re-authored as Mermaid** via a *target-matching eyeball loop* — render a candidate with the same `mmdc` the forward path uses, compare it against the scraped original with a local vision model, and iterate until it matches; the scraped PNG is kept as a fallback so nothing is ever lost. Everything degrades gracefully: without the AI stack, images simply stay as scraped PNGs. Needs `pip install 'md2star[ocr]'`.
@@ -407,12 +407,12 @@ is different in kind from md2star's deterministic core.
 
 ## Examples
 
-A self-contained cookbook lives at **[EXAMPLES.md](EXAMPLES.md)** —
+A self-contained cookbook lives at **[EXAMPLES.md](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md)** —
 covering titles, Mermaid, lists, multi-column slides, LaTeX math,
 bibliographies, branded templates, language detection, page breaks, and
-[footnotes](EXAMPLES.md#10-footnotes).
+[footnotes](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#10-footnotes).
 
-You can also find more complex examples inside the [`tests/examples/`](tests/examples) directory. To natively batch-compile all documents inside the folder, execute the bash runner:
+You can also find more complex examples inside the [`tests/examples/`](https://github.com/warith-harchaoui/md2star/blob/main/tests/examples) directory. To natively batch-compile all documents inside the folder, execute the bash runner:
 ```bash
 cd tests/examples
 ./run.sh
@@ -421,33 +421,33 @@ cd tests/examples
 Below are basic `.docx` and `.pptx` files generated dynamically during our test suite from sample Markdown files:
 
 **Word Documents Examples**
-- Basic Title [assets/docx/basic.docx](assets/docx/basic.docx) *(from [basic.md](assets/docx/basic.md))*
+- Basic Title [assets/docx/basic.docx](https://github.com/warith-harchaoui/md2star/blob/main/assets/docx/basic.docx) *(from [basic.md](https://github.com/warith-harchaoui/md2star/blob/main/assets/docx/basic.md))*
   ```bash
   md2docx assets/docx/basic.md
   ```
-- Author Injected [assets/docx/with_author.docx](assets/docx/with_author.docx) *(from [with_author.md](assets/docx/with_author.md))*
+- Author Injected [assets/docx/with_author.docx](https://github.com/warith-harchaoui/md2star/blob/main/assets/docx/with_author.docx) *(from [with_author.md](https://github.com/warith-harchaoui/md2star/blob/main/assets/docx/with_author.md))*
   ```bash
   md2docx assets/docx/with_author.md --author "Tester"
   ```
-- Bibliography [assets/docx/with_bib.docx](assets/docx/with_bib.docx) *(from [with_bib.md](assets/docx/with_bib.md))*
+- Bibliography [assets/docx/with_bib.docx](https://github.com/warith-harchaoui/md2star/blob/main/assets/docx/with_bib.docx) *(from [with_bib.md](https://github.com/warith-harchaoui/md2star/blob/main/assets/docx/with_bib.md))*
   ```bash
   md2docx assets/docx/with_bib.md --bib "assets/references.bib" --bibliography-name "References"
   ```
-- Language & Date (French) [assets/docx/with_lang.docx](assets/docx/with_lang.docx) *(from [with_lang.md](assets/docx/with_lang.md))*
+- Language & Date (French) [assets/docx/with_lang.docx](https://github.com/warith-harchaoui/md2star/blob/main/assets/docx/with_lang.docx) *(from [with_lang.md](https://github.com/warith-harchaoui/md2star/blob/main/assets/docx/with_lang.md))*
   ```bash
   md2docx assets/docx/with_lang.md --author "User"
   ```
-- Math Formulas [assets/docx/math.docx](assets/docx/math.docx) *(from [math.md](assets/docx/math.md))*
+- Math Formulas [assets/docx/math.docx](https://github.com/warith-harchaoui/md2star/blob/main/assets/docx/math.docx) *(from [math.md](https://github.com/warith-harchaoui/md2star/blob/main/assets/docx/math.md))*
   ```bash
   md2docx assets/docx/math.md
   ```
 
 **PowerPoint Slides Examples**
-- Extensive Example [assets/pptx/example.pptx](assets/pptx/example.pptx) *(from [example.md](assets/pptx/example.md))*
+- Extensive Example [assets/pptx/example.pptx](https://github.com/warith-harchaoui/md2star/blob/main/assets/pptx/example.pptx) *(from [example.md](https://github.com/warith-harchaoui/md2star/blob/main/assets/pptx/example.md))*
   ```bash
   md2pptx assets/pptx/example.md
   ```
-- Branded Template [tests/examples/branded_slides.pptx](tests/examples/branded_slides.pptx) *(from [branded_slides.md](tests/examples/branded_slides.md) + [Presentation1.pptx](tests/examples/Presentation1.pptx))*
+- Branded Template [tests/examples/branded_slides.pptx](https://github.com/warith-harchaoui/md2star/blob/main/tests/examples/branded_slides.pptx) *(from [branded_slides.md](https://github.com/warith-harchaoui/md2star/blob/main/tests/examples/branded_slides.md) + [Presentation1.pptx](https://github.com/warith-harchaoui/md2star/blob/main/tests/examples/Presentation1.pptx))*
   ```bash
   md2pptx tests/examples/branded_slides.md --reference-doc tests/examples/Presentation1.pptx
   ```
@@ -459,7 +459,7 @@ Below are basic `.docx` and `.pptx` files generated dynamically during our test 
 
 `md2star` is built for reliability. Our automated test suite covers:
 - [x] **Metadata accuracy**: title extraction, author injection, and subtitle composition.
-- [x] **Bibliography rendering**: citeproc pipeline against the curated [references.bib](assets/references.bib) snapshot.
+- [x] **Bibliography rendering**: citeproc pipeline against the curated [references.bib](https://github.com/warith-harchaoui/md2star/blob/main/assets/references.bib) snapshot.
 - [x] **Date localization**: French weekday/month rendering and date-format injection.
 - [x] **Preprocessor invariants**: list spacing, code-block preservation, HTML-table conversion, pipe-table separator normalization, image width injection, language detection, mermaid fallback, math-in-code unwrapping, PPTX slide isolation.
 - [x] **Offline-mode enforcement**: every network-touching phase refuses to run with `--offline`.
@@ -478,7 +478,7 @@ Requires **pytest** and your generated virtual environment:
 python -m pytest tests/ -v
 ```
 
-For more details, see [tests/README.md](tests/README.md).
+For more details, see [tests/README.md](https://github.com/warith-harchaoui/md2star/blob/main/tests/README.md).
 
 ---
 
@@ -503,7 +503,7 @@ output is a **faithful, reversible rendering** of your Markdown: read the
 mathematical sense — running it twice yields the same document as running it
 once (`g(g(x)) == g(x)`), so repeated conversions *converge* instead of
 accumulating cruft. This is enforced in CI by
-[`tests/test_roundtrip.py`](tests/test_roundtrip.py), which converts a fixture
+[`tests/test_roundtrip.py`](https://github.com/warith-harchaoui/md2star/blob/main/tests/test_roundtrip.py), which converts a fixture
 to DOCX, reads it back with Pandoc's native reader, and asserts both content
 survival and the fixed-point property.
 
@@ -525,7 +525,7 @@ to a PDF and read back with [kreuzberg](https://github.com/Goldziher/kreuzberg)
 (`extract_file_sync(path, config=ExtractionConfig(output_format=OutputFormat.PLAIN))`),
 the round-trip `md → docx → pdf → text` is the **identity** `g(f(x)) = x` — proven
 by exact, whole-document string equality under an explicit *normal form* in
-[`tests/test_roundtrip_ocr.py`](tests/test_roundtrip_ocr.py), run for real in CI on a
+[`tests/test_roundtrip_ocr.py`](https://github.com/warith-harchaoui/md2star/blob/main/tests/test_roundtrip_ocr.py), run for real in CI on a
 full LibreOffice + kreuzberg toolchain. It holds for:
 
 - **paragraphs** of any length (line wrapping is reflowed back);
@@ -587,7 +587,7 @@ These are shipped inside the wheel and used as the offline fallback when no
 ## Developer Documentation
 
 For contributors and advanced users interested in the inner workings of our Python logic and AST parsing hooks, check our internal API guides:
-- [Developer Guide](docs/developer_guide.md)
+- [Developer Guide](https://github.com/warith-harchaoui/md2star/blob/main/docs/developer_guide.md)
 
 ---
 
@@ -624,19 +624,19 @@ images stay opt-in via `--allow-remote-images`. Since v2.5.0 the
 failure); use `--no-remote-templates` to skip it. The `--offline`
 switch is the hard kill-switch that forbids every network touch and
 makes the refusal explicit in scripts. Full security model:
-**[SECURITY.md](SECURITY.md)**.
+**[SECURITY.md](https://github.com/warith-harchaoui/md2star/blob/main/SECURITY.md)**.
 
 ## Roadmap & status
 
-- See **[ROADMAP.md](ROADMAP.md)** for what's coming and what's
+- See **[ROADMAP.md](https://github.com/warith-harchaoui/md2star/blob/main/ROADMAP.md)** for what's coming and what's
   explicitly NOT in scope.
-- See **[CHANGELOG.md](CHANGELOG.md)** for the per-release diff.
-- See **[docs/audit.md](docs/audit.md)** for the latest honest
+- See **[CHANGELOG.md](https://github.com/warith-harchaoui/md2star/blob/main/CHANGELOG.md)** for the per-release diff.
+- See **[docs/audit.md](https://github.com/warith-harchaoui/md2star/blob/main/docs/audit.md)** for the latest honest
   engineering audit (forces, risks, priorities).
 
 ## Contributing
 
-See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the quickstart,
+See **[CONTRIBUTING.md](https://github.com/warith-harchaoui/md2star/blob/main/CONTRIBUTING.md)** for the quickstart,
 project layout, and PR checklist. The TL;DR is `make dev` +
 `python -m pytest tests/` + `ruff check md2star/ tests/`.
 
@@ -644,7 +644,7 @@ project layout, and PR checklist. The TL;DR is `make dev` +
 
 ## License
 
-Distributed under the **[BSD 3-Clause License](LICENSE)** — the same
+Distributed under the **[BSD 3-Clause License](https://github.com/warith-harchaoui/md2star/blob/main/LICENSE)** — the same
 permissive license used by scikit-learn and other major scientific
 Python projects.
 
