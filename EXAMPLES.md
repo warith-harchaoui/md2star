@@ -235,3 +235,55 @@ md2docx report.md
 > text block appended to that slide's body (endnote-style, on the
 > slide itself — not the speaker-notes pane). The marker-and-text
 > pairing is preserved either way.
+
+## 11. Reverse direction — the Markdown twin
+
+Go the *other* way: turn a finished document back into an editable
+Markdown source. `md2star twin` recovers prose + GFM tables, scrapes
+every embedded image out to an `assets/` folder, and re-links them —
+so the result is a real source you can edit and re-render, not a flat
+text dump. Works on **any PDF, or anything LibreOffice can convert to
+one** (`.docx`, `.pptx`, `.odt`, `.rtf`, `.html`, …). Needs the `[ocr]`
+extra: `pip install 'md2star[ocr]'`.
+
+```bash
+# report.pdf  →  report.md + assets/img-p1-0.png …
+md2star twin report.pdf --out ./recovered/
+
+# prose + tables only, no scraped rasters
+md2star twin report.pdf --no-images
+```
+
+Add `--diagrams` (opt-in, needs `[ai]` + a local Ollama) and md2star
+classifies each scraped image with a local vision model: **photos stay
+as PNGs**, while **node-and-edge figures are re-authored as Mermaid**.
+Each Mermaid candidate is verified by a *target-matching eyeball loop*
+— render it with the same `mmdc` the forward path uses, compare it
+against the scraped original with the VLM, and iterate until it
+matches. The original PNG is always kept as a commented fallback, so a
+reconstruction is never a lossy dead end.
+
+```bash
+# diagrams become editable Mermaid; photos stay PNGs
+md2star twin architecture.pdf --diagrams --out ./recovered/
+```
+
+A recovered diagram lands in the twin like this — editable code, with
+the source raster preserved beneath it:
+
+````markdown
+```mermaid
+flowchart LR
+    A[Client] --> B[API]
+    B --> C[(Database)]
+```
+
+<!-- source figure: ![](assets/img-p2-0.png) -->
+````
+
+> [!TIP]
+> The twin is the reverse of md2star's own output: render Markdown →
+> DOCX/PDF with the forward CLIs, then `md2star twin` reads it back.
+> Because a reconstructed diagram is Mermaid (which the forward path
+> renders natively), the round-trip `md → doc → twin → doc` keeps
+> diagrams as code the whole way.

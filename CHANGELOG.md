@@ -6,6 +6,37 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [2.11.0] — 2026-08-01
+
+### Added
+- **Markdown *twin* — the reverse path, upgraded from "recover the text" to
+  "recover an editable document".** A new `md2star twin <file>` command (also
+  `md2star-x twin`) reads **any PDF, or anything LibreOffice can convert to
+  one**, back into a `<stem>.md` **plus an `assets/` folder**:
+  - **Tables** come back as GFM pipe tables and **every embedded raster is
+    scraped** out to `assets/` and re-linked, so the Markdown is a first-class
+    source you can edit and re-render through the forward path.
+  - **`--diagrams`** (opt-in, `[ai]`) classifies each scraped raster with the
+    local vision model and **re-authors node-and-edge figures as Mermaid** via a
+    **target-matching Ralph Eyeball Loop**: render the candidate with the same
+    vendored `mmdc` the forward path uses, compare it against the scraped
+    original with the VLM, feed the discrepancies back to the text model, and
+    iterate until it matches (budget-capped). Photos and figures that aren't
+    graph-expressible keep their scraped PNG; a reconstructed diagram keeps the
+    PNG as a commented fallback, so the ground truth is never lost.
+  - **Input normalization**: non-native formats (`.odt`, `.rtf`, `.doc`,
+    `.xlsx`, `.html`, `.epub`, …) are routed through headless LibreOffice to PDF
+    first, so everything funnels into the same Kreuzberg + OCR pipeline.
+  - **Graceful degradation** throughout: no `[ocr]` engine → clear install hint;
+    no AI stack / Ollama / `mmdc` → every image degrades to the plain scraped
+    PNG (exactly the deterministic result). Model choice is delegated to
+    `best-engine-ai-helper`; nothing is hard-coded.
+  - New modules `md2star/reverse.py` (`to_markdown_twin`, `extract_twin`),
+    `md2star/reverse_diagrams.py` (classifier + eyeball loop, injectable seams),
+    and `md2star/twin_cli.py`. Covered by `tests/test_reverse_twin.py` (offline:
+    the eyeball loop and handlers run against injected fakes; a live extraction
+    test skips cleanly without the `[ocr]` engine).
+
 ## [2.10.0] — 2026-07-31
 
 ### Added

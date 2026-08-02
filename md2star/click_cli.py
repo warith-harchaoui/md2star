@@ -197,6 +197,38 @@ def doctor(as_json: bool) -> None:
     raise SystemExit(doctor_main(["--json"] if as_json else []))
 
 
+@cli.command(name="twin")
+@click.argument("input_path", type=click.Path(exists=False))
+@click.option("--out", "out_dir", default=None, help="Output folder (default: input's folder).")
+@click.option("--no-images", is_flag=True, help="Prose + tables only; drop scraped rasters.")
+@click.option("--diagrams", is_flag=True, help="Re-author diagrams as Mermaid (local VLM).")
+@click.option("--model", default=None, help="Vision model tag for --diagrams.")
+@click.option("--max-iterations", type=int, default=3, help="Eyeball-loop budget per diagram.")
+def twin(
+    input_path: str,
+    out_dir: str | None,
+    no_images: bool,
+    diagrams: bool,
+    model: str | None,
+    max_iterations: int,
+) -> None:
+    """Read a document back into an editable Markdown twin (reverse direction)."""
+    # Reuse the exact argparse twin entry so both front-ends share one code path.
+    from .twin_cli import main as twin_main
+
+    argv = [input_path]
+    if out_dir:
+        argv += ["--out", out_dir]
+    if no_images:
+        argv.append("--no-images")
+    if diagrams:
+        argv.append("--diagrams")
+    if model:
+        argv += ["--model", model]
+    argv += ["--max-iterations", str(max_iterations)]
+    raise SystemExit(twin_main(argv))
+
+
 def main(argv: list[str] | None = None) -> int:
     """Console entry point for ``md2star-x``.
 

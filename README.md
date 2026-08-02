@@ -63,15 +63,20 @@ you pass `--allow-remote-images`. Neither ever sends your Markdown anywhere.
 
 [📋 Examples](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md)
 
-## Why md2star?
+## Why md2star? (the honest "just use Pandoc" answer)
 
-Pandoc by itself is powerful but unopinionated: it gives you a
-plain-vanilla DOCX with no template, no localized dates, no
-sensible table widths, no Mermaid rendering. The result needs hand-
-editing in Word before it's shareable.
+Pandoc is a **converter**; md2star is a **deliverable**. Pandoc turns
+Markdown into a valid `.docx`; md2star turns Markdown into a `.docx` you can
+send to a client without opening Word — and reads it back into editable
+Markdown when it comes home. md2star does not out-Pandoc Pandoc; it *calls*
+Pandoc and adds the curated template, the Mermaid/image/PDF glue, the reverse
+`md2star twin` path, and a CI-enforced round-trip that raw Pandoc makes you
+build yourself. It sits *on top of* Pandoc — it never asks you to give Pandoc up.
 
-`md2star` sits between you and Pandoc. You write Markdown; you get a
-DOCX / PPTX / PDF that looks like a deliberate document.
+The full case — the styling gaps raw `pandoc report.md -o report.docx` leaves on
+your desk, the one place "just use Pandoc" has no answer (the reverse path +
+round-trip guarantee), and where Pandoc really is the right tool — is in
+**[WHY_MD2STAR_OVER_PANDOC.md](WHY_MD2STAR_OVER_PANDOC.md)**.
 
 ## Quick start
 
@@ -224,6 +229,7 @@ same wheel, not a separate download).
 - **Native Footnotes**: Markdown footnotes (`text[^1]` + `[^1]: …`) pass straight through Pandoc's `footnotes` extension to real Word footnotes — DOCX gets true bottom-of-page footnotes, PPTX collects them into per-slide notes. No special syntax, no preprocessing. See [EXAMPLES.md §10](EXAMPLES.md#10-footnotes).
 - **Automatic Cleanups** (quiet quality-of-life): remote `http(s)://` images downloaded for embedding (opt-in), HTML `<table>` blocks converted to Pandoc pipe-tables, and standalone images split off PPTX slides that contain a table (Pandoc otherwise drops them).
 - **Reversible by Design**: md2star's output is a *faithful, recoverable* rendering, not a one-way dead end. Read the DOCX back with Pandoc and your headings, `**bold**`/`*italic*`/`` `code` `` emphasis, tables, and lists come back intact; render all the way to PDF and read it back with [kreuzberg](https://github.com/Goldziher/kreuzberg) and the `md → docx → pdf → text` round-trip is the exact identity `g(f(x)) = x` for prose, bullet lists, multi-page docs, and footnotes (CI-enforced). Repeated conversions converge to a **stable fixed point** rather than drifting. See [Round-trip fidelity](#round-trip-fidelity).
+- **Markdown twin (reverse direction)**: `md2star twin <file>` reads **any PDF — or anything LibreOffice can convert to one** — back into an *editable* `<stem>.md` **plus an `assets/` folder**. Tables return as GFM pipe tables and every embedded image is scraped out and re-linked. Add `--diagrams` (opt-in, needs `[ai]` + a local Ollama) and node-and-edge figures are **re-authored as Mermaid** via a *target-matching eyeball loop* — render a candidate with the same `mmdc` the forward path uses, compare it against the scraped original with a local vision model, and iterate until it matches; the scraped PNG is kept as a fallback so nothing is ever lost. Everything degrades gracefully: without the AI stack, images simply stay as scraped PNGs. Needs `pip install 'md2star[ocr]'`.
 - **Graceful Image Path Resolution**: URLs, absolute paths, and relative paths all "just work". Relative `![](images/foo.png)` references resolve against the input file's directory — so `md2docx subdir/file.md` from any cwd still finds the image. No need to `cd` into the source folder first.
 - **Zero-Config Branding**: drop a `template.docx` / `template.pptx` next to your Markdown and md2star will pick it up automatically as `--reference-doc`. If neither exists, md2star fetches the `deraison.ai` default template by default (since v2.5.0) and caches it; pass `--no-remote-templates` / `--offline` to use the bundled template instead.
 - **Discoverable CLI**: every wrapper supports `--help` / `-h` and prints the md2star-specific flags followed by `pandoc --help`, so the full conversion surface is one command away. Try `md2docx --help`, `md2pptx --help`, or `md2star --help`.

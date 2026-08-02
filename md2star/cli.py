@@ -759,6 +759,11 @@ def main(argv: list[str] | None = None) -> int:
     if sub == "templates":
         from .templates import main as templates_main
         return templates_main(rest)
+    if sub == "twin":
+        # Reverse direction: any document → an editable Markdown twin. Lazy
+        # import so a plain forward conversion never loads Kreuzberg/AI code.
+        from .twin_cli import main as twin_main
+        return twin_main(rest)
     if sub == "gui":
         # The GUI ships its ~4 MB vendored frontend (PDF.js, CodeMirror,
         # Tailwind, fonts) inside md2star/data/gui/. Import is lazy so a
@@ -797,6 +802,7 @@ def _print_top_level_help(file=sys.stdout) -> None:
         "  md2star pptx <input.md> [options...]\n"
         "  md2star pdf  <input.md> [options...]\n"
         "  md2star gui  [--port N] [--no-browser] [--bind ADDR]\n"
+        "  md2star twin <input.(pdf|docx|pptx|...)> [--out DIR] [--diagrams]\n"
         "  md2star doctor [--json]\n"
         "  md2star templates {list,path} [...]\n"
         "  md2star cache-dir\n"

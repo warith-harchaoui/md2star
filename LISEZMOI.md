@@ -67,15 +67,22 @@ jamais votre machine.
 
 [📋 Exemples](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md)
 
-## Pourquoi md2star ?
+## Pourquoi md2star ? (la réponse honnête au « utilise juste Pandoc »)
 
-Pandoc seul est capable mais neutre : il sort un DOCX brut, sans
-template, sans date localisée, sans largeurs de tableau raisonnables,
-sans rendu Mermaid. Le résultat passe encore par Word avant d'être
-partageable.
+Pandoc est un **convertisseur** ; md2star est un **livrable**. Pandoc
+transforme du Markdown en un `.docx` valide ; md2star transforme du Markdown
+en un `.docx` que vous pouvez envoyer à un client sans ouvrir Word — et le
+relit en Markdown éditable quand il vous revient. md2star ne fait pas mieux que
+Pandoc ; il *appelle* Pandoc et y ajoute le template soigné, la colle
+Mermaid/images/PDF, le chemin inverse `md2star twin` et un aller-retour vérifié
+en CI que Pandoc brut vous force à construire vous-même. Il se pose *au-dessus*
+de Pandoc — il ne vous demande jamais d'abandonner Pandoc.
 
-`md2star` s'intercale entre vous et Pandoc. Vous écrivez en Markdown ;
-vous récupérez un DOCX / PPTX / PDF qui a l'air d'un document voulu.
+L'argumentaire complet — les manques de style que `pandoc rapport.md -o
+rapport.docx` vous laisse sur les bras, le seul endroit où « utilise juste
+Pandoc » n'a pas de réponse (le chemin inverse + la garantie d'aller-retour),
+et là où Pandoc est vraiment le bon outil — est dans
+**[WHY_MD2STAR_OVER_PANDOC.md](WHY_MD2STAR_OVER_PANDOC.md)**.
 
 ## Démarrage rapide
 
@@ -232,6 +239,7 @@ installer.
 - **Notes de bas de page natives** : les footnotes Markdown (`texte[^1]` + `[^1]: …`) passent directement par l'extension `footnotes` de Pandoc et deviennent de vraies notes Word. Le DOCX obtient de vraies notes en bas de page, le PPTX les regroupe en notes par diapositive. Aucune syntaxe spéciale, aucun prétraitement. Voir [EXAMPLES.md §10](EXAMPLES.md#10-footnotes).
 - **Nettoyages automatiques** (petit confort discret) : téléchargement des images `http(s)://` pour l'embarquement (opt-in), conversion des `<table>` HTML en pipe-tables Pandoc, et isolation des images sur leur propre diapositive PPTX quand elles cohabiteraient avec un tableau (sinon Pandoc les supprime).
 - **Réversible par conception** : la sortie DOCX de md2star est un rendu *fidèle et récupérable*, pas une impasse à sens unique. Relisez-la vers du Markdown avec n'importe quel lecteur DOCX (Pandoc, [kreuzberg](https://github.com/Goldziher/kreuzberg)) : vos titres, votre emphase `**gras**`/`*italique*`/`` `code` ``, vos tableaux et vos listes reviennent intacts, et les conversions répétées convergent vers un **point fixe stable** au lieu de dériver. Voir [Fidélité de l'aller-retour](#fidélité-de-laller-retour).
+- **Jumeau Markdown (sens inverse)** : `md2star twin <fichier>` relit **n'importe quel PDF — ou tout ce que LibreOffice sait convertir en PDF** — en un `<nom>.md` *éditable* **plus un dossier `assets/`**. Les tableaux reviennent en pipe-tables GFM et chaque image embarquée est extraite puis re-liée. Ajoutez `--diagrams` (opt-in, nécessite `[ai]` + un Ollama local) et les figures en nœuds-et-flèches sont **ré-écrites en Mermaid** via une *boucle œil-de-lynx guidée par la cible* — on rend un candidat avec le même `mmdc` que le sens direct, on le compare à l'original extrait via un modèle de vision local, et on itère jusqu'à correspondance ; le PNG extrait est conservé en repli, donc rien n'est jamais perdu. Tout se dégrade proprement : sans la pile IA, les images restent de simples PNG extraits. Nécessite `pip install 'md2star[ocr]'`.
 - **Résolution souple des chemins d'images** : URLs, chemins absolus et chemins relatifs se comportent comme prévu. Une référence relative `![](images/foo.png)` est résolue par rapport au dossier du fichier source.
 - **Identité visuelle zéro-config** : déposez un `template.docx` / `template.pptx` à côté de votre Markdown, md2star le détecte automatiquement comme `--reference-doc`. À défaut, md2star télécharge par défaut (depuis v2.5.0) le template `deraison.ai` et le met en cache ; passez `--no-remote-templates` / `--offline` pour utiliser le template embarqué.
 - **CLI auto-documentée** : chaque wrapper accepte `--help` / `-h` et affiche d'abord les options propres à md2star, puis `pandoc --help`. Essayez `md2docx --help`, `md2pptx --help` ou `md2star --help`.
