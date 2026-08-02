@@ -28,7 +28,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - run: python -m pip install --upgrade ruff
+      # Pinned: an unpinned `--upgrade ruff` let ruff 0.16 change default
+      # behaviour under the gate. Bump this deliberately, not by surprise.
+      - run: python -m pip install "ruff==0.15.21"
       - run: ruff check md2star/ tests/
 
   # ──────────────────────────────────────────────────────────────────
@@ -69,7 +71,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        # Super-light gate: one Python for the unit suite. The full
+        # multi-version sweep runs locally before push; the 3-OS integration
+        # matrix and the coverage / ocr-roundtrip jobs still exercise breadth.
+        python-version: ["3.12"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

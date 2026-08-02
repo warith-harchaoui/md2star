@@ -6,6 +6,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.0.0] — 2026-08-02
+
+Major release: md2star moves onto the stable 2.x / 1.x AI Helpers foundation.
+The conversion behaviour and public API are unchanged — the bump is major
+because two core suite dependencies each crossed a major boundary at once.
+
+### Changed
+- **Adopts `os-helper>=2.0.0,<3`** (was `>=1.7.2,<2`) — the hardened suite
+  foundation for logging, file management and smart (resumable / verified)
+  downloads.
+- **Adopts `best-engine-ai-helper>=1.0.0,<2`** (was `>=0.3.0,<1`). The old `<1`
+  cap silently locked md2star out of best-engine's first stable release, pinning
+  it to the 0.x model-picker; the alt-text (`vision_model()`) and lint
+  (`text_model()`) resolvers md2star relies on are unchanged in 1.x.
+- **CI lint no longer floats its ruff version.** The `ruff` job installed
+  `--upgrade ruff` (unpinned), which let a new ruff change gate behaviour by
+  surprise; it now pins `ruff==0.15.21` like the rest of the suite. The unit
+  `pytest` matrix drops to a single Python (the 3-OS integration, coverage and
+  OCR round-trip jobs still cover breadth; the full local sweep runs before
+  push).
+
+### Added
+- `tests/test_readme_install_pin.py` guards against a stale `git+…@vX` self-pin
+  ever appearing in any Markdown file (the install docs stay `pip install
+  md2star`).
+
 ## [2.14.0] — 2026-08-02
 
 ### Changed
