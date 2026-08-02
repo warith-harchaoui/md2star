@@ -70,7 +70,7 @@ detailed audit these priorities came from.
       upload, and draft auto-save. Shipped **bundled in the core
       package** (Option A) rather than as a separate `md2star[gui]`
       wheel (Option B): the ~4 MB vendor tree (Tailwind, CodeMirror,
-      PDF.js, Montserrat + Roboto Serif) lives under
+      PDF.js, the three-Roboto fonts) lives under
       `md2star/data/gui/` and the whole thing is pure stdlib
       `http.server` — zero extra Python deps. This trades the lean
       ~200 KB wheel (now ~2.3 MB) for a one-command GUI that needs no

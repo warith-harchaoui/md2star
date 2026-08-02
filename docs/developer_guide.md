@@ -274,7 +274,7 @@ The Overleaf-style local web editor was **restored in v2.6.0**,
 Invoke it with `md2star gui`. The server module is
 `md2star/gui_server.py` — pure Python stdlib `http.server` bound to
 `127.0.0.1`, adding **zero** extra Python dependencies. The entire
-frontend (PDF.js, CodeMirror, Tailwind, Montserrat + Roboto Serif) is
+frontend (PDF.js, CodeMirror, Tailwind, the three-Roboto fonts) is
 vendored under `md2star/data/gui/`, which is why the wheel grew from
 ~200 KB back to ~2.3 MB. Path confinement of the `/fs/*` endpoints
 (root-confined folder browser, in-session reference-template upload,

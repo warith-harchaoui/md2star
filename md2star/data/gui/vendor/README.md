@@ -22,16 +22,18 @@ when the upstream packages publish security patches.
 | `tailwind.js`                    | Tailwind Play CDN with `?plugins=forms,typography`       | MIT            |
 | `codemirror.js`                  | esbuild bundle of @codemirror/{state,view,commands,…}    | MIT            |
 | `codemirror.js.LEGAL.txt`        | Per-module legal comments, harvested by esbuild           | MIT            |
-| `fonts/montserrat/`              | Vendored from the `front-ui` skill (upstream:            | SIL OFL 1.1    |
-|                                  | <github.com/JulietaUla/Montserrat>)                      |                |
-| `fonts/roboto-serif/`            | Google Fonts (Roboto Serif), URLs rewritten to local      | SIL OFL 1.1    |
-|                                  | (upstream: <github.com/googlefonts/RobotoSerif>)         |                |
+| `fonts/roboto/`                  | Vendored from the `sprezzature-ui` skill (upstream:      | SIL OFL 1.1    |
+|                                  | <github.com/googlefonts/roboto-classic>)                 |                |
+| `fonts/roboto-serif/`            | Vendored from the `sprezzature-ui` skill (upstream:      | SIL OFL 1.1    |
+|                                  | <github.com/googlefonts/RobotoSerif>)                    |                |
+| `fonts/roboto-mono/`             | Vendored from the `sprezzature-ui` skill (upstream:      | SIL OFL 1.1    |
+|                                  | <github.com/googlefonts/robotomono>)                     |                |
 
-The GUI uses **Montserrat for sans-serif** (UI chrome) and
-**Roboto Serif for serif** (`class="font-serif"` — long-form prose,
-rendered Markdown). The editor's code pane uses the OS's system
-monospace stack (`ui-monospace`, `SFMono-Regular`, `Menlo`, `Monaco`,
-`Consolas`) — no third web font ships. Total vendor tree: ~3.1 MB.
+The GUI follows the **three-Roboto rule**: **Roboto** for sans (UI chrome +
+body), **Roboto Serif** for serif (`class="font-serif"` — long-form prose,
+rendered Markdown), and **Roboto Mono** for code (the editor pane, `<kbd>`,
+`<code>`). Each family is a single self-hosted variable woff2 (weights
+100–900). Total vendor tree: ~3.1 MB.
 
 CodeMirror is bundled as **one** file on purpose: shipping the five
 sub-packages (`state`, `view`, `commands`, `lang-markdown`, `language`)

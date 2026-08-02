@@ -6,7 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-## [2.13.0] — 2026-08-02
+## [2.14.0] — 2026-08-02
+
+### Changed
+- **GUI typography aligned to the house "three-Roboto" rule.** The full editor
+  (`md2star gui`) now ships exactly three self-hosted variable web fonts, all
+  from the Roboto super-family, so the whole surface reads as one typographic
+  system:
+  - **Roboto** (sans) replaces Montserrat for UI chrome and body text.
+  - **Roboto Serif** (serif) stays for long-form prose / the rendered preview.
+  - **Roboto Mono** (mono) replaces the OS system-mono stack in the CodeMirror
+    editor pane, `<kbd>` and `<code>` (with the OS stack kept only as a
+    first-paint fallback).
+  All three are vendored under `md2star/data/gui/vendor/fonts/` straight from the
+  `sprezzature-ui` skill (single variable woff2 each, SIL OFL 1.1, no CDN);
+  `scripts/vendor_gui.sh` now refreshes them from that one source instead of
+  copying Montserrat + fetching Roboto Serif from Google Fonts. The
+  sprezzature-colors palette and the class-based dark mode were already in place
+  and are unchanged; verified in a headless-Chrome render (light mode coherent,
+  all three faces loading). No behavioural change and no new dependency — a
+  vendor-tree swap only.
 
 ### Added
 - **Twin diagram reconstruction now covers *free figures*, not just node-and-edge

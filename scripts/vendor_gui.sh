@@ -33,7 +33,7 @@ if ! command -v npx >/dev/null; then
     exit 127
 fi
 
-mkdir -p "${VENDOR}/pdfjs" "${VENDOR}/fonts/jetbrains-mono"
+mkdir -p "${VENDOR}/pdfjs"
 
 # ── PDF.js ───────────────────────────────────────────────────────────
 echo "[1/4] PDF.js ${PDFJS_VERSION}"
@@ -47,40 +47,22 @@ echo "[2/4] Tailwind Play CDN bundle"
 curl -fsSL -o "${VENDOR}/tailwind.js" \
     'https://cdn.tailwindcss.com?plugins=forms,typography'
 
-# ── Fonts — Montserrat (sans) + Roboto Serif (serif) ────────────────
-# Editor monospace uses the OS's own system mono stack (ui-monospace /
-# SFMono / Menlo / Consolas), so no third web font ships.
-echo "[3/4a] Montserrat (from front-ui skill — variable + static fallbacks)"
-FRONT_UI_MONT="${HOME}/.claude/skills/front-ui/assets/fonts/montserrat"
-if [[ -d "${FRONT_UI_MONT}" ]]; then
-    mkdir -p "${VENDOR}/fonts/montserrat"
-    cp -f "${FRONT_UI_MONT}"/*.woff2 "${FRONT_UI_MONT}/fonts.css" \
-          "${FRONT_UI_MONT}/OFL.txt" "${VENDOR}/fonts/montserrat/" 2>/dev/null || true
-else
-    echo "  WARNING: front-ui skill not at ${FRONT_UI_MONT}; Montserrat not refreshed." >&2
-fi
-
-echo "[3/4b] Roboto Serif (from Google Fonts — variable, weights 400/500/600/700)"
-mkdir -p "${VENDOR}/fonts/roboto-serif"
-TMP_CSS="$(mktemp)"
-curl -fsSL -H 'User-Agent: Mozilla/5.0' \
-     -o "${TMP_CSS}" \
-     'https://fonts.googleapis.com/css2?family=Roboto+Serif:opsz,wght@8..144,400;8..144,500;8..144,600;8..144,700&display=swap'
-grep -oE 'https://fonts.gstatic.com/[^)]+\.woff2' "${TMP_CSS}" | sort -u \
-    | while read -r url; do
-        fname="${url##*/}"
-        curl -fsSL -o "${VENDOR}/fonts/roboto-serif/${fname}" "${url}"
+# ── Fonts — the three-Roboto set (sans + serif + mono) ──────────────
+# One super-family, three self-hosted variable woff2s, copied straight
+# from the sprezzature-ui skill so the GUI matches the house style and
+# stays fully offline (no Google Fonts / CDN fetch).
+echo "[3/4] Fonts — Roboto (sans) + Roboto Serif (serif) + Roboto Mono (mono)"
+SPREZZ_FONTS="${HOME}/.claude/skills/sprezzature-ui/assets/fonts"
+if [[ -d "${SPREZZ_FONTS}" ]]; then
+    for fam in roboto roboto-serif roboto-mono; do
+        mkdir -p "${VENDOR}/fonts/${fam}"
+        cp -f "${SPREZZ_FONTS}/${fam}"/*.woff2 \
+              "${SPREZZ_FONTS}/${fam}/fonts.css" \
+              "${SPREZZ_FONTS}/${fam}/OFL.txt" \
+              "${VENDOR}/fonts/${fam}/" 2>/dev/null || true
     done
-sed -E 's|https://fonts.gstatic.com/[^)]+/([^)/]+\.woff2)|./\1|g' \
-    "${TMP_CSS}" > "${VENDOR}/fonts/roboto-serif/fonts.css"
-rm -f "${TMP_CSS}"
-if curl -fsSL -o "${VENDOR}/fonts/roboto-serif/OFL.txt.tmp" \
-        'https://raw.githubusercontent.com/googlefonts/RobotoSerif/main/OFL.txt'; then
-    mv "${VENDOR}/fonts/roboto-serif/OFL.txt.tmp" \
-       "${VENDOR}/fonts/roboto-serif/OFL.txt"
 else
-    rm -f "${VENDOR}/fonts/roboto-serif/OFL.txt.tmp"
-    echo "  WARNING: could not refresh Roboto Serif OFL.txt; keeping existing copy." >&2
+    echo "  WARNING: sprezzature-ui skill not at ${SPREZZ_FONTS}; fonts not refreshed." >&2
 fi
 
 # ── CodeMirror 6 single-file bundle (one EditorState constructor) ────

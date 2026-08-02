@@ -52,18 +52,18 @@
           },
           extend: {
             fontFamily: {
-              // Two self-hosted web fonts:
-              //   - Montserrat (sans, geometric) for UI chrome.
-              //   - Roboto Serif (serif, neutral) for body / long-form
-              //     prose (use class="font-serif" inside the editor or
-              //     any rendered preview).
-              // Mono is the OS's system stack — `ui-monospace` covers
-              // modern macOS / iOS, then SFMono / Menlo / Consolas on
-              // older Apple / Linux / Windows. No third web font ships.
-              sans:  ['Montserrat', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+              // The three-Roboto rule (house style): one super-family, three
+              // self-hosted variable web fonts, so the whole GUI reads as one
+              // typographic system in light and dark.
+              //   - Roboto (sans)       → UI chrome + body by default.
+              //   - Roboto Serif (serif) → long-form prose (class="font-serif"
+              //     in the editor or the rendered preview).
+              //   - Roboto Mono (mono)  → code, the editor pane, kbd, terminal.
+              // OS stacks stay as fallbacks so first paint never blanks.
+              sans:  ['Roboto', 'ui-sans-serif', 'system-ui', 'sans-serif'],
               serif: ['"Roboto Serif"', 'ui-serif', 'Georgia', 'serif'],
-              mono:  ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco',
-                      'Consolas', 'monospace'],
+              mono:  ['"Roboto Mono"', 'ui-monospace', 'SFMono-Regular',
+                      'Menlo', 'Monaco', 'Consolas', 'monospace'],
             },
             colors: {
               brand: {
@@ -105,19 +105,21 @@
       };
     </script>
 
-    <!-- Self-hosted web fonts. Both ship under SIL OFL 1.1:
-           - Montserrat (sans)    → vendor/fonts/montserrat/OFL.txt
+    <!-- Self-hosted web fonts — the three-Roboto set, all SIL OFL 1.1:
+           - Roboto (sans)        → vendor/fonts/roboto/OFL.txt
            - Roboto Serif (serif) → vendor/fonts/roboto-serif/OFL.txt
-         The editor's monospace pane uses the OS's own system mono
-         stack, so no third web font ships. -->
+           - Roboto Mono (mono)   → vendor/fonts/roboto-mono/OFL.txt
+         Each is a single variable woff2 (weights 100–900), self-hosted;
+         no CDN, no third font family. -->
     <!-- Cache-busting ?v={{CACHE_BUST}} on every locally-served asset.
          The server splices a per-process random hex tag at request time
          so any stale browser is forced to re-fetch app.js / styles.css
          after a `md2star gui` restart. Without it, browsers hold on to
          old ES modules in their in-memory module map even when we send
          Cache-Control: no-store. -->
-    <link rel="stylesheet" href="/vendor/fonts/montserrat/fonts.css?v={{CACHE_BUST}}" />
+    <link rel="stylesheet" href="/vendor/fonts/roboto/fonts.css?v={{CACHE_BUST}}" />
     <link rel="stylesheet" href="/vendor/fonts/roboto-serif/fonts.css?v={{CACHE_BUST}}" />
+    <link rel="stylesheet" href="/vendor/fonts/roboto-mono/fonts.css?v={{CACHE_BUST}}" />
 
     <link rel="stylesheet" href="/styles.css?v={{CACHE_BUST}}" />
   </head>

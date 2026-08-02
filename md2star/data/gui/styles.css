@@ -102,12 +102,14 @@
 .sidebar-row.row-disabled:hover { background: transparent; }
 
 /* CodeMirror — make it fill its container and match our font tokens.
-   CodeMirror's default line-height (1.4) feels tight on the OS mono
-   stack at 13.5 px; bumping to 1.55 gives editor-grade breathing room. */
+   Roboto Mono is the house monospace (the third of the three-Roboto set);
+   the OS mono stack stays as a fallback for first paint. CodeMirror's
+   default line-height (1.4) feels tight at 13.5 px; 1.55 gives editor-
+   grade breathing room. */
 .cm-editor {
   height: 100%;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-               monospace;
+  font-family: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+               Consolas, monospace;
   font-size: 13.5px;
   line-height: 1.55;
 }

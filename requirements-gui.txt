@@ -11,7 +11,8 @@
 #   md2star gui
 #
 # Because the whole frontend — PDF.js, CodeMirror, Tailwind and the
-# Montserrat / Roboto Serif fonts — is *vendored* inside md2star/data/gui/
+# three-Roboto fonts (Roboto / Roboto Serif / Roboto Mono) — is *vendored*
+# inside md2star/data/gui/
 # and the server itself is pure Python standard library, the GUI adds
 # ZERO extra pip dependencies on top of the CLI. It therefore just
 # inherits the core runtime install below (which pulls in langdetect +
