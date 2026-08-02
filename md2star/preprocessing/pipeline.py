@@ -53,7 +53,7 @@ from .lint import lint_with_llm
 from .math import unwrap_math_in_code_spans
 from .mermaid import render_mermaid_local
 from .regexes import PIPE_TABLE_ROW_RE
-from .tables import convert_html_tables, normalize_pipe_tables
+from .tables import convert_html_tables, normalize_grid_tables, normalize_pipe_tables
 
 # Module logger — child of the root "md2star" logger (configured by the CLI).
 logger = get_logger(__name__)
@@ -74,6 +74,7 @@ PHASES: frozenset[str] = frozenset({
     "table_resize",
     "table_normalize",
     "image_widths",
+    "grid_normalize",
     "pptx_isolation",
 })
 
@@ -83,6 +84,11 @@ _STANDALONE_IMG_RE = re.compile(r"^\s*!\[.*\]\(.*\)")
 
 # Matches a list item: optional indent, marker (-, *, +, or N.), then a space.
 _LIST_PATTERN = re.compile(r"^(\s*(?:[-*+]|\d+\.)\s+.*)")
+
+# A grid-table border line: ``+---+===+---+`` (only ``+``, ``-``, ``=``). Recognised so the
+# PPTX-isolation pass treats a grid table as one block rather than wedging a ``##`` before every
+# row (which shatters a grid table — the one table form whose image cells survive into DOCX/PDF).
+_GRID_BORDER_LINE_RE = re.compile(r"^\+[-=+]+\+$")
 
 
 def _warn_remote_images_blocked(content: str) -> None:
@@ -354,6 +360,11 @@ def preprocess_markdown(
         content = fill_empty_alt_text(content, base_dir)
     if "image_widths" not in skip:
         content = fix_image_widths(content)
+    # Re-align grid tables AFTER the phases that change cell text length (image-path
+    # absolutization, width-hint insertion), so Pandoc still parses them — grid cells
+    # are the only table cells whose images survive into DOCX/PDF.
+    if "grid_normalize" not in skip:
+        content = normalize_grid_tables(content)
     if "pptx_isolation" not in skip:
         content = isolate_images_for_pptx(content)
 
@@ -422,6 +433,22 @@ def isolate_images_for_pptx(content: str) -> str:
             # don't wedge a ``##`` between the header and body of one table.
             if not in_table and (section_has_table or section_has_content):
                 # New table on a slide that already has stuff → isolate it.
+                out.append("")
+                out.append("##")
+                out.append("")
+                section_has_table = False
+                section_has_content = False
+            in_table = True
+            section_has_table = True
+            out.append(line)
+            continue
+
+        # A grid-table border (``+---+`` / ``+===+``) is part of the table, not a slide break.
+        # Treat it like a table row: isolate once when the table first opens on a dirty slide, but
+        # keep ``in_table`` across the borders so no ``##`` is wedged between a border and the next
+        # row. Without this, each border reset ``in_table`` and shattered the grid table.
+        if _GRID_BORDER_LINE_RE.match(stripped):
+            if not in_table and (section_has_table or section_has_content):
                 out.append("")
                 out.append("##")
                 out.append("")

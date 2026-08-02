@@ -191,13 +191,35 @@ def fix_image_widths(content: str) -> str:
     return "\n".join(result_lines)
 
 
+# A grid-table border line (``+---+===+---+``): used to tell grid-table rows (which also start
+# with ``|``) apart from real pipe-table rows.
+_GRID_BORDER_RE = re.compile(r"^\+[-=+]+\+[ \t]*$")
+
+
 def resize_images_in_markdown_tables(content: str, base_dir: str = ".") -> str:
-    """Replace image references in pipe-table cells with paths to resized copies.
+    """Replace image references in *pipe*-table cells with paths to resized copies.
 
     URL-based images and images that cannot be located on disk are left as-is.
+    Grid-table rows are skipped: their cell images carry explicit ``{width=…}`` hints that Pandoc
+    honours, so physically downscaling them here (and dropping the hint) would make a grid gallery
+    render at uneven native sizes. Only genuine pipe-table cells are resized.
     """
     result_lines: list[str] = []
+    in_grid = False
     for line in content.split("\n"):
+        stripped = line.strip()
+        # A ``+---+`` border opens (or continues) a grid table; the ``| … |`` rows between borders
+        # are grid cells, not pipe cells, and must be left untouched.
+        if _GRID_BORDER_RE.match(stripped):
+            in_grid = True
+            result_lines.append(line)
+            continue
+        if in_grid:
+            if PIPE_TABLE_ROW_RE.match(line):
+                result_lines.append(line)  # a grid row → leave its {width=…} intact
+                continue
+            in_grid = False  # a non-border, non-row line closes the grid table
+
         # Only rewrite inside pipe-table rows — everything else keeps its
         # normal (page-sized) image handling.
         if PIPE_TABLE_ROW_RE.match(line):

@@ -639,3 +639,121 @@ def normalize_pipe_tables(
         i = block_end
 
     return "\n".join(out)
+
+
+# A grid-table border line: ``+---+===+---+`` (only ``+``, ``-``, ``=``).
+_GRID_BORDER_RE = re.compile(r"^\+[-=+]+\+[ \t]*$")
+# A grid-table content row: starts and ends with ``|``.
+_GRID_ROW_RE = re.compile(r"^\|.*\|[ \t]*$")
+
+
+def _realign_grid_block(block: list[str]) -> list[str] | None:
+    """Rebuild one grid-table block with columns wide enough for their content.
+
+    Pandoc grid tables require the ``|`` cell separators in each row to line up
+    exactly with the ``+`` in the border rows. Earlier phases (image-path
+    absolutization, width-hint insertion) lengthen the text inside a cell, which
+    shifts that row's ``|`` past the fixed-width border and makes Pandoc stop
+    seeing a table at all — the images survive but the rows/columns collapse.
+    This re-derives each column's width from its widest cell and re-emits aligned
+    borders and rows, so the table parses again. Returns ``None`` (leave the block
+    untouched) for anything not a clean single-line-cell grid table.
+    """
+    parsed: list[tuple[str, object]] = []  # ("border", is_header) | ("row", cells)
+    ncols: int | None = None
+    orig: list[int] | None = None  # author-specified column widths (first border's dash counts)
+    for line in block:
+        if _GRID_BORDER_RE.match(line):
+            if orig is None:
+                # Dash/equal count of each ``+…+`` segment = the author's column-width intent.
+                orig = [len(seg) for seg in line.strip().strip("+").split("+")]
+            parsed.append(("border", "=" in line))
+            continue
+        # Split a ``| a | b |`` row into its logical cells by the ``|`` delimiters
+        # (robust to misalignment); drop the empty strings before the first and
+        # after the last pipe. A file path with a ``|`` in it would break this, but
+        # that does not occur in practice.
+        cells = [c.strip() for c in line.split("|")[1:-1]]
+        if ncols is None:
+            ncols = len(cells)
+        elif len(cells) != ncols:
+            return None  # ragged row → not a table we can safely realign
+        parsed.append(("row", cells))
+    if not ncols:
+        return None
+
+    # Widest actual content per column.
+    content = [0] * ncols
+    for kind, val in parsed:
+        if kind == "row":
+            for c in range(ncols):
+                content[c] = max(content[c], len(val[c]))  # type: ignore[index]
+    # Respect the author's column-width RATIOS (the border dash counts): scale every column up by
+    # the same factor so the widest content fits while the relative widths are preserved. So equal
+    # dash counts stay equal (a fixed-width gallery), and proportional widths stay proportional —
+    # the widths follow what the author specified, not the incidental length of a path or label.
+    # Fall back to per-column content width only if the border widths are unusable.
+    if orig and len(orig) == ncols and all(o > 0 for o in orig):
+        scale = max(content[c] / orig[c] for c in range(ncols))
+        widths = [max(content[c], round(orig[c] * scale)) for c in range(ncols)]
+    else:
+        widths = content
+
+    def border(is_header: bool) -> str:
+        ch = "=" if is_header else "-"
+        return "+" + "+".join(ch * (widths[c] + 2) for c in range(ncols)) + "+"
+
+    def row(cells: list[str]) -> str:
+        return "|" + "|".join(" " + cells[c].ljust(widths[c] + 1) for c in range(ncols)) + "|"
+
+    return [border(bool(v)) if k == "border" else row(v) for k, v in parsed]  # type: ignore[arg-type]
+
+
+def normalize_grid_tables(content: str) -> str:
+    """Re-align every grid table so Pandoc still parses it after path/width rewrites.
+
+    Runs late in the pipeline (after image paths were absolutized and width hints
+    added, both of which change cell text length). Grid tables — unlike pipe
+    tables — are the only Markdown table form whose cells can hold images that
+    Pandoc keeps in DOCX/PDF, so keeping them intact matters for image galleries.
+    Idempotent; fenced code blocks and non-table ``+``/``|`` lines are left
+    untouched.
+    """
+    lines = content.split("\n")
+    out: list[str] = []
+    in_code = False
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.strip().startswith("```"):
+            in_code = not in_code
+            out.append(line)
+            i += 1
+            continue
+        # A grid table starts on a border line; gather the contiguous run of
+        # border/row lines that follows.
+        if not in_code and _GRID_BORDER_RE.match(line):
+            j = i
+            while j < len(lines) and (
+                _GRID_BORDER_RE.match(lines[j]) or _GRID_ROW_RE.match(lines[j])
+            ):
+                j += 1
+            block = lines[i:j]
+            rows = [b for b in block if _GRID_ROW_RE.match(b)]
+            # A real grid table: top and bottom borders and at least one row.
+            if (
+                len(rows) >= 1
+                and _GRID_BORDER_RE.match(block[0])
+                and _GRID_BORDER_RE.match(block[-1])
+            ):
+                realigned = _realign_grid_block(block)
+                if realigned is not None:
+                    out.extend(realigned)
+                    i = j
+                    continue
+            out.extend(block)
+            i = j
+            continue
+        out.append(line)
+        i += 1
+    return "\n".join(out)
