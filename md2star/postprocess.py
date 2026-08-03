@@ -261,6 +261,89 @@ def strip_table_normal_for_pdf(docx_path: str) -> bool:
     return True
 
 
+# Fully-qualified WordML tag / attribute names for the image-centring pass.
+_P_TAG = f"{{{_W_NS}}}p"
+_PPR_TAG = f"{{{_W_NS}}}pPr"
+_PSTYLE_TAG = f"{{{_W_NS}}}pStyle"
+_JC_TAG = f"{{{_W_NS}}}jc"
+_VAL_ATTR = f"{{{_W_NS}}}val"
+_DRAWING_TAG = f"{{{_W_NS}}}drawing"
+_T_TAG = f"{{{_W_NS}}}t"
+_TBL_TAG = f"{{{_W_NS}}}tbl"
+
+
+def _center_images_xml(xml_bytes: bytes) -> tuple[bytes, bool]:
+    """Add ``<w:jc w:val="center"/>`` to every standalone-image paragraph.
+
+    "Standalone" = the paragraph carries an image (``<w:drawing>``), no real text,
+    and is NOT inside a table cell (the rule is *hors tableau*). Returns the
+    (possibly rewritten) bytes and whether anything changed.
+    """
+    root = ET.fromstring(xml_bytes)
+    # ElementTree has no parent pointers; build a child→parent map to detect
+    # paragraphs nested inside a table.
+    parents = {child: parent for parent in root.iter() for child in parent}
+    changed = False
+    for para in root.iter(_P_TAG):
+        if para.find(f".//{_DRAWING_TAG}") is None:
+            continue
+        if any((t.text or "").strip() for t in para.iter(_T_TAG)):
+            continue                                    # image mixed with text
+        ancestor, in_table = parents.get(para), False
+        while ancestor is not None:
+            if ancestor.tag == _TBL_TAG:
+                in_table = True
+                break
+            ancestor = parents.get(ancestor)
+        if in_table:
+            continue
+        ppr = para.find(_PPR_TAG)
+        if ppr is None:
+            ppr = ET.Element(_PPR_TAG)
+            para.insert(0, ppr)                         # pPr must be the first child
+        jc = ppr.find(_JC_TAG)
+        if jc is None:
+            jc = ET.Element(_JC_TAG)
+            # Keep pStyle first in pPr; jc goes right after it (else at the front).
+            pstyle = ppr.find(_PSTYLE_TAG)
+            ppr.insert(list(ppr).index(pstyle) + 1 if pstyle is not None else 0, jc)
+        if jc.get(_VAL_ATTR) != "center":
+            jc.set(_VAL_ATTR, "center")
+            changed = True
+    if not changed:
+        return xml_bytes, False
+    return ET.tostring(root, encoding="UTF-8", xml_declaration=True), True
+
+
+def center_standalone_images(docx_path: str) -> bool:
+    """Centre standalone (non-table) images in *docx_path*; True if changed.
+
+    md2star already sizes each bare image to a contain-fit that never exceeds the
+    page (see :func:`md2star.preprocessing.images.image_size_attr`); Pandoc,
+    however, leaves the image left-aligned. This adds the missing centring so an
+    image outside a table sits centred at the largest size that still fits the
+    page — in the DOCX and, via LibreOffice, in the PDF. Table-cell images are
+    untouched.
+    """
+    with zipfile.ZipFile(docx_path, "r") as zin:
+        members = {item.filename: zin.read(item.filename) for item in zin.infolist()}
+    if "word/document.xml" not in members:
+        return False
+    new_bytes, changed = _center_images_xml(members["word/document.xml"])
+    if not changed:
+        return False
+    members["word/document.xml"] = new_bytes
+
+    tmp_path = docx_path + ".tmp"
+    with zipfile.ZipFile(docx_path, "r") as zin, zipfile.ZipFile(
+        tmp_path, "w", zipfile.ZIP_DEFLATED
+    ) as zout:
+        for item in zin.infolist():
+            zout.writestr(item, members.get(item.filename, zin.read(item.filename)))
+    shutil.move(tmp_path, docx_path)
+    return True
+
+
 if __name__ == "__main__":
     # Standalone debug entry (`python -m md2star.postprocess <file.docx>`):
     # configure logging ourselves since there's no CLI wrapper to do it.

@@ -61,7 +61,11 @@ from .errors import (
 )
 from .logging import configure as configure_logging
 from .logging import get_logger
-from .postprocess import inject_table_styles, strip_table_normal_for_pdf
+from .postprocess import (
+    center_standalone_images,
+    inject_table_styles,
+    strip_table_normal_for_pdf,
+)
 from .preprocessing import preprocess_markdown
 
 # Module logger — a dotted child of the root "md2star" logger, so it inherits
@@ -531,7 +535,9 @@ def _convert(fmt: str, argv: list[str]) -> int:
         if rc != 0:
             return rc
 
-    # 5. DOCX-only postprocess: re-inject MyTable / MyTableSmall styles.
+    # 5. DOCX-only postprocess: re-inject MyTable / MyTableSmall styles, then
+    #    centre standalone (non-table) images — Pandoc leaves them left-aligned.
+    #    Both run for the DOCX and the PDF (which builds from this same DOCX).
     if docx_fmt == "docx":
         try:
             inject_table_styles(str(docx_path))
@@ -539,6 +545,13 @@ def _convert(fmt: str, argv: list[str]) -> int:
             logger.warning(
                 f"md2star warning: postprocess failed ({exc}); "
                 "the .docx is otherwise complete."
+            )
+        try:
+            center_standalone_images(str(docx_path))
+        except Exception as exc:
+            logger.warning(
+                f"md2star warning: image-centring pass failed ({exc}); "
+                "images will render left-aligned."
             )
 
     # 6. PDF-only: shell out to headless LibreOffice. The intermediate

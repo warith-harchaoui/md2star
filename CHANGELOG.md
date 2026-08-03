@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **Standalone images are now centred on the page.** md2star already sizes each
+  bare `![](…)` image to a contain-fit that never exceeds the page (aspect-ratio
+  preserved: `{width=15cm}` for wide images, `{height=17cm}` for tall ones — see
+  `preprocessing/images.image_size_attr`), but Pandoc left them left-aligned. A
+  new `postprocess.center_standalone_images` pass adds `<w:jc w:val="center"/>`
+  to every image-only paragraph that is **outside a table** (`hors tableau`), so
+  an image sits centred at the largest size that still fits — in the DOCX and,
+  via LibreOffice, in the PDF. Table-cell images are untouched. Covered by
+  `tests/test_postprocess.py`.
+
 ## [3.0.0] — 2026-08-02
 
 Major release: md2star moves onto the stable 2.x / 1.x AI Helpers foundation.

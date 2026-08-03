@@ -27,7 +27,11 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 import zipfile
 
-from md2star.postprocess import inject_table_styles, strip_table_normal_for_pdf
+from md2star.postprocess import (
+    center_standalone_images,
+    inject_table_styles,
+    strip_table_normal_for_pdf,
+)
 
 _W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 
@@ -203,3 +207,48 @@ def test_strip_table_normal_removes_refs_and_is_a_noop_when_absent(tmp_path) -> 
     before = blank.read_bytes()
     assert strip_table_normal_for_pdf(str(blank)) is False
     assert blank.read_bytes() == before
+
+
+# ──────────────────────────────────────────────────────────────────
+# center_standalone_images — centre bare images, only outside tables.
+# ──────────────────────────────────────────────────────────────────
+
+
+def _build_docx_with_images(path) -> None:
+    """A DOCX with four paragraphs: text-only, a bare image, an image beside
+    text, and an image inside a table cell."""
+    document = (
+        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        f'<w:document xmlns:w="{_W_NS}"><w:body>'
+        '<w:p><w:r><w:t>text only</w:t></w:r></w:p>'
+        '<w:p><w:r><w:drawing/></w:r></w:p>'                       # standalone image
+        '<w:p><w:r><w:t>caption </w:t></w:r><w:r><w:drawing/></w:r></w:p>'  # image + text
+        '<w:tbl><w:tr><w:tc>'
+        '<w:p><w:r><w:drawing/></w:r></w:p>'                       # image in a table cell
+        '</w:tc></w:tr></w:tbl>'
+        '</w:body></w:document>'
+    ).encode("utf-8")
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zout:
+        zout.writestr("word/document.xml", document)
+
+
+def test_center_standalone_images_only_bare_images_outside_tables(tmp_path) -> None:
+    """Only the bare, non-table image paragraph is centred; the pass is idempotent.
+
+    The text-only paragraph has no image, the image-beside-text paragraph carries
+    real text, and the table-cell image is *hors tableau*-excluded — so exactly
+    one ``<w:jc w:val="center"/>`` is added, and a second run is a no-op.
+    """
+    docx = tmp_path / "imgs.docx"
+    _build_docx_with_images(docx)
+
+    assert center_standalone_images(str(docx)) is True
+    with zipfile.ZipFile(docx) as z:
+        document = z.read("word/document.xml").decode("utf-8")
+    # Exactly one centred paragraph — the standalone image.
+    assert document.count('<w:jc w:val="center"') == 1
+    # The centred one sits before the table (it is the bare image paragraph).
+    assert document.index('<w:jc w:val="center"') < document.index("<w:tbl")
+
+    # Idempotency: a second run changes nothing.
+    assert center_standalone_images(str(docx)) is False
