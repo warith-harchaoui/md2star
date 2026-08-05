@@ -1,13 +1,13 @@
 # md2star
 
+[🇫🇷](https://github.com/warith-harchaoui/md2star/blob/main/LISEZMOI.md) · [🇬🇧](https://github.com/warith-harchaoui/md2star/blob/main/README.md)
+
 [![PyPI](https://img.shields.io/pypi/v/md2star.svg)](https://pypi.org/project/md2star/)
 [![CI](https://github.com/warith-harchaoui/md2star/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/md2star/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)
 ![Status: beta](https://img.shields.io/badge/status-beta-orange.svg)
 [![Local-first](https://img.shields.io/badge/privacy-local--first-2f6f5e.svg)](#the-promise)
-
-> 🇫🇷 *Version française : **[LISEZMOI.md](https://github.com/warith-harchaoui/md2star/blob/main/LISEZMOI.md)**.*
 
 **Convert Markdown into professional DOCX, PPTX and PDF documents
 using Pandoc, branded templates, and practical automation.**
