@@ -239,12 +239,12 @@ installer.
 - **Notes de bas de page natives** : les footnotes Markdown (`texte[^1]` + `[^1]: …`) passent directement par l'extension `footnotes` de Pandoc et deviennent de vraies notes Word. Le DOCX obtient de vraies notes en bas de page, le PPTX les regroupe en notes par diapositive. Aucune syntaxe spéciale, aucun prétraitement. Voir [EXAMPLES.md §10](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#10-footnotes).
 - **Nettoyages automatiques** (petit confort discret) : téléchargement des images `http(s)://` pour l'embarquement (opt-in), conversion des `<table>` HTML en pipe-tables Pandoc, et isolation des images sur leur propre diapositive PPTX quand elles cohabiteraient avec un tableau (sinon Pandoc les supprime).
 - **Réversible par conception** : la sortie DOCX de md2star est un rendu *fidèle et récupérable*, pas une impasse à sens unique. Relisez-la vers du Markdown avec n'importe quel lecteur DOCX (Pandoc, [kreuzberg](https://github.com/Goldziher/kreuzberg)) : vos titres, votre emphase `**gras**`/`*italique*`/`` `code` ``, vos tableaux et vos listes reviennent intacts, et les conversions répétées convergent vers un **point fixe stable** au lieu de dériver. Voir [Fidélité de l'aller-retour](#fidélité-de-laller-retour).
-- **Jumeau Markdown (sens inverse)** : `md2star twin <fichier>` relit **n'importe quel PDF — ou tout ce que LibreOffice sait convertir en PDF** — en un `<nom>.md` *éditable* **plus un dossier `assets/`**. Les tableaux reviennent en pipe-tables GFM et chaque image embarquée est extraite puis re-liée. Ajoutez `--diagrams` (opt-in, nécessite `[ai]` + un Ollama local) et les figures en nœuds-et-flèches sont **ré-écrites en Mermaid** via une *boucle œil-de-lynx guidée par la cible* — on rend un candidat avec le même `mmdc` que le sens direct, on le compare à l'original extrait via un modèle de vision local, et on itère jusqu'à correspondance ; le PNG extrait est conservé en repli, donc rien n'est jamais perdu. Tout se dégrade proprement : sans la pile IA, les images restent de simples PNG extraits. Nécessite `pip install 'md2star[ocr]'`.
+- **Jumeau Markdown (sens inverse)** : `md2star twin <fichier>` relit **n'importe quel PDF — ou tout ce que LibreOffice sait convertir en PDF** — en un `<nom>.md` *éditable* **plus un dossier `assets/`**. Les tableaux reviennent en pipe-tables GFM et chaque image embarquée est extraite puis re-liée. Ajoutez `--diagrams` (opt-in, nécessite un modèle local — voir le Linter LLM ci-dessous) et les figures en nœuds-et-flèches sont **ré-écrites en Mermaid** via une *boucle œil-de-lynx guidée par la cible* — on rend un candidat avec le même `mmdc` que le sens direct, on le compare à l'original extrait via un modèle de vision local, et on itère jusqu'à correspondance ; les autres figures vectorielles nettes sont ré-écrites en SVG éditable de la même façon. Le PNG extrait est toujours conservé en repli, donc rien n'est jamais perdu. Tout se dégrade proprement : si le modèle local ne peut être résolu, les images restent de simples PNG extraits. Nécessite `pip install 'md2star[ocr]'`.
 - **Résolution souple des chemins d'images** : URLs, chemins absolus et chemins relatifs se comportent comme prévu. Une référence relative `![](images/foo.png)` est résolue par rapport au dossier du fichier source.
 - **Identité visuelle zéro-config** : déposez un `template.docx` / `template.pptx` à côté de votre Markdown, md2star le détecte automatiquement comme `--reference-doc`. À défaut, md2star télécharge par défaut (depuis v2.5.0) le template `deraison.ai` et le met en cache ; passez `--no-remote-templates` / `--offline` pour utiliser le template embarqué.
 - **CLI auto-documentée** : chaque wrapper accepte `--help` / `-h` et affiche d'abord les options propres à md2star, puis `pandoc --help`. Essayez `md2docx --help`, `md2pptx --help` ou `md2star --help`.
-- **Linter LLM opt-in** : une passe locale Ollama corrige les erreurs de syntaxe (liens d'images cassés, fences non fermées, pipes mal formés) **avant** que Pandoc lise le fichier. **Désactivé par défaut** ; ajoutez `--lint` pour l'activer. Le wrapper lance alors `ollama serve` et fait un `ollama pull` du modèle par défaut à la demande : `gemma4:e2b-mlx` sur macOS (build MLX optimisé Apple Silicon) ou `gemma4:e2b` sur Linux/Windows. La passe fonctionne **sans dépendance Python** (via `urllib` de la stdlib) ; l'extra optionnel `md2star[ai]` bascule sur le client officiel `ollama` pour une API plus ergonomique, à comportement identique.
-- **Texte alternatif rédigé par IA** : avec `--lint`, chaque `![](src)` au texte alternatif vide reçoit une description générée par un modèle de vision (même modèle `gemma4:e2b`, cache par image). Surchargez le modèle via `MD2STAR_ALT_TEXT_MODEL`.
+- **Linter LLM opt-in** : une passe locale corrige les erreurs de syntaxe (liens d'images cassés, fences non fermées, pipes mal formés) **avant** que Pandoc lise le fichier. **Désactivé par défaut** ; ajoutez `--lint` pour l'activer. Le backend et le modèle sont choisis par le **contrat brief → engine** de la suite : md2star embarque un `md2star/llm.brief.yaml` versionné décrivant les besoins de ses passes IA, et [`best-engine-ai-helper`](https://pypi.org/project/best-engine-ai-helper/) le résout contre *votre* machine au premier usage — écrivant le choix concret dans un `md2star/llm.engine.yaml` gitignoré. **Aucun tag de modèle n'est codé en dur** ; le transport (Ollama local pour l'instant) gère lui-même le cycle de vie du démon, donc md2star ne lance jamais `ollama serve` / `ollama pull`. Si aucun modèle local n'est résolu, `--lint` avertit et retombe sur le Markdown original — la passe n'est jamais bloquante.
+- **Texte alternatif rédigé par IA** : avec `--lint`, chaque `![](src)` au texte alternatif vide reçoit une description générée par un modèle de vision, dans la langue même du document, en s'appuyant sur le titre et la prose environnants (cache par image). Le modèle de vision provient du même engine résolu que le linter.
 - **Compagnon : adaptateur de templates IA** : pour brander un template PPTX
   d'entreprise dont les noms de mises en page ne suivent pas la convention
   Pandoc, utilisez l'outil compagnon
@@ -273,10 +273,8 @@ Node.js que pour Mermaid, Ollama que pour `--lint`.
   brew install --cask libreoffice
   # Optionnel : les diagrammes Mermaid nécessitent Node.js
   brew install node
-  # Optionnel : --lint et le texte alt IA nécessitent Ollama
+  # Optionnel : --lint et le texte alt IA nécessitent un runtime de modèle local (Ollama aujourd'hui)
   brew install ollama
-  # Optionnel : transport IA plus ergonomique (client ollama officiel)
-  pipx inject md2star ollama      # équivalent à l'extra md2star[ai]
   ```
 
 - Ubuntu 🐧 : `sudo apt-get install pandoc pipx`
@@ -384,14 +382,16 @@ md2pdf article.md --author "Dr. R. Chercheur" --bib references.bib
 # par défaut : lint désactivé, conversions déterministes
 md2docx brouillon.md
 
-# activer (lance `ollama serve` et tire le modèle à la demande)
+# activer (résout un modèle local au premier usage, puis exécute)
 md2docx brouillon.md --lint
 
 # no-op explicite (identique au défaut)
 md2docx brouillon.md --no-lint
 ```
 
-Avec `--lint`, une passe locale Ollama (modèle texte `gemma4:e2b-mlx` sur macOS, `gemma4:e2b` sur Linux/Windows) corrige les liens d'images cassés, les fences non fermées et les pipes de tables mal formés avant que Pandoc lise le fichier. Le même `--lint` remplit aussi les `![](src)` vides via un modèle de vision local (`MD2STAR_ALT_TEXT_MODEL` pour surcharger). Le wrapper démarre le démon à la demande (`ollama serve`) et tire le modèle par défaut au premier usage. Si vous passez `--lint` sans avoir Ollama installé, md2star affiche un avertissement et continue avec le Markdown original. Par défaut la requête passe par `urllib` (stdlib, aucune dépendance Python) ; installez l'extra `md2star[ai]` (`pip install 'md2star[ai]'` ou `pipx inject md2star ollama`) pour utiliser le client officiel `ollama` (mêmes modèles, même sortie, mêmes garanties de repli).
+Avec `--lint`, une passe locale corrige les liens d'images cassés, les fences non fermées et les pipes de tables mal formés avant que Pandoc lise le fichier. Le même `--lint` remplit aussi les `![](src)` vides via un modèle de vision local, dans la langue même du document.
+
+**Quel modèle, et comment il est choisi (contrat brief → engine).** md2star ne code aucun tag de modèle en dur. Il embarque un `md2star/llm.brief.yaml` versionné décrivant les besoins de ses passes IA (local, texte + vision, faible latence, multilingue). Au premier usage, [`best-engine-ai-helper`](https://pypi.org/project/best-engine-ai-helper/) résout ce brief contre *votre* machine et écrit le backend + modèle concrets dans un `md2star/llm.engine.yaml` gitignoré ; les exécutions suivantes lisent simplement ce fichier engine. Tous les appels passent par `best_engine_ai_helper.llm.chat`, et le transport (Ollama local pour l'instant) gère lui-même le cycle de vie du démon — md2star ne lance jamais `ollama serve` / `ollama pull`. Si aucun modèle local n'est résolu, `--lint` avertit sur stderr et retombe sur le Markdown original, donc la conversion réussit toujours. `best-engine-ai-helper` est une dépendance cœur, donc cela fonctionne d'emblée dès qu'un runtime de modèle local (Ollama aujourd'hui) est installé.
 
 ---
 

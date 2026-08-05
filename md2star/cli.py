@@ -348,10 +348,10 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
     lint_group.add_argument(
         "--lint", action="store_true",
         help=(
-            "Opt in to the Ollama LLM linter (off by default). Also fills "
-            "empty image alt text with a vision-model description, using the "
-            "model chosen by best-engine-ai-helper (override: "
-            "MD2STAR_ALT_TEXT_MODEL)."
+            "Opt in to the local LLM linter (off by default). Also fills "
+            "empty image alt text with a vision-model description. The backend "
+            "and model are resolved from md2star's committed llm.brief.yaml by "
+            "best-engine-ai-helper (written to a per-machine llm.engine.yaml)."
         ),
     )
     lint_group.add_argument(

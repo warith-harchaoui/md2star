@@ -64,6 +64,16 @@ it from the name alone, and a VLM can confirm from the rendered picture.
 
 ## 3. The engines — `best-engine-ai-helper`
 
+> **Note (brief → engine contract).** md2star now selects its model through the
+> suite's *brief → engine* contract rather than the old `beh.text_model()` /
+> `beh.vision_model()` tag resolvers. A committed `md2star/llm.brief.yaml`
+> describes the AI passes hardware-independently; on first use
+> `beh.ensure(<md2star pkg dir>)` resolves it against the machine and writes the
+> gitignored `md2star/llm.engine.yaml`. Every call passes `engine=…` and
+> `kind="llm"|"vlm"` to `best_engine_ai_helper.llm.chat`; there is no hard-coded
+> model tag and no `MD2STAR_*_MODEL` env override. The `chat` sketch below still
+> describes the transport, but read the model from the resolved engine.
+
 ### 3.1 Calling the models
 
 `best-engine-ai-helper` (v1.0.0) gives both *which model* and *the transport*:
@@ -233,10 +243,25 @@ are already rendered pre-pandoc, so that work survives either way.
 
 ### 4.4 Ralph Eyeball Loop for slides
 
-This is a **target-matching** loop (like `md2star/reverse_diagrams.py`), *not*
-the self-critique canonical loop. Reuse the generic `_reconstruct` shape
-(render → compare → revise → budget/fallback) verbatim; only the render and
-prompts change:
+The **Ralph Eyeball Loop** (Warith Harchaoui's method — canonical definition:
+[EN](https://harchaoui.org/warith/sprezzature/ralph-eyeball-loop.html) ·
+[FR](https://harchaoui.org/warith/sprezzature/fr/ralph-eyeball-loop.html)) is
+the capstone quality gate. Its four steps map directly onto slides —
+**Render** (deterministically, LibreOffice → `pdftoppm` PNG) → **Look** (is the
+point the first thing the eye finds? overflow / low-contrast / awkward void /
+too-small figure?) → **Critique/Fix** → **Edit the *spec*, never the picture**
+(the picture is only ever the evidence; here the spec is `mapping.json`'s
+per-slide `overrides`). Loop *until there is nothing left to catch, then ship*.
+Two modes as the method prescribes: **agent** (the agent that built the deck does
+the looking) and **model-assisted** (a small local VLM does it); a
+colour-vision / grayscale accessibility pass folds in before review.
+
+Two shapes are useful here. A **target-matching** variant (like
+`md2star/reverse_diagrams.py`) compares against the chosen layout's thumbnail;
+a **self-critique** variant judges the rendered slide against design principles
+(what the shipped `.private/jsk/eyeball.py` PoC does). Reuse the generic
+`_reconstruct` shape (render → judge → revise → budget/fallback); only the render
+and prompts change:
 
 - **Render** (`RenderFn("slide", src) -> png`): assemble the one slide → tiny
   pptx → `soffice --headless --convert-to pdf` → `pdftoppm -png -r 150 -f N -l N`.

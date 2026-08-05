@@ -1,11 +1,13 @@
-"""Unit tests for the Ollama-driven alt-text drafting pass.
+"""Unit tests for the LLM-driven alt-text drafting pass.
 
 Gated by the same ``--lint`` flag as the LLM Markdown lint; its safety net is
-identical (Ollama missing / daemon down / model not pulled → content unchanged).
-The Ollama calls are mocked so the suite stays hermetic. Three functional tests
-cover the whole surface: the rewrite decision + edge behaviours (caching,
-``]``-escaping), the broken-environment quiet-skip contract, and model-override
-precedence.
+identical (any model-call failure → the affected image is left unchanged). The
+model call (:func:`_generate_alt`, which reads the image to bytes and calls
+``best_engine_ai_helper.llm.chat``) is mocked so the suite stays hermetic, and
+``alt_text.engine`` is stubbed so no real brief -> engine resolution runs. Three
+functional tests cover the whole surface: the rewrite decision + edge behaviours
+(caching, ``]``-escaping), the failure quiet-skip contract, and the cache-key
+model-tag precedence.
 
 Author
 ------
@@ -20,14 +22,25 @@ from unittest.mock import patch
 
 import pytest
 
+from md2star.preprocessing import alt_text
 from md2star.preprocessing.alt_text import fill_empty_alt_text
 
 _MOD = "md2star.preprocessing.alt_text"
 
+# A stand-in engine descriptor; the concrete shape only matters for the cache-key
+# vlm tag (``_alt_model_tag``). llm.chat is mocked, so nothing else reads it.
+_FAKE_ENGINE = {"backend": "ollama", "base_url": None, "vlm": {"model": "fake-vlm:2b"}}
+
+
+@pytest.fixture(autouse=True)
+def _stub_engine(monkeypatch) -> None:
+    """Pin ``alt_text.engine`` to a fake so no real engine resolution happens."""
+    monkeypatch.setattr(alt_text, "engine", lambda: _FAKE_ENGINE)
+
 
 @pytest.fixture
 def png_fixture(tmp_path: Path) -> Path:
-    """Write a tiny 1×1 PNG the pass can hash + base64."""
+    """Write a tiny 1×1 PNG the pass can hash + read."""
     from PIL import Image
     p = tmp_path / "x.png"
     Image.new("RGB", (1, 1), "white").save(p)
@@ -35,15 +48,12 @@ def png_fixture(tmp_path: Path) -> Path:
 
 
 @contextmanager
-def _ollama_up(gen_return: str = "A blank canvas"):
-    """Patch the whole Ollama stack to a healthy daemon returning *gen_return*.
+def _model_returns(caption: str = "A blank canvas"):
+    """Patch ``_generate_alt`` to a model that returns *caption*.
 
     Yields the ``_generate_alt`` mock for call-count / not-called assertions.
     """
-    with patch(f"{_MOD}.is_ollama_installed", return_value=True), \
-         patch(f"{_MOD}._ping_ollama", return_value=True), \
-         patch(f"{_MOD}._ensure_model_pulled", return_value=True), \
-         patch(f"{_MOD}._generate_alt", return_value=gen_return) as gen:
+    with patch(f"{_MOD}._generate_alt", return_value=caption) as gen:
         yield gen
 
 
@@ -63,7 +73,7 @@ def test_rewrite_decision_and_edge_behaviours(tmp_path, png_fixture) -> None:
     ]
     for template, should_rewrite, reason in cases:
         md = template.format(img=png_fixture)
-        with _ollama_up("A blank canvas") as gen:
+        with _model_returns("A blank canvas") as gen:
             out = fill_empty_alt_text(md, base_dir=str(tmp_path))
         if should_rewrite:
             assert f"![A blank canvas]({png_fixture})" in out, reason
@@ -82,27 +92,22 @@ def test_rewrite_decision_and_edge_behaviours(tmp_path, png_fixture) -> None:
 
     # Disk cache: a repeat call with the same image reaches the model only once.
     md = f"![]({img2})\n"
-    with _ollama_up("Cached caption") as gen:
+    with _model_returns("Cached caption") as gen:
         fill_empty_alt_text(md, base_dir=str(tmp_path))
         fill_empty_alt_text(md, base_dir=str(tmp_path))
         assert gen.call_count == 1, "second call should hit the cache, not the network"
 
     # A model-emitted ``]`` is escaped so the image ref still parses, path intact.
-    with _ollama_up("A [tricky] caption"):
+    with _model_returns("A [tricky] caption"):
         out = fill_empty_alt_text(f"![]({img3})", base_dir=str(tmp_path))
     assert "\\]" in out and f"({img3})" in out
 
 
-def test_broken_environment_is_a_quiet_skip(tmp_path, png_fixture) -> None:
-    """A missing binary or an unreachable daemon returns the content unchanged."""
+def test_model_failure_is_a_quiet_skip(tmp_path, png_fixture) -> None:
+    """When the model call fails (returns ``None``), the image is left unchanged."""
     md = f"![]({png_fixture})"
-    for installed, reachable, reason in [
-        (False, True, "binary not on PATH"),
-        (True, False, "daemon unreachable"),
-    ]:
-        with patch(f"{_MOD}.is_ollama_installed", return_value=installed), \
-             patch(f"{_MOD}._ping_ollama", return_value=reachable):
-            assert fill_empty_alt_text(md, base_dir=str(tmp_path)) == md, reason
+    with patch(f"{_MOD}._generate_alt", return_value=None):
+        assert fill_empty_alt_text(md, base_dir=str(tmp_path)) == md
 
 
 def test_run_surfaces_a_neutral_draft_summary(tmp_path, png_fixture, caplog) -> None:
@@ -115,7 +120,7 @@ def test_run_surfaces_a_neutral_draft_summary(tmp_path, png_fixture, caplog) -> 
     import logging
 
     md = f"Intro prose about the picture below.\n\n![]({png_fixture})\n"
-    with _ollama_up("A blank canvas"), caplog.at_level(logging.INFO, logger="md2star"):
+    with _model_returns("A blank canvas"), caplog.at_level(logging.INFO, logger="md2star"):
         fill_empty_alt_text(md, base_dir=str(tmp_path))
 
     assert "drafted alt text" in caplog.text
@@ -145,11 +150,7 @@ def test_prompt_uses_detected_language_and_surrounding_context(tmp_path, png_fix
         "optimisations déployées par l'équipe.\n\n"
         f"![]({png_fixture})\n"
     )
-    mod = "md2star.preprocessing.alt_text"
-    with patch(f"{mod}.is_ollama_installed", return_value=True), \
-         patch(f"{mod}._ping_ollama", return_value=True), \
-         patch(f"{mod}._ensure_model_pulled", return_value=True), \
-         patch(f"{mod}._generate_alt", side_effect=_capture):
+    with patch(f"{_MOD}._generate_alt", side_effect=_capture):
         out = fill_empty_alt_text(md, base_dir=str(tmp_path))
 
     prompt = captured["prompt"]
@@ -161,28 +162,20 @@ def test_prompt_uses_detected_language_and_surrounding_context(tmp_path, png_fix
     assert "![Un vélo rouge]" in out
 
 
-def test_model_resolution_precedence(monkeypatch) -> None:
-    """Alt-text model = MD2STAR_ALT_TEXT_MODEL override, else the suite picker's VLM.
+def test_cache_key_model_tag_precedence(monkeypatch) -> None:
+    """Cache-key tag = explicit override, else the resolved engine's vlm model.
 
-    The default vision model is single-sourced from the suite model picker via
-    ``best_engine_ai_helper.vision_model()`` — not hard-coded here, so the choice
-    tracks the machine's selection (or a safe default) without breaking this
-    test. An explicit ``MD2STAR_ALT_TEXT_MODEL`` still wins, and
-    ``MD2STAR_LINT_MODEL`` (text lint) must never influence the alt-text model.
+    The concrete model is owned by the engine descriptor, not this module. When a
+    caller passes an explicit tag it wins; otherwise the tag is read from the
+    engine's ``vlm`` section (here the stubbed ``fake-vlm:2b``). A resolution
+    failure degrades to the stable ``"vlm"`` key.
     """
-    import best_engine_ai_helper as beh
+    assert alt_text._alt_model_tag(None) == "fake-vlm:2b"
+    assert alt_text._alt_model_tag("override:1b") == "override:1b"
 
-    from md2star.preprocessing.alt_text import _DEFAULT_ALT_MODEL, _default_alt_text_model
+    # Engine that cannot resolve → the coarse-but-stable fallback key.
+    def _boom():
+        raise RuntimeError("no brief")
 
-    assert _DEFAULT_ALT_MODEL == beh.vision_model()
-    for alt_env, expected in [
-        (None, _DEFAULT_ALT_MODEL),          # no override → the vision default
-        ("moondream:v2", "moondream:v2"),    # explicit override wins
-    ]:
-        if alt_env is None:
-            monkeypatch.delenv("MD2STAR_ALT_TEXT_MODEL", raising=False)
-        else:
-            monkeypatch.setenv("MD2STAR_ALT_TEXT_MODEL", alt_env)
-        # The lint model env var must NOT influence the alt-text model anymore.
-        monkeypatch.setenv("MD2STAR_LINT_MODEL", "qwen2.5-vl:7b")
-        assert _default_alt_text_model() == expected
+    monkeypatch.setattr(alt_text, "engine", _boom)
+    assert alt_text._alt_model_tag(None) == "vlm"

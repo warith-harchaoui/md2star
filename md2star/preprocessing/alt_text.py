@@ -1,15 +1,14 @@
-"""Opt-in alt-text drafting for empty image alts via a local Ollama vision model.
+"""Opt-in alt-text drafting for empty image alts via a local vision model.
 
 Gated by the same ``--lint`` flag as :mod:`md2star.preprocessing.lint`:
 
-* No flag, or ``--no-lint``         → skip the pass entirely.
-* ``--lint`` + Ollama installed     → describe each ``![](src)`` whose alt is
-                                      empty and whose ``src`` resolves to a
-                                      readable local file; URLs / data URIs /
-                                      missing files / non-empty alts pass
-                                      through untouched.
-* ``--lint`` + Ollama missing       → quiet skip (the lint pass already
-                                      printed the install hint).
+* No flag, or ``--no-lint``     → skip the pass entirely.
+* ``--lint``                    → describe each ``![](src)`` whose alt is empty
+                                  and whose ``src`` resolves to a readable local
+                                  file; URLs / data URIs / missing files /
+                                  non-empty alts pass through untouched.
+* Any failure (engine unresolved, model unreachable, empty generation) → the
+  affected image is left untouched; the pass is never load-bearing.
 
 Language + context (aligned with the suite's ``front-vision`` skill):
 
@@ -20,19 +19,15 @@ Language + context (aligned with the suite's ``front-vision`` skill):
   to the model so it describes what the image *means* in place, not just its
   pixels.
 
-The vision model is chosen by the suite's model picker,
-``best_engine_ai_helper.vision_model()`` — the VLM selected by
-``best-engine-ai-helper pull`` for this machine, or a safe multimodal default
-(``qwen3-vl:8b``) when detection has never run. Override with
-``MD2STAR_ALT_TEXT_MODEL``.
+The vision model and backend come entirely from md2star's resolved engine
+descriptor (:mod:`md2star._engine`): the committed ``llm.brief.yaml`` is resolved
+to a per-machine ``llm.engine.yaml`` on first use, and the request goes through
+:func:`best_engine_ai_helper.llm.chat` (``kind="vlm"``). Nothing is hard-coded
+here, and the transport owns the daemon/serving lifecycle.
 
 Per-image results are cached in ``$XDG_CACHE_HOME/md2star/alt-text/`` keyed by
 ``<image-md5>_<model>_<lang+context-hash>.txt`` so a re-run in a different
 language or surrounding context re-drafts rather than serving a stale caption.
-
-Like the text lint, the transport is transparent: the ``md2star[ai]`` extra
-routes through the official ``ollama`` client, and its absence falls back to
-a hand-rolled :mod:`urllib.request` POST with no change in behaviour.
 
 
 Author
@@ -42,24 +37,16 @@ Author
 
 from __future__ import annotations
 
-import base64
-import json
 import os
 import re
-import urllib.request
 
-import best_engine_ai_helper as beh
 import os_helper as osh
+from best_engine_ai_helper import llm
 
+from .._engine import engine
 from ..cache import cache_dir
 from ..logging import get_logger
-from . import _ollama_client
 from .language import get_language_metadata
-from .lint import (
-    _ensure_model_pulled,
-    _ping_ollama,
-    is_ollama_installed,
-)
 
 # Module logger — child of the root "md2star" logger (configured by the CLI).
 logger = get_logger(__name__)
@@ -171,27 +158,21 @@ def _surrounding_context(content: str, src: str, window: int = 280) -> str:
     return (prefix + chunk).strip()[: 2 * window]
 
 
-# Default vision model for alt-text: the VLM chosen by the suite's model picker,
-# ``beh.vision_model()``. It resolves the model selected for this machine (or a
-# safe multimodal default), so alt-text runs on hardware-appropriate weights
-# without md2star hard-coding a tag.
-_DEFAULT_ALT_MODEL = beh.vision_model()
+def _alt_model_tag(model: str | None) -> str:
+    """Return an identifier for the vision model in use, for cache-keying.
 
-
-def _default_alt_text_model() -> str:
-    """Return the configured vision model tag.
-
-    Honours ``MD2STAR_ALT_TEXT_MODEL`` first; otherwise uses the suite picker's
-    choice :data:`_DEFAULT_ALT_MODEL` (``beh.vision_model()``), a multimodal
-    build that processes images on every platform.
+    The concrete model is owned by the resolved engine descriptor, not this
+    module. When the caller passes an explicit *model* override it is used
+    verbatim; otherwise we read the ``vlm`` tag out of md2star's engine so the
+    per-image cache filename tracks which weights produced the caption. Any
+    resolution failure degrades to ``"vlm"`` — a stable, if coarse, key.
     """
-    override = os.environ.get("MD2STAR_ALT_TEXT_MODEL")
-    if override:
-        return override
-    return _DEFAULT_ALT_MODEL
-
-
-DEFAULT_ALT_TEXT_MODEL = _default_alt_text_model()
+    if model:
+        return model
+    try:
+        return str(engine().get("vlm", {}).get("model") or "vlm")
+    except Exception:  # noqa: BLE001 — cache-keying must never be load-bearing
+        return "vlm"
 
 
 def _hash_file(path: str) -> str | None:
@@ -211,67 +192,48 @@ def _hash_file(path: str) -> str | None:
 
 
 def _generate_alt(
-    image_path: str, model: str, prompt: str, timeout: float = 60.0
+    image_path: str, model: str | None, prompt: str, timeout: float = 60.0
 ) -> str | None:
-    """Ask Ollama's vision model to describe *image_path* using *prompt*.
+    """Ask the vision model to describe *image_path* using *prompt*.
 
     *prompt* is the per-image instruction built by :func:`_build_alt_prompt`
-    (target language + surrounding-text context). Returns the trimmed response
-    on success, ``None`` on any failure — the caller treats ``None`` as "leave
-    the markdown unchanged". With the ``md2star[ai]`` extra the request goes
-    through the official client; without it we base64-post to ``/api/generate``
-    ourselves. Both paths share the quote/whitespace cleanup below.
+    (target language + surrounding-text context). The image file is read to raw
+    bytes and handed to :func:`best_engine_ai_helper.llm.chat` (``kind="vlm"``);
+    the backend and model come from md2star's resolved engine (*model* is an
+    optional per-call tag override). Returns the trimmed response on success,
+    ``None`` on any failure — the caller treats ``None`` as "leave the markdown
+    unchanged". *timeout* is accepted for signature compatibility; the transport
+    owns request timing.
     """
-    if _ollama_client.OLLAMA is not None:
-        # ``[ai]`` extra installed → hand the image *path* to the client, which
-        # owns the read + base64 encoding. Any failure returns None (skip).
-        alt = _ollama_client.generate(
-            model,
+    # ``llm.chat`` wants raw image bytes; read the file here. An unreadable file
+    # means "leave the markdown unchanged".
+    try:
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+    except OSError:
+        return None
+
+    try:
+        # Low temperature keeps alt-text on-task rather than creative.
+        alt = llm.chat(
             prompt,
-            images=[image_path],
-            options={"temperature": 0.2},
-            timeout=timeout,
+            engine=engine(),
+            kind="vlm",
+            images=[image_bytes],
+            temperature=0.2,
+            model=model,
         )
-    else:
-        # Zero-dependency fallback: Ollama's vision API takes images as base64
-        # in the JSON body, so read the bytes and encode. Unreadable file →
-        # None ("leave markdown unchanged").
-        try:
-            with open(image_path, "rb") as f:
-                img_b64 = base64.b64encode(f.read()).decode("ascii")
-        except OSError:
-            return None
+    except Exception as e:  # noqa: BLE001 — any failure → skip this image
+        logger.debug("md2star: alt-text generation failed for %s: %s", image_path, e)
+        return None
 
-        # stream=False so we get one complete JSON response; low temperature
-        # keeps alt-text deterministic-ish and on-task rather than creative.
-        payload = json.dumps({
-            "model": model,
-            "prompt": prompt,
-            "images": [img_b64],
-            "stream": False,
-            "options": {"temperature": 0.2},
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
-            "http://localhost:11434/api/generate",
-            data=payload,
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "md2star/1.0",
-            },
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return None
-        alt = data.get("response")
-
-    # Shared cleanup across both transports. Strip any surrounding quotes the
-    # model may have produced so the rendered alt reads as a label rather
-    # than a sentence (matches the W3C-style examples we asked for).
-    alt = (alt or "").strip().strip('"').strip("'").strip()
+    # A plain (no json_schema) call returns a str; guard against anything else.
+    if not isinstance(alt, str):
+        return None
+    # Strip any surrounding quotes the model may have produced so the rendered
+    # alt reads as a label rather than a sentence (matches the W3C-style
+    # examples we asked for).
+    alt = alt.strip().strip('"').strip("'").strip()
     return alt or None
 
 
@@ -282,25 +244,16 @@ def fill_empty_alt_text(
 ) -> str:
     """Replace ``![](src)`` empty-alt images with an LLM-generated description.
 
-    Mirrors :func:`md2star.preprocessing.lint.lint_with_llm`'s safety net:
-    if Ollama is missing, the daemon is unreachable, the vision model is
-    not pulled (and cannot be pulled), or the request fails, the original
-    content is returned unchanged. The pass is *never* load-bearing.
+    Mirrors :func:`md2star.preprocessing.lint.lint_with_llm`'s safety net: the
+    model call in :func:`_generate_alt` swallows every failure (engine
+    unresolvable, backend/model unreachable, transport error) into ``None``, and
+    each such image is left untouched. The pass is *never* load-bearing. *model*
+    is an optional per-call vision-model tag override; when ``None`` the tag
+    comes from md2star's resolved engine descriptor.
     """
-    if model is None:
-        model = _default_alt_text_model()
-
-    # Three cheap pre-flight gates: no Ollama, no running daemon, or no model →
-    # return the content untouched. This pass is never load-bearing.
-    if not is_ollama_installed():
-        return content
-    if not _ping_ollama(2):
-        # Don't spawn ``ollama serve`` from this pass — let the lint pass
-        # own that side-effect. If the daemon isn't already up by now,
-        # silently skip.
-        return content
-    if not _ensure_model_pulled(model):
-        return content
+    # Effective vision-model tag, used only for cache-keying — the concrete model
+    # is owned by the engine descriptor, resolved lazily on the first call.
+    model_tag = _alt_model_tag(model)
 
     cache = cache_dir("alt-text")
 
@@ -359,7 +312,7 @@ def fill_empty_alt_text(
         # Cache key folds the image content, model, language, and a short hash of
         # the context+language so a re-run in a different language or context
         # re-drafts rather than serving a stale caption. Sanitise ':' / '/'.
-        safe_model = model.replace(":", "_").replace("/", "_")
+        safe_model = model_tag.replace(":", "_").replace("/", "_")
         ctx_key = osh.hash_string(f"{lang_name}\x00{context}", 10)
         cache_file = cache / f"{img_hash}_{safe_model}_{ctx_key}.txt"
 

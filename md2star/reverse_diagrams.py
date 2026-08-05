@@ -23,11 +23,13 @@ source. The loop repeats until the model reports a match or the iteration budget
 is spent. On anything short of a confident match the twin keeps the scraped PNG
 as a caption fallback, so a poor reconstruction never loses the ground truth.
 
-Everything here is **best-effort and never load-bearing**: if the ``[ai]``
-stack, the Ollama daemon, the vision model, ``mmdc`` or an SVG rasteriser is
-absent, every image degrades to the plain scraped PNG — exactly what the
-deterministic core would have produced. Models are chosen by the suite picker
-(:mod:`best_engine_ai_helper`); nothing is hard-coded.
+Everything here is **best-effort and never load-bearing**: if the engine cannot
+be resolved, the backend/vision model is unreachable, ``mmdc`` or an SVG
+rasteriser is absent, every image degrades to the plain scraped PNG — exactly
+what the deterministic core would have produced. The backend and vision model
+come entirely from md2star's resolved engine descriptor (:mod:`md2star._engine`,
+the committed ``llm.brief.yaml`` → per-machine ``llm.engine.yaml`` contract);
+nothing is hard-coded.
 
 The public entry point is :func:`make_diagram_handler`, which returns an
 :data:`md2star.reverse.ImageHandler` ready to hand to
@@ -43,22 +45,21 @@ Author
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import re
 import shutil
 import subprocess
-import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
 import os_helper as osh
+from best_engine_ai_helper import llm
 
+from ._engine import engine
 from .cache import cache_dir
 from .logging import get_logger
-from .preprocessing import _ollama_client
 from .reverse import ImageHandler, TwinImage
 
 # Module logger — child of the root "md2star" logger (configured by the CLI).
@@ -90,56 +91,44 @@ class _Verdict:
     discrepancies: str  # free-text notes the text model uses to revise the source
 
 
-def _default_vlm(model: str) -> VlmFn:
-    """Build the real Ollama-backed transport for *model*.
+def _default_vlm(model: str | None = None) -> VlmFn:
+    """Build the real engine-backed vision transport.
 
-    Mirrors :func:`md2star.preprocessing.alt_text._generate_alt`: route through
-    the official client when the ``[ai]`` extra is installed, else fall back to a
-    zero-dependency base64 POST to ``/api/generate``. Returns ``None`` on any
-    failure so the loop degrades to "keep the PNG".
+    Each call reads the given image *paths* to raw bytes and routes the request
+    through :func:`best_engine_ai_helper.llm.chat` (``kind="vlm"``, temperature
+    0); the backend and model come from md2star's resolved engine descriptor
+    (*model* is an optional per-call tag override). Returns ``None`` on any
+    failure — an unreadable image, an unresolved engine, or a transport error —
+    so the eyeball loop degrades to "keep the PNG".
     """
 
     def _call(prompt: str, image_paths: list[str]) -> str | None:
-        # Preferred path: the typed client owns reading + base64-encoding images.
-        if _ollama_client.OLLAMA is not None:
-            return _ollama_client.generate(
-                model,
-                prompt,
-                images=image_paths or None,
-                options={"temperature": 0.0},
-                timeout=90.0,
-            )
-
-        # Zero-dependency fallback: encode each image ourselves and post JSON.
-        images_b64: list[str] = []
+        # ``llm.chat`` wants raw image bytes; read each path here. An unreadable
+        # image means we cannot judge — skip.
+        images: list[bytes] = []
         for path in image_paths:
             try:
                 with open(path, "rb") as handle:
-                    images_b64.append(base64.b64encode(handle.read()).decode("ascii"))
+                    images.append(handle.read())
             except OSError:
-                return None  # an unreadable image means we cannot judge — skip
+                return None
 
-        payload = json.dumps(
-            {
-                "model": model,
-                "prompt": prompt,
-                "images": images_b64 or None,
-                "stream": False,
-                "options": {"temperature": 0.0},
-            }
-        ).encode("utf-8")
-        req = urllib.request.Request(
-            "http://localhost:11434/api/generate",
-            data=payload,
-            headers={"Content-Type": "application/json", "User-Agent": "md2star/1.0"},
-            method="POST",
-        )
         try:
-            with urllib.request.urlopen(req, timeout=90.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-        except (OSError, json.JSONDecodeError):
+            text = llm.chat(
+                prompt,
+                engine=engine(),
+                kind="vlm",
+                images=images or None,
+                temperature=0.0,
+                model=model,
+            )
+        except Exception as exc:  # noqa: BLE001 — any failure → keep the PNG
+            logger.debug("vision transport failed: %s", exc)
             return None
-        text = (data.get("response") or "").strip()
+
+        if not isinstance(text, str):
+            return None
+        text = text.strip()
         return text or None
 
     return _call
@@ -515,24 +504,24 @@ class DiagramHandler:
 def diagrams_available(model: str | None = None) -> bool:
     """Return ``True`` when diagram reconstruction can actually run.
 
-    Checks the same pre-flight gates the alt-text pass uses (Ollama installed,
-    daemon reachable, model pulled). Cheap enough to call before offering the
-    feature in a UI or CLI ``--diagrams`` flag.
+    A light "can we resolve an engine?" probe: md2star's brief -> engine contract
+    must resolve to a descriptor that carries a usable ``vlm`` model. Resolution
+    happens once and is cached, so this is cheap enough to call before offering
+    the feature in a UI or CLI ``--diagrams`` flag. Any failure (missing brief,
+    no reachable backend/model) → ``False``, and the twin keeps plain PNGs.
+
+    The *model* argument is accepted for signature compatibility with the CLI's
+    ``--model`` override; the concrete tag otherwise comes from the engine.
     """
-    from .preprocessing.lint import _ensure_model_pulled, _ping_ollama, is_ollama_installed
-
-    if not is_ollama_installed() or not _ping_ollama(2):
+    try:
+        eng = engine()
+    except Exception as exc:  # noqa: BLE001 — unresolved engine → feature off
+        logger.debug("diagrams unavailable: engine did not resolve: %s", exc)
         return False
-    return _ensure_model_pulled(model or _resolve_vision_model())
-
-
-def _resolve_vision_model() -> str:
-    """Resolve the vision model tag via the suite picker (or the alt-text override)."""
-    # Reuse alt-text's resolution so ``MD2STAR_ALT_TEXT_MODEL`` and the
-    # best-engine picker choice apply uniformly to every VLM pass in the tool.
-    from .preprocessing.alt_text import _default_alt_text_model
-
-    return _default_alt_text_model()
+    if model:
+        return True
+    # A resolved engine must expose a vision model for the reconstruction passes.
+    return bool(eng.get("vlm", {}).get("model"))
 
 
 def make_diagram_handler(
@@ -547,21 +536,22 @@ def make_diagram_handler(
     Parameters
     ----------
     model : str, optional
-        Vision model tag. Defaults to the suite picker's choice.
+        Vision model tag override. When ``None`` the tag comes from md2star's
+        resolved engine descriptor.
     max_iterations : int, default 3
         Eyeball-loop budget per diagram.
     vlm, render : optional
-        Injectable transport/renderer seams (defaults talk to Ollama + ``mmdc``).
-        Supplying fakes makes the whole layer unit-testable offline.
+        Injectable transport/renderer seams (defaults route the vision calls
+        through the resolved engine and Mermaid through ``mmdc``). Supplying
+        fakes makes the whole layer unit-testable offline.
 
     Returns
     -------
     ImageHandler
         A callable ready for :func:`md2star.reverse.to_markdown_twin`.
     """
-    resolved_model = model or _resolve_vision_model()
     handler = DiagramHandler(
-        vlm=vlm or _default_vlm(resolved_model),
+        vlm=vlm or _default_vlm(model),
         render=render or _default_render(),
         max_iterations=max_iterations,
     )
