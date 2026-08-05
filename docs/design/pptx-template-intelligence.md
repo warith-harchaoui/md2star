@@ -64,6 +64,16 @@ it from the name alone, and a VLM can confirm from the rendered picture.
 
 ## 3. The engines — `best-engine-ai-helper`
 
+> **Note (brief → engine contract).** md2star now selects its model through the
+> suite's *brief → engine* contract rather than the old `beh.text_model()` /
+> `beh.vision_model()` tag resolvers. A committed `md2star/llm.brief.yaml`
+> describes the AI passes hardware-independently; on first use
+> `beh.ensure(<md2star pkg dir>)` resolves it against the machine and writes the
+> gitignored `md2star/llm.engine.yaml`. Every call passes `engine=…` and
+> `kind="llm"|"vlm"` to `best_engine_ai_helper.llm.chat`; there is no hard-coded
+> model tag and no `MD2STAR_*_MODEL` env override. The `chat` sketch below still
+> describes the transport, but read the model from the resolved engine.
+
 ### 3.1 Calling the models
 
 `best-engine-ai-helper` (v1.0.0) gives both *which model* and *the transport*:

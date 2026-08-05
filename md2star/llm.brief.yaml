@@ -1,0 +1,30 @@
+# md2star's committed LLM/VLM usage brief (best-engine-ai-helper).
+#
+# This is the INPUT to the brief -> engine contract: a hardware-independent
+# description of what md2star's opt-in AI passes ask of a local model. On first
+# use best-engine-ai-helper resolves it against THIS machine and writes the
+# concrete pick to the gitignored `llm.engine.yaml`; runtime reads only that
+# engine file. There is no hard-coded model tag anywhere in the package.
+#
+# Only `mode: local` is supported for now; cloud is deferred to a future branch.
+mode: local
+kind: both
+headroom: 0.5
+min_tps: 15
+# The passes below use no JSON schema (plain text/markdown out), so structured
+# output is not required.
+structured_output: false
+task: >
+  md2star runs three opt-in, best-effort AI jobs over documents in the
+  document's own language (any language, auto-detected — never a hardcoded
+  EN/FR toggle). (1) A text LLM repairs Markdown SYNTAX ONLY at temperature 0:
+  broken image links, unclosed code fences and malformed table pipes — never
+  rewording prose. (2) A vision model drafts concise W3C-style alt text for
+  images with empty alts, in the document's language, using the surrounding
+  heading and prose as context for what the image means in place. (3) A vision
+  model reconstructs scraped rasters into editable source — node-and-edge
+  diagrams as Mermaid, other clean vector figures as SVG — through a
+  render -> compare -> revise "eyeball loop" that shows the model both the
+  candidate render and the original and iterates until they match. Latency
+  matters (short, per-image calls); solid multilingual reading and writing
+  matter more than raw model size.

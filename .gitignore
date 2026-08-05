@@ -145,4 +145,9 @@ coverage.xml
 
 .claude/
 
+# best-engine-ai-helper resolves this from the committed md2star/llm.brief.yaml
+# on first use; it is per-machine state (the concrete backend + model tag chosen
+# for THIS host), never tracked. Only the brief is committed.
+/md2star/llm.engine.yaml
+
 

@@ -284,7 +284,7 @@ async def extract(
     diagrams: bool = Form(
         False,
         description="With twin=true, re-author node-and-edge figures as Mermaid "
-        "via the local AI (needs the [ai] stack + Ollama); implies twin.",
+        "via a local model resolved by best-engine-ai-helper; implies twin.",
     ),
 ) -> dict[str, str] | FileResponse:
     """Read an uploaded DOCX/PPTX/PDF back into Markdown (the reverse direction).

@@ -28,10 +28,8 @@ from __future__ import annotations
 __version__: str = "3.0.0"
 
 from .preprocessing import (
-    DEFAULT_ALT_TEXT_MODEL,
-    DEFAULT_LINT_MODEL,
     fill_empty_alt_text,
-    is_ollama_installed,
+    lint_with_llm,
     preprocess_markdown,
     render_mermaid_local,
 )
@@ -41,7 +39,5 @@ __all__ = [
     "preprocess_markdown",
     "render_mermaid_local",
     "fill_empty_alt_text",
-    "is_ollama_installed",
-    "DEFAULT_LINT_MODEL",
-    "DEFAULT_ALT_TEXT_MODEL",
+    "lint_with_llm",
 ]

@@ -23,12 +23,26 @@ import pytest
 
 from md2star.preprocessing import lint
 
-# Skip the whole module unless a local Ollama daemon is installed AND answering.
-# Both gates matter: the binary may exist without the daemon running.
-_OLLAMA_READY = lint.is_ollama_installed() and lint._ping_ollama(2)
+
+def _engine_ready() -> bool:
+    """True iff md2star's brief -> engine contract resolves a usable local model.
+
+    ``beh.ensure`` resolves the committed ``llm.brief.yaml`` against this machine
+    (writing the gitignored engine file on first use); a machine with no
+    resolvable backend/model raises, so we treat any failure as "not ready" and
+    skip the whole eval module. This keeps CI green (no local model) while the
+    eval still runs on a developer box that has one.
+    """
+    try:
+        return bool(lint.engine().get("llm", {}).get("model"))
+    except Exception:  # noqa: BLE001 — unresolved engine → eval skips cleanly
+        return False
+
+
+# Skip the whole module unless the brief resolves to a usable local model.
 pytestmark = [
     pytest.mark.ai_eval,
-    pytest.mark.skipif(not _OLLAMA_READY, reason="no reachable local Ollama daemon"),
+    pytest.mark.skipif(not _engine_ready(), reason="no resolvable local LLM engine"),
 ]
 
 

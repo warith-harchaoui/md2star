@@ -61,10 +61,10 @@ def _build_parser() -> argparse.ArgumentParser:
         "--diagrams",
         action="store_true",
         help="Re-author figures via the local VLM eyeball loop — node-and-edge "
-        "diagrams as Mermaid, other vector figures as SVG (needs the [ai] stack "
-        "+ a running Ollama).",
+        "diagrams as Mermaid, other vector figures as SVG (needs a local model "
+        "resolvable via best-engine-ai-helper).",
     )
-    # Model override; when absent the suite picker (best-engine) chooses per host.
+    # Model override; when absent the resolved engine (best-engine) chooses per host.
     parser.add_argument(
         "--model",
         metavar="TAG",

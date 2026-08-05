@@ -6,6 +6,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- **AI passes migrated to the suite's brief → engine LLM contract.** The three
+  opt-in AI features — the `--lint` Markdown syntax fixer, empty-alt-text
+  drafting, and `--diagrams` diagram/figure reconstruction — no longer pick a
+  model tag themselves. md2star now commits a `md2star/llm.brief.yaml`
+  (hardware-independent description of what the passes need: local, text +
+  vision, low latency, multilingual); on first use `best_engine_ai_helper.ensure`
+  resolves it against the machine and writes a **gitignored**
+  `md2star/llm.engine.yaml`, and every call goes through
+  `best_engine_ai_helper.llm.chat(engine=…, kind="llm"|"vlm")`. There is no
+  hard-coded model tag and no `MD2STAR_LINT_MODEL` / `MD2STAR_ALT_TEXT_MODEL`
+  env override anymore — the model comes only from the resolved engine.
+- **`best-engine-ai-helper` is now the LLM transport, not just a tag picker.**
+  The transport owns the daemon/serving lifecycle, so md2star no longer runs
+  `ollama serve` / `ollama pull` or probes `localhost:11434` itself. The
+  best-effort "never load-bearing" guarantee is unchanged: any resolution or
+  transport failure degrades to the untouched document / scraped PNG.
+
+### Removed
+- **The `md2star[ai]` extra and the direct `ollama` dependency.** They existed
+  only for the optional typed Ollama client behind an in-tree urllib fallback;
+  both the extra and the fallback are gone now that all LLM traffic routes
+  through `best_engine_ai_helper.llm.chat`. Deleted
+  `md2star/preprocessing/_ollama_client.py`, the Ollama lifecycle helpers in
+  `lint.py` (`is_ollama_installed`, `_ping_ollama`, `_ensure_model_pulled`, …),
+  the `DEFAULT_LINT_MODEL` / `DEFAULT_ALT_TEXT_MODEL` constants, and
+  `requirements-ai.txt`.
+
 ## [3.0.0] — 2026-08-02
 
 Major release: md2star moves onto the stable 2.x / 1.x AI Helpers foundation.

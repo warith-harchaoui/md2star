@@ -46,12 +46,14 @@ dependencies = [
     # basicConfig). Core dep. (Model-tag choice moved to best-engine-ai-helper
     # below, so os-helper's llm_model() is no longer used.)
     "os-helper>=2.0.0,<3",
-    # best-engine-ai-helper is the suite's model picker: lint (text) and
-    # alt-text (vision) read its cheap text_model()/vision_model() resolvers to
-    # get the tag selected for this machine — or a safe default — instead of
-    # hard-coding a model. Light deps (click/psutil/pyyaml/requests). Core dep.
-    # The 1.x line is the first stable release; the old `<1` cap locked md2star
-    # out of it.
+    # best-engine-ai-helper is the suite's brief -> engine contract AND the LLM
+    # transport. md2star commits `md2star/llm.brief.yaml`; on first use
+    # `beh.ensure()` resolves it against this machine, writes the gitignored
+    # `md2star/llm.engine.yaml`, and the opt-in AI passes (lint, alt-text,
+    # diagram reconstruction) send every model call through
+    # `best_engine_ai_helper.llm.chat`. Hard dependency — there is no urllib
+    # fallback and no hard-coded model tag anywhere in the package. The transport
+    # owns the daemon/serving lifecycle, so md2star no longer manages Ollama.
     "best-engine-ai-helper>=1.0.0,<2",
     "langdetect>=1.0.9,<2",
     # Pillow 12.x ships fixes for ~37 CVEs flagged on 11.3 by
@@ -84,13 +86,6 @@ mcp = [
     "fastapi>=0.111,<1",
     "uvicorn>=0.30,<1",
     "python-multipart>=0.0.9",
-]
-# Optional AI passes (--lint syntax fixer + empty-alt-text drafter). The passes
-# work with zero Python deps via a urllib fallback; this extra adds the official
-# `ollama` client for the ergonomic typed API when it is installed. System
-# Ollama (the daemon + `ollama pull`) is still required at runtime either way.
-ai = [
-    "ollama>=0.4,<1",
 ]
 # Reverse conversion (DOCX/PPTX/PDF → Markdown) via Kreuzberg — the same engine
 # the round-trip OCR test uses, now exposed as a runtime feature: the API's
