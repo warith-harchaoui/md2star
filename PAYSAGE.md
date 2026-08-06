@@ -11,7 +11,7 @@ compatibles git. Un outil optimisé pour un tout autre usage (édition
 Office native, typographie nativement LaTeX) n'est pas pénalisé ; la
 note reflète seulement l'adéquation à *ce* créneau. Choisir le bon
 outil compte plus que choisir le nôtre : si votre équipe vit dans des
-documents Office natifs, Word / Google Docs bat md2star, et nous le
+documents Office natifs, Word / Google Docs bat md2star et nous le
 disons.
 
 Nous nous notons honnêtement : `md2star` n'a pas 5 étoiles sur chaque
@@ -99,7 +99,7 @@ Choisissez `md2star` quand **toutes** ces conditions sont réunies :
   pas une chaîne gabarits + PDF à câbler à la main.
 - Vous tenez au hors-ligne par défaut, à l'absence de télémétrie et à
   des assistances LLM local optionnelles.
-- Votre équipe est petite (1–10) et asynchrone, ou vous travaillez
+- Votre équipe est petite (1–10) et asynchrone ou vous travaillez
   seul sur plusieurs appareils.
 
 Là où `md2star` ne domine délibérément pas le tableau :
@@ -155,5 +155,5 @@ Là où `md2star` ne domine délibérément pas le tableau :
   la note que son utilisateur type défendrait. Nous ne relèverons pas
   notre auto-évaluation sans confirmation indépendante.
 - Si une note vous semble fausse, ouvrez une issue avec l'outil, la
-  colonne, la note actuelle et proposée, et une raison concrète (lien
+  colonne, la note actuelle et proposée et une raison concrète (lien
   vers une fonctionnalité, un benchmark, un document représentatif).
