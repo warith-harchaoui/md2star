@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.1.0] — 2026-08-07
+
 ### Changed
 - **Standalone images are now centred on the page.** md2star already sizes each
   bare `![](…)` image to a contain-fit that never exceeds the page (aspect-ratio
