@@ -46,7 +46,7 @@ Représentation 2D du tableau ci-dessus.
 
 ![Carte de positionnement](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/paysage.png)
 
-La carte est un résumé en 2D des 9 critères : à lire comme une forme, pas comme un classement. « md2star » se situe dans le coin en haut à droite. Les axes se lisent **Horizontal — Riche en informations ↔ Facile à utiliser** et **Vertical — Précis et structuré ↔ Compréhensif et complet**.
+La carte est un résumé en 2D des 9 critères : à lire comme une forme, pas comme un classement. « md2star » se situe dans le coin en haut à droite. Les axes se lisent **Horizontal — Rigueur ↔ Autonomie** et **Vertical — Clarté ↔ Complétude**.
 <!-- FIGURE:END -->
 
 ## Légende des colonnes
