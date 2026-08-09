@@ -1,39 +1,7 @@
 # requirements-dev.txt — DEV + TEST dependencies for md2star
-# ===========================================================
-# Everything a contributor needs: the runtime set, plus the test/lint/coverage
-# stack and the OCR round-trip extras.
 #
-#   python -m venv .venv && source .venv/bin/activate
-#   pip install -r requirements-dev.txt
-#   pytest -q                 # full suite (needs pandoc; LibreOffice+kreuzberg for `slow`)
-#   pytest -q -m "not slow"   # fast suite only
-#   ruff check md2star tests  # PEP 8 / lint gate
-#
-# This installs the package with its [dev] extra, whose single source of truth
-# is pyproject.toml's [project.optional-dependencies].dev — pytest, pytest-cov,
-# ruff, pypdf, the api/mcp smoke-test deps, and kreuzberg (test-only, for the
-# md → docx → pdf → text OCR round-trip in tests/test_roundtrip_ocr.py).
+# Derived from pyproject.toml's [dev] extra, the single source of truth CI
+# actually installs from (`pip install -e ".[dev]"`). Kept only for
+# contributors who prefer `pip install -r requirements-dev.txt` — edit the
+# [dev] extra in pyproject.toml, not this file, to change what installs.
 -e .[dev]
-
-# ---------------------------------------------------------------------------
-# OCR round-trip test dependencies (tests/test_roundtrip_ocr.py).
-# These are the packages the `md → docx → pdf → text` identity g(f(x)) = x IMPLIES.
-# They are already pulled in transitively by `.[dev]` above; listed again here,
-# explicitly and pinned, so requirements-dev.txt is a self-describing record of
-# exactly what the OCR test needs — no digging through pyproject required.
-kreuzberg>=4,<5        # reverse reader g: extracts the printed PDF's text back out
-pypdf>=6.13,<7         # PDF-text extraction used by the other integration tests
-
-# ---------------------------------------------------------------------------
-# System tools for the full/`slow` suite (not pip-installable — see the
-# requirements.txt header for the per-OS install commands):
-#   - pandoc       required by most tests (the md → docx hop of f)
-#   - LibreOffice  (`soffice`) required by the PDF + OCR round-trip tests (docx → pdf).
-#                  macOS 🍎: `brew install --cask libreoffice`
-#                  (install `brew` thanks to https://brew.sh/);
-#                  Ubuntu 🐧: `sudo apt-get install libreoffice-writer`;
-#                  Windows 🪟: `winget install TheDocumentFoundation.LibreOffice`.
-# The `slow` tests skip cleanly when these are absent, so `pytest -q` still passes
-# on a machine with only the pip deps installed — but CI installs the full toolchain
-# so the OCR identity g(f(x)) = x is actually executed, not skipped.
-# ---------------------------------------------------------------------------
