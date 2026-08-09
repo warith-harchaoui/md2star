@@ -638,6 +638,10 @@ See **[CONTRIBUTING.md](https://github.com/warith-harchaoui/md2star/blob/main/CO
 project layout, and PR checklist. The TL;DR is `make dev` +
 `python -m pytest tests/` + `ruff check md2star/ tests/`.
 
+## Author
+
+[Warith HARCHAOUI](https://linkedin.com/in/warith-harchaoui)
+
 ---
 
 ## License

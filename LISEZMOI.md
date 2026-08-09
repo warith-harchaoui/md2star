@@ -648,6 +648,10 @@ Voir **[CONTRIBUTING.md](https://github.com/warith-harchaoui/md2star/blob/main/C
 l'organisation du projet et la checklist de PR. TL;DR : `make dev`
 + `python -m pytest tests/` + `ruff check md2star/ tests/`.
 
+## Auteur
+
+[Warith HARCHAOUI](https://linkedin.com/in/warith-harchaoui)
+
 ---
 
 ## Licence
