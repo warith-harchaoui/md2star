@@ -67,7 +67,7 @@ jamais votre machine.
 
 [🗺️ Paysage](https://github.com/warith-harchaoui/md2star/blob/main/PAYSAGE.md)
 
-[📋 Exemples](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md)
+[📋 Exemples](https://github.com/warith-harchaoui/md2star/blob/main/EXEMPLES.md)
 
 ## Pourquoi md2star ? (la réponse honnête au « utilise juste Pandoc »)
 
