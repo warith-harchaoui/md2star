@@ -1,15 +1,15 @@
-# TRIGGERS — md2star
+# TRIGGERS: md2star
 
 This is the user-facing, exhaustive catalogue of what `md2star` does and the
-natural-language phrasings, commands, and file situations that should invoke it
-— whether you call it yourself or drive it as a Claude / OpenCode **skill** (see
+natural-language phrasings, commands, and file situations that should invoke it,
+whether you call it yourself or drive it as a Claude / OpenCode **skill** (see
 [`skills/md2star/SKILL.md`](skills/md2star/SKILL.md) and its
 [`references/triggers.md`](skills/md2star/references/triggers.md), the
 machine-checked superset that `scripts/check_triggers.py` enforces).
 
 `md2star` converts **Markdown → DOCX / PPTX / PDF** via Pandoc with a curated
 styling layer (branded templates, BibTeX citations, footnotes, Mermaid
-diagrams, LaTeX math, image embedding). It also runs the **reverse direction** —
+diagrams, LaTeX math, image embedding). It also runs the **reverse direction**:
 read a finished PDF/DOCX/PPTX back into an editable Markdown *twin* (prose +
 tables + scraped images, optionally re-authoring diagrams as Mermaid). It is
 local-first: the document content never leaves your machine. It does **not**
@@ -22,9 +22,9 @@ generate websites or run a LaTeX-native workflow.
 | Markdown → Word (.docx) | `md2docx report.md` | `md2star docx report.md` | `POST /convert?fmt=docx` |
 | Markdown → PowerPoint (.pptx) | `md2pptx slides.md` | `md2star pptx slides.md` | `POST /convert?fmt=pptx` |
 | Markdown → PDF (needs LibreOffice) | `md2pdf paper.md` | `md2star pdf paper.md` | `POST /convert?fmt=pdf` |
-| Full browser editor (live PDF preview) | — | `md2star gui` | — |
-| Document → editable Markdown *twin* (reverse) | — | `md2star twin file.pdf [--diagrams]` | `POST /extract` |
-| Environment diagnostic | — | `md2star doctor [--json]` | `GET /doctor` |
+| Full browser editor (live PDF preview) | N/A | `md2star gui` | N/A |
+| Document → editable Markdown *twin* (reverse) | N/A | `md2star twin file.pdf [--diagrams]` | `POST /extract` |
+| Environment diagnostic | N/A | `md2star doctor [--json]` | `GET /doctor` |
 
 Every conversion is also reachable through the click CLI (`md2star-x
 docx|pptx|pdf|gui|doctor`, same delegation), the FastAPI HTTP surface
@@ -55,7 +55,7 @@ docx|pptx|pdf|gui|doctor`, same delegation), the FastAPI HTTP surface
 
 ## File situations it accepts
 
-- **Input**: a Markdown file (`.md`, `.markdown`) — optionally with `[@key]`
+- **Input**: a Markdown file (`.md`, `.markdown`), optionally with `[@key]`
   citations (pass `--bib refs.bib`), footnotes, Mermaid code fences, LaTeX math,
   and local or (opt-in) remote images.
 - **Output**: `.docx`, `.pptx`, `.pdf`.
@@ -64,7 +64,7 @@ docx|pptx|pdf|gui|doctor`, same delegation), the FastAPI HTTP surface
 
 ## When NOT to use md2star (SKIP)
 
-- "Just run pandoc with these flags" — the user wants raw Pandoc control.
+- "Just run pandoc with these flags": the user wants raw Pandoc control.
 - Building a website / static HTML from Markdown → use a site generator.
 - LaTeX-native PDF authoring → Overleaf / latexmk.
 - Drafting alt-text or captions as primary content → the dedicated
@@ -73,7 +73,7 @@ docx|pptx|pdf|gui|doctor`, same delegation), the FastAPI HTTP surface
 
 ## See also
 
-- [`README.md`](README.md) — features, install, quick start (English).
-- [`LISEZMOI.md`](LISEZMOI.md) — the same in French.
-- [`EXAMPLES.md`](EXAMPLES.md) — runnable recipes.
-- [`skills/README.md`](skills/README.md) — installing this as an agent skill.
+- [`README.md`](README.md): features, install, quick start (English).
+- [`LISEZMOI.md`](LISEZMOI.md): the same in French.
+- [`EXAMPLES.md`](EXAMPLES.md): runnable recipes.
+- [`skills/README.md`](skills/README.md): installing this as an agent skill.

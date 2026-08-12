@@ -258,7 +258,7 @@ md2star twin report.pdf --out ./recovered/
 md2star twin report.pdf --no-images
 ```
 
-Ajoutez `--diagrams` (option, nécessite l'extra `[ai]` et un Ollama local) :
+Ajoutez `--diagrams` (option, nécessite l'extra `[ocr]` et un Ollama local) :
 `md2star` classe alors chaque image extraite avec un modèle de vision local
 dans l'une de trois catégories : les **photos restent en PNG**, les
 **diagrammes de nœuds et d'arêtes sont réécrits en Mermaid** ; les autres
@@ -308,7 +308,7 @@ le contrôle **Import** offre deux bascules :
   latérale se rafraîchit. Nécessite un dossier ouvert ; l'**Import** simple
   reste un chargement texte seul.
 - **Mermaid** : réécrit en plus les figures de nœuds et d'arêtes via le VLM
-  local (nécessite la pile `[ai]` et Ollama). Implique **Jumeau**.
+  local (nécessite la pile `[ocr]` et Ollama). Implique **Jumeau**.
 
 Sur l'API HTTP (`md2star-api`), `POST /extract` prend les mêmes options en
 champs de formulaire : texte seul renvoie du JSON, jumeau renvoie un zip
@@ -322,7 +322,7 @@ curl -sF file=@report.pdf http://localhost:8000/extract
 curl -sF file=@report.pdf -F twin=true \
      -o report.zip http://localhost:8000/extract
 
-# Jumeau + reconstruction IA des diagrammes (implique le jumeau ; nécessite la pile [ai])
+# Jumeau + reconstruction IA des diagrammes (implique le jumeau ; nécessite la pile [ocr])
 curl -sF file=@architecture.pdf -F diagrams=true \
      -o architecture.zip http://localhost:8000/extract
 ```

@@ -4,16 +4,16 @@
 
 Honest competitive comparison in the "Markdown → polished document"
 space, benchmarked against `md2star`. Ratings are ⭐ (1) to
-⭐⭐⭐⭐⭐ (5), scored on `md2star`'s intended job — take a Markdown
+⭐⭐⭐⭐⭐ (5), scored on `md2star`'s intended job: take a Markdown
 source of truth and produce a deliberate-looking DOCX / PPTX / PDF,
 offline by default, with clean git-friendly diffs. A tool optimised
 for a very different job (native Office co-editing, LaTeX-native
-typesetting) is not penalised — the score just reflects fit to *this*
+typesetting) is not penalised; the score just reflects fit to *this*
 niche. Picking the right tool matters more than picking ours: if your
 team lives in native Office documents, Word / Google Docs beats
 md2star and we say so.
 
-We grade ourselves honestly — `md2star` does not get 5 stars on every
+We grade ourselves honestly: `md2star` does not get 5 stars on every
 row. This document is maintained by hand and reflects the state of
 each project as of mid-2026; open an issue if something is out of
 date.
@@ -53,27 +53,27 @@ The map is a 2-D summary of the nine criteria, so read it as a shape, not a scor
 
 The nine criteria, in short:
 
-- **Office+PDF** — quality and reliability of `.docx`, `.pptx` and PDF
+- **Office+PDF**: quality and reliability of `.docx`, `.pptx` and PDF
   output (PDF without requiring a LaTeX toolchain).
-- **Citations** — citations / bibliography (BibTeX, CSL, Zotero).
-- **Diagrams** — Mermaid / Graphviz / PlantUML rendered into the
+- **Citations**: citations / bibliography (BibTeX, CSL, Zotero).
+- **Diagrams**: Mermaid / Graphviz / PlantUML rendered into the
   document.
-- **Math** — LaTeX `$…$` / `$$…$$` typesetting, inline and display,
+- **Math**: LaTeX `$…$` / `$$…$$` typesetting, inline and display,
   rendered correctly in the chosen output.
-- **Branded** — house-style templates (fonts, colours, cover, headers/
+- **Branded**: house-style templates (fonts, colours, cover, headers/
   footers) so output looks deliberate, not a raw export.
-- **One-cmd CLI** — a single command turns Markdown into the
+- **One-cmd CLI**: a single command turns Markdown into the
   deliverable, with no multi-step toolchain to wire up by hand.
-- **Offline** — works fully offline by default, no silent network
+- **Offline**: works fully offline by default, no silent network
   calls.
-- **Local-LLM** — optional local-LLM features (lint, summaries, merge
+- **Local-LLM**: optional local-LLM features (lint, summaries, merge
   proposals) via Ollama or similar.
-- **Reverse-MD** — round-trips a finished DOCX / PPTX / PDF back into
+- **Reverse-MD**: round-trips a finished DOCX / PPTX / PDF back into
   an editable Markdown twin.
 
 Cells that would be "not applicable" in the hand-maintained rubric
 (e.g. an Office+PDF rating for a slides-only or website-only tool)
-score ⭐ here, so the machine-read table stays pure stars — read those
+score ⭐ here, so the machine-read table stays pure stars; read those
 as "not a fit for this dimension".
 
 ## Positioning
@@ -89,7 +89,7 @@ LaTeX-native math, or Word / Google Docs on native Office editing.
 
 You should pick `md2star` when **all** of these apply:
 
-- Your source of truth is Markdown — you want plain-text diffs, a
+- Your source of truth is Markdown: you want plain-text diffs, a
   greppable archive, and no proprietary-format risk.
 - You produce DOCX, PPTX or PDF as the polished deliverable (papers,
   internal reports, client slides, training material, a book draft
@@ -103,40 +103,40 @@ You should pick `md2star` when **all** of these apply:
 
 Where `md2star` deliberately doesn't top the table:
 
-1. **Math** — 3 stars, its weakest row. Deep LaTeX math belongs to
+1. **Math**: 3 stars, its weakest row. Deep LaTeX math belongs to
    Typst, Overleaf or raw Pandoc; md2star renders everyday inline and
    display math well but is not a full LaTeX substitute.
-2. **Office+PDF** — 4 stars. Output is deliberate and reliable, but
+2. **Office+PDF**: 4 stars. Output is deliberate and reliable, but
    native editors (Word / Google Docs, LibreOffice) and Overleaf beat
    it on raw rendering fidelity in their own format.
-3. **Citations & Diagrams** — 4 stars each. Broad enough for reports
+3. **Citations & Diagrams**: 4 stars each. Broad enough for reports
    and papers; Pandoc and Quarto go further on exotic CSL styles and
    the long tail of diagram engines.
 
 ## When to pick what
 
-- **`md2star`** — Markdown-sourced documents that must ship as a
+- **`md2star`**: Markdown-sourced documents that must ship as a
   polished, branded DOCX / PPTX / PDF, offline, one command, with
   clean git diffs and a reverse path back to Markdown.
-- **Pandoc** — the raw universal converter when you're happy wiring
+- **Pandoc**: the raw universal converter when you're happy wiring
   templates and a PDF toolchain yourself (md2star sits on top of it).
-- **Pandoc + templates** — same engine once you've built and
+- **Pandoc + templates**: same engine once you've built and
   maintain your own reference-doc / template set for branding.
-- **Quarto** — R/Python notebook → publication pipelines with
+- **Quarto**: R/Python notebook → publication pipelines with
   executable code and citations.
-- **Typst** — a fast, modern LaTeX alternative for math-heavy,
+- **Typst**: a fast, modern LaTeX alternative for math-heavy,
   precisely typeset PDFs.
-- **Marp / Slidev / reveal.js** — Markdown or HTML slide decks with
+- **Marp / Slidev / reveal.js**: Markdown or HTML slide decks with
   hot reload (slides only, no Office / branded-PDF pipeline).
-- **MkDocs / Docusaurus** — documentation websites from Markdown,
+- **MkDocs / Docusaurus**: documentation websites from Markdown,
   not Office or PDF deliverables.
-- **LibreOffice** — native Office editing and rock-solid DOCX / PPTX
+- **LibreOffice**: native Office editing and rock-solid DOCX / PPTX
   when Markdown isn't your source.
-- **Overleaf** — collaborative LaTeX with LaTeX-native PDF and
+- **Overleaf**: collaborative LaTeX with LaTeX-native PDF and
   citations.
-- **Obsidian export** — Markdown notes with plugin-driven export and
+- **Obsidian export**: Markdown notes with plugin-driven export and
   some offline local-LLM tooling.
-- **Word / Google Docs** — when native Office editing or real-time
+- **Word / Google Docs**: when native Office editing or real-time
   co-editing is the actual product.
 
 ## Methodology

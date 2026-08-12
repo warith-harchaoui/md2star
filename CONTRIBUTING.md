@@ -1,7 +1,7 @@
 # Contributing to md2star
 
 Thanks for considering a contribution. md2star is a small project with one
-maintainer — small, well-scoped PRs are very welcome.
+maintainer; small, well-scoped PRs are very welcome.
 
 ## Quickstart
 
@@ -36,36 +36,37 @@ gives you the runtime set only (`-e .`).
 
 ## Project layout
 
-- `md2star/` — the importable Python package.
-  - `cli.py` — the single source of truth for `md2docx` / `md2pptx` /
+- `md2star/`: the importable Python package.
+  - `cli.py`: the single source of truth for `md2docx` / `md2pptx` /
     `md2pdf` / `md2star`. There used to be a bash wrapper, a PowerShell
     wrapper, and a `.cmd` wrapper. Don't bring them back.
-  - `click_cli.py` — the `md2star-x docx|pptx|pdf|gui|doctor` click
+  - `click_cli.py`: the `md2star-x docx|pptx|pdf|gui|doctor` click
     front-end. It is a *thin adapter*: it delegates to
     `cli._convert`, so behaviour is defined once. Add a flag in
-    `cli.py` first, then wire it through here — never fork the logic.
-  - `api.py` / `mcp.py` — the FastAPI HTTP surface (`md2star-api`,
+    `cli.py` first, then wire it through here; never fork the logic.
+  - `api.py` / `mcp.py`: the FastAPI HTTP surface (`md2star-api`,
     `[api]` extra) and the FastAPI-MCP server (`md2star-mcp`, `[mcp]`
     extra). Both wrap the same conversion pipeline.
-  - `doctor.py` — `md2star doctor` environment diagnostic.
-  - `preprocessing/` — the 12-phase Markdown preprocessor. The order
-    is in `pipeline.py` and is *load-bearing*; reordering needs a
+  - `doctor.py`: `md2star doctor` environment diagnostic.
+  - `preprocessing/`: the 13-phase Markdown preprocessor (the phase names
+    live in `pipeline.py`'s `PHASES`). The order
+    is *load-bearing*; reordering needs a
     correctness argument.
-  - `postprocess.py` — DOCX-only zip rewrite that re-injects the
+  - `postprocess.py`: DOCX-only zip rewrite that re-injects the
     `MyTable` / `MyTableSmall` styles Pandoc strips. Idempotent.
-  - `cache.py` — XDG cache dir resolver. Override with
+  - `cache.py`: XDG cache dir resolver. Override with
     `MD2STAR_CACHE_DIR` (tests do this via the autouse fixture).
-  - `data/` — bundled package data (Lua filter, defaults YAMLs,
+  - `data/`: bundled package data (Lua filter, defaults YAMLs,
     templates, Mermaid config).
-- `tests/` — pytest suite. `conftest.py` redirects the cache to `tmp_path`
+- `tests/`: pytest suite. `conftest.py` redirects the cache to `tmp_path`
   for every test. The load-bearing files:
-  - `test_preprocessing.py` (~85 tests) — the line-level pipeline.
-  - `test_postprocess.py` — DOCX style re-injection.
-  - `test_lua_filter.py` — the Pandoc Lua filter (drives pandoc as a
+  - `test_preprocessing.py`: the line-level pipeline.
+  - `test_postprocess.py`: DOCX style re-injection.
+  - `test_lua_filter.py`: the Pandoc Lua filter (drives pandoc as a
     subprocess; skipped when pandoc is not on PATH).
-  - `test_offline_security.py` — the `--offline` / `--allow-remote-*`
+  - `test_offline_security.py`: the `--offline` / `--allow-remote-*`
     network gates (the contract documented in `SECURITY.md`).
-  - `test_roundtrip_ocr.py` — the `md → docx → pdf → text` OCR round-trip
+  - `test_roundtrip_ocr.py`: the `md → docx → pdf → text` OCR round-trip
     *identity* `g(f(x)) = x`: exact whole-document equality under an explicit
     normal form, for prose (any length), bullet lists, multi-page docs, and
     footnotes (numeric `[^1]` and named `[^aa]`). Marked `slow` (needs
@@ -78,20 +79,20 @@ gives you the runtime set only (`-e .`).
   bibliography localization. `test_ai_eval.py` (marker `ai_eval`) is a
   quality eval of the opt-in `--lint` / alt-text passes against a real
   local Ollama daemon and skips cleanly when none is running.
-- `minimal-gui/` — the standalone stdlib `md → PDF` preview server
+- `minimal-gui/`: the standalone stdlib `md → PDF` preview server
   (`python3 minimal-gui/server.py`). Renamed from the old `overleaf/`;
   don't reintroduce that path.
-- `skills/` — the Claude Skill / OpenCode skill packaging
+- `skills/`: the Claude Skill / OpenCode skill packaging
   (`skills/md2star/SKILL.md` + `references/`). The host model only reads
   the `description`, so `scripts/check_triggers.py` enforces trigger
-  coverage — edit the description and `references/triggers.md` together
+  coverage: edit the description and `references/triggers.md` together
   and re-run it.
-- `scripts/` — `install.sh` / `uninstall.sh` / `test.sh` plus the
+- `scripts/`: `install.sh` / `uninstall.sh` / `test.sh` plus the
   PowerShell siblings (`install.ps1` / `uninstall.ps1` / `update.ps1`),
   `brew.sh` (idempotent macOS Homebrew bootstrap), `check_triggers.py`
   (skill trigger coverage), and `audit_comments.py`. Thin wrappers; the
   real install path is `pipx`.
-- `docs/developer_guide.md` — architectural notes (the why, not the what).
+- `docs/developer_guide.md`: architectural notes (the why, not the what).
 
 ## PR checklist
 
@@ -101,7 +102,7 @@ Before opening a PR:
       faster local loop that skips the LibreOffice/kreuzberg round-trip).
 - [ ] `ruff check md2star tests` is clean (no new warnings).
 - [ ] If you touched the Lua filter, the integration suite still passes
-      (`make test`) — pytest alone does not cover end-to-end DOCX output.
+      (`make test`); pytest alone does not cover end-to-end DOCX output.
 - [ ] If you added a new preprocessing phase, register its name in
       `md2star.preprocessing.pipeline.PHASES` so `--skip-phase` knows
       about it, and add at least one test in `tests/test_preprocessing.py`
@@ -124,14 +125,14 @@ Before opening a PR:
 - [ ] All `.py` files you add or modify keep a module header docstring
       with an Author block linking to
       [Warith HARCHAOUI](https://linkedin.com/in/warith-harchaoui/),
-      NumPy-style docstrings on **every** function and class — public
+      NumPy-style docstrings on **every** function and class, public
       *and* private (`_helper`, `__dunder__`, nested closures included;
-      no exemption for visibility) — and full type annotations.
+      no exemption for visibility), and full type annotations.
 
 ## Conventions
 
-- **One short docstring per module / function** — public and private
-  alike. The codebase already documents *why*, not *what* — keep that
+- **One short docstring per module / function**, public and private
+  alike. The codebase already documents *why*, not *what*; keep that
   bias.
 - **No backward-compat shims** unless you can name a real outside caller
   that relies on the old API. This is a small, single-author project; do
@@ -158,7 +159,7 @@ To regenerate either from scratch:
 2. Write a comprehensive markdown source that exercises every
    element you want to style. The two we used for v2.0 live in
    `.private/template-source.md` (DOCX) and
-   `.private/template-pptx-source.md` (PPTX) — copy them as a
+   `.private/template-pptx-source.md` (PPTX): copy them as a
    starting point.
 
 3. Render with the default ref:
@@ -168,7 +169,7 @@ To regenerate either from scratch:
 
 4. Open in Word / PowerPoint / Keynote / LibreOffice and brand:
    fonts, colours, margins, logo in headers / slide masters,
-   etc. Don't rename existing styles — pandoc looks them up by
+   etc. Don't rename existing styles; pandoc looks them up by
    name (`Heading1`, `Title`, `Hyperlink`, ...). For PPTX, the
    layout names must match the pandoc set: `Title Slide`,
    `Section Header`, `Title and Content`, `Two Content`,

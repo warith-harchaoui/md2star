@@ -53,28 +53,28 @@ La carte est un résumé en 2D des 9 critères : à lire comme une forme, pas co
 
 Les neuf critères, en bref :
 
-- **Office+PDF** — qualité et fiabilité des sorties `.docx`, `.pptx`
+- **Office+PDF**: qualité et fiabilité des sorties `.docx`, `.pptx`
   et PDF (PDF sans exiger une chaîne LaTeX).
-- **Citations** — citations / bibliographie (BibTeX, CSL, Zotero).
-- **Diagrammes** — Mermaid / Graphviz / PlantUML rendus dans le
+- **Citations**: citations / bibliographie (BibTeX, CSL, Zotero).
+- **Diagrammes**: Mermaid / Graphviz / PlantUML rendus dans le
   document.
-- **Maths** — typographie LaTeX `$…$` / `$$…$$`, en ligne et en bloc,
+- **Maths**: typographie LaTeX `$…$` / `$$…$$`, en ligne et en bloc,
   rendue correctement dans la sortie choisie.
-- **Charte** — gabarits à la charte maison (polices, couleurs,
+- **Charte**: gabarits à la charte maison (polices, couleurs,
   couverture, en-têtes/pieds) pour un rendu voulu, pas un export brut.
-- **CLI une-cmd** — une seule commande transforme le Markdown en
+- **CLI une-cmd**: une seule commande transforme le Markdown en
   livrable, sans chaîne d'outils à câbler à la main.
-- **Hors ligne** — fonctionne entièrement hors ligne par défaut, sans
+- **Hors ligne**: fonctionne entièrement hors ligne par défaut, sans
   appels réseau silencieux.
-- **LLM local** — fonctions optionnelles de LLM local (lint, résumés,
+- **LLM local**: fonctions optionnelles de LLM local (lint, résumés,
   propositions de fusion) via Ollama ou équivalent.
-- **Retour-MD** — reconvertit un DOCX / PPTX / PDF fini en un jumeau
+- **Retour-MD**: reconvertit un DOCX / PPTX / PDF fini en un jumeau
   Markdown éditable.
 
 Les cases qui seraient « non applicables » dans la grille maintenue à
 la main (par ex. une note Office+PDF pour un outil uniquement de
 slides ou de site web) valent ⭐ ici, afin que le tableau reste en
-étoiles pures — à lire comme « pas fait pour cette dimension ».
+étoiles pures : à lire comme « pas fait pour cette dimension ».
 
 ## Positionnement
 
@@ -90,7 +90,7 @@ l'édition Office native.
 
 Choisissez `md2star` quand **toutes** ces conditions sont réunies :
 
-- Votre référence est en Markdown — vous voulez des diffs en texte
+- Votre référence est en Markdown : vous voulez des diffs en texte
   brut, une archive grepable et aucun risque de format propriétaire.
 - Vous produisez du DOCX, PPTX ou PDF comme livrable soigné (articles,
   rapports internes, slides client, supports de formation, brouillon
@@ -104,42 +104,42 @@ Choisissez `md2star` quand **toutes** ces conditions sont réunies :
 
 Là où `md2star` ne domine délibérément pas le tableau :
 
-1. **Maths** — 3 étoiles, sa ligne la plus faible. Les maths LaTeX
+1. **Maths**: 3 étoiles, sa ligne la plus faible. Les maths LaTeX
    poussées reviennent à Typst, Overleaf ou Pandoc brut ; md2star rend
    bien les maths en ligne et en bloc courantes, mais n'est pas un
    substitut LaTeX complet.
-2. **Office+PDF** — 4 étoiles. La sortie est soignée et fiable, mais
+2. **Office+PDF**: 4 étoiles. La sortie est soignée et fiable, mais
    les éditeurs natifs (Word / Google Docs, LibreOffice) et Overleaf
    la dépassent sur la fidélité de rendu brute dans leur propre format.
-3. **Citations & Diagrammes** — 4 étoiles chacun. Suffisant pour
+3. **Citations & Diagrammes**: 4 étoiles chacun. Suffisant pour
    rapports et articles ; Pandoc et Quarto vont plus loin sur les
    styles CSL exotiques et la longue traîne des moteurs de diagrammes.
 
 ## Quand choisir quoi
 
-- **`md2star`** — documents issus de Markdown qui doivent partir en
+- **`md2star`**: documents issus de Markdown qui doivent partir en
   DOCX / PPTX / PDF soigné et à la charte, hors ligne, en une commande,
   avec des diffs git propres et un retour vers le Markdown.
-- **Pandoc** — le convertisseur universel brut quand on accepte de
+- **Pandoc**: le convertisseur universel brut quand on accepte de
   câbler soi-même templates et chaîne PDF (md2star repose dessus).
-- **Pandoc + templates** — le même moteur une fois qu'on a construit
+- **Pandoc + templates**: le même moteur une fois qu'on a construit
   et qu'on maintient son propre jeu de gabarits pour la charte.
-- **Quarto** — pipelines notebook R/Python → publication avec code
+- **Quarto**: pipelines notebook R/Python → publication avec code
   exécutable et citations.
-- **Typst** — une alternative LaTeX rapide et moderne pour des PDF
+- **Typst**: une alternative LaTeX rapide et moderne pour des PDF
   riches en maths et typographiés avec précision.
-- **Marp / Slidev / reveal.js** — decks de slides en Markdown ou HTML
+- **Marp / Slidev / reveal.js**: decks de slides en Markdown ou HTML
   avec rechargement à chaud (slides uniquement, pas de chaîne
   Office / PDF à la charte).
-- **MkDocs / Docusaurus** — sites de documentation depuis Markdown,
+- **MkDocs / Docusaurus**: sites de documentation depuis Markdown,
   pas des livrables Office ou PDF.
-- **LibreOffice** — édition Office native et DOCX / PPTX solides quand
+- **LibreOffice**: édition Office native et DOCX / PPTX solides quand
   votre source n'est pas du Markdown.
-- **Overleaf** — LaTeX collaboratif avec PDF nativement LaTeX et
+- **Overleaf**: LaTeX collaboratif avec PDF nativement LaTeX et
   citations.
-- **Obsidian export** — notes Markdown avec export piloté par plugins
+- **Obsidian export**: notes Markdown avec export piloté par plugins
   et un peu d'outillage LLM local hors ligne.
-- **Word / Google Docs** — quand l'édition Office native ou la
+- **Word / Google Docs**: quand l'édition Office native ou la
   co-édition en temps réel est le vrai produit.
 
 ## Méthodologie

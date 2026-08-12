@@ -1,4 +1,4 @@
-# md2star — Examples & Syntax Reference ⭐️
+# md2star: Examples & Syntax Reference ⭐️
 
 Welcome to the `md2star` syntax reference! Because `md2star` extends pure Pandoc by fixing annoying layout issues (especially surrounding bullet lists and `mermaid` blocks), you can format documents dynamically without breaking workflows.
 
@@ -33,7 +33,7 @@ The date is automatically localized based on the detected language:
 
 ## 2. Mermaid Diagrams
 
-Standard Pandoc breaks on ````mermaid` fenced code blocks. `md2star` automatically converts them to high-resolution PNGs using the Mermaid CLI locally — no data leaves your machine.
+Standard Pandoc breaks on ````mermaid` fenced code blocks. `md2star` automatically converts them to high-resolution PNGs using the Mermaid CLI locally; no data leaves your machine.
 
 ```markdown
 Here is our pipeline architecture:
@@ -129,7 +129,7 @@ tool to build a compatible reference doc, then point md2pptx at it via
 
 ## 8. Language Detection & Date Localization
 
-`md2star` automatically detects the language of your content and localizes dates accordingly — no configuration needed. Supported languages include French, Spanish, German, Italian, Portuguese, Dutch, Russian, Chinese, and Japanese.
+`md2star` automatically detects the language of your content and localizes dates accordingly, no configuration needed. Supported languages include French, Spanish, German, Italian, Portuguese, Dutch, Russian, Chinese, and Japanese.
 
 ```markdown
 # Test du langage
@@ -156,7 +156,7 @@ date_format: "%A %e %B %Y"
 
 A horizontal rule (`---` on its own line) is rewritten into a hard
 page break in the DOCX output. The Lua filter only fires this
-mapping for the DOCX writer — PPTX keeps the default horizontal-rule
+mapping for the DOCX writer: PPTX keeps the default horizontal-rule
 rendering, because slide structure in PPTX already comes from `## `
 headings and overloading `---` there would conflict with intent.
 
@@ -186,22 +186,22 @@ md2docx pagebreaks.md
 
 > [!TIP]
 > The `---` must be on its **own line**, with blank lines above
-> and below — that's the standard Pandoc horizontal-rule syntax.
+> and below; that's the standard Pandoc horizontal-rule syntax.
 > A `---` inside a YAML metadata block (the document's front
 > matter) is not affected: Pandoc consumes it as metadata
 > delimiter before the Lua filter ever sees it.
 
 > [!NOTE]
 > No equivalent in PPTX. To force a slide break, start a new
-> `## Heading` — that's how Pandoc maps Markdown to PowerPoint
+> `## Heading`; that's how Pandoc maps Markdown to PowerPoint
 > slides.
 
 ---
 
 ## 10. Footnotes
 
-Markdown footnotes pass straight through to **native Word footnotes**
-— they land in the DOCX's `word/footnotes.xml` part, so Word renders
+Markdown footnotes pass straight through to **native Word footnotes**:
+they land in the DOCX's `word/footnotes.xml` part, so Word renders
 them at the bottom of the page with clickable superscript markers and
 automatic renumbering. `md2star` does no special pre-processing here;
 Pandoc's default Markdown reader has the `footnotes` extension on, so
@@ -215,7 +215,7 @@ under adversarial inputs.[^adv]
 [^adv]: See the red-team appendix for the full protocol.
 ```
 
-Labels are arbitrary identifiers (`[^1]`, `[^bench]`, `[^note-a]`) —
+Labels are arbitrary identifiers (`[^1]`, `[^bench]`, `[^note-a]`);
 Word reorders and renumbers the visible markers automatically, so the
 label you choose never leaks into the output. You can also inline the
 note directly with the `^[...]` form:
@@ -233,10 +233,10 @@ md2docx report.md
 > Footnotes work in DOCX and PPTX alike. DOCX gets true bottom-of-page
 > footnotes; PPTX collects each slide's notes into a small **"Notes"**
 > text block appended to that slide's body (endnote-style, on the
-> slide itself — not the speaker-notes pane). The marker-and-text
+> slide itself, not the speaker-notes pane). The marker-and-text
 > pairing is preserved either way.
 
-## 11. Reverse direction — the Markdown twin
+## 11. Reverse direction: the Markdown twin
 
 Go the *other* way: turn a finished document back into an editable
 Markdown source. `md2star twin` recovers prose + GFM tables, scrapes
@@ -254,15 +254,15 @@ md2star twin report.pdf --out ./recovered/
 md2star twin report.pdf --no-images
 ```
 
-Add `--diagrams` (opt-in, needs `[ai]` + a local Ollama) and md2star
+Add `--diagrams` (opt-in, needs `[ocr]` + a local Ollama) and md2star
 classifies each scraped image with a local vision model into three
 buckets: **photos stay as PNGs**, **node-and-edge diagrams are
 re-authored as Mermaid**, and other **vector figures** (charts, plots,
 logos, icons, line drawings) are re-authored as an editable **SVG**
-written beside the raster. Every candidate — Mermaid or SVG — is
+written beside the raster. Every candidate, Mermaid or SVG, is
 verified by the same *target-matching eyeball loop*: render it (the
-same `mmdc` the forward path uses for Mermaid; a detected rasteriser —
-`cairosvg` / `rsvg-convert` / `inkscape` / ImageMagick — for SVG),
+same `mmdc` the forward path uses for Mermaid; a detected rasteriser,
+`cairosvg` / `rsvg-convert` / `inkscape` / ImageMagick, for SVG),
 compare it against the scraped original with the VLM, and iterate until
 it matches. The original PNG is always kept as a commented fallback, so
 a reconstruction is never a lossy dead end.
@@ -272,7 +272,7 @@ a reconstruction is never a lossy dead end.
 md2star twin architecture.pdf --diagrams --out ./recovered/
 ```
 
-A recovered diagram lands in the twin like this — editable code, with
+A recovered diagram lands in the twin like this: editable code, with
 the source raster preserved beneath it:
 
 ````markdown
@@ -297,15 +297,15 @@ flowchart LR
 The twin is not CLI-only. In the full editor (`md2star gui`), the
 **Import** control has two toggles:
 
-- **Twin** — keep scraped images. The recovered `<stem>.md` **and** an
+- **Twin**: keep scraped images. The recovered `<stem>.md` **and** an
   `assets/` folder are written into the folder you have open (so the
   image links resolve when you re-render), and the sidebar refreshes.
   Requires an open folder; plain **Import** stays a text-only load.
-- **Mermaid** — additionally re-author node-and-edge figures via the
-  local VLM (needs the `[ai]` stack + Ollama). Implies **Twin**.
+- **Mermaid**: additionally re-author node-and-edge figures via the
+  local VLM (needs the `[ocr]` stack + Ollama). Implies **Twin**.
 
 Over the HTTP API (`md2star-api`), `POST /extract` takes the same
-options as form fields — text-only returns JSON, twin returns a zip of
+options as form fields: text-only returns JSON, twin returns a zip of
 `<stem>.md` + `assets/`:
 
 ```bash
@@ -316,7 +316,7 @@ curl -sF file=@report.pdf http://localhost:8000/extract
 curl -sF file=@report.pdf -F twin=true \
      -o report.zip http://localhost:8000/extract
 
-# Twin + AI diagram reconstruction (implies twin; needs the [ai] stack)
+# Twin + AI diagram reconstruction (implies twin; needs the [ocr] stack)
 curl -sF file=@architecture.pdf -F diagrams=true \
      -o architecture.zip http://localhost:8000/extract
 ```

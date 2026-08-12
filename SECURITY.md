@@ -17,8 +17,8 @@ public issue.
 ## Network behavior
 
 No markdown file you process can cause a network call on its own. The
-one phase md2star itself may reach the network for — with no markdown
-involvement — is the reference-template fetch, on by default since
+one phase where md2star itself may reach the network, with no markdown
+involvement, is the reference-template fetch, on by default since
 v2.5.0.
 
 | Phase                          | Default | Opt-out / opt-in flag        |
@@ -31,7 +31,7 @@ v2.5.0.
 The template fetch happens only when no local `template.{docx,pptx}`
 exists, targets the fixed `deraison.ai` host (never a markdown-supplied
 URL), caches the result under XDG, and falls back to the bundled
-template if the download fails — so it never breaks a conversion.
+template if the download fails, so it never breaks a conversion.
 
 `--offline` (a top-level flag) is the hard kill-switch: it forces every
 network-touching phase off, including the template fetch and the
@@ -65,10 +65,12 @@ Markdown is mostly safe to process. The exceptions:
 
 ## Process-level security
 
-- **Subprocess timeouts**: Pandoc, soffice, mermaid, ollama all run
-  with bounded timeouts (Pandoc + soffice: 120 s; mermaid: 60 s;
-  ollama: 30 s / 900 s for pulls). We do not enable `shell=True`
-  anywhere.
+- **Subprocess timeouts**: Pandoc and soffice run with a bounded
+  120 s timeout; mermaid rendering (`mmdc`) is bounded to 60 s. LLM
+  calls for `--lint` go through `best-engine-ai-helper`, which applies
+  its own request timeout (120 s by default, `SPREZZATURE_LLM_TIMEOUT`
+  to override) rather than md2star spawning `ollama` itself. We do not
+  enable `shell=True` anywhere.
 - **No `eval` / `exec`** on user content.
 - **No reads of `$HOME` config files** outside the documented
   `$XDG_CACHE_HOME/md2star/` cache.
