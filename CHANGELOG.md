@@ -4,7 +4,14 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.1.1] — 2026-08-15
+
+### Fixed
+- **`md2star-x`'s console-script entry point** pointed at the bare
+  `click_cli.cli` group instead of `click_cli.main()` — the latter exists
+  specifically to be the console entry point (its own docstring says so,
+  and tests exercise it), but the installed script never actually ran
+  through it. Fixed the `pyproject.toml` wiring.
 
 ## [3.1.0] — 2026-08-07
 
