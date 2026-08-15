@@ -133,7 +133,7 @@ md2docx = "md2star.cli:md2docx_main"
 md2pptx = "md2star.cli:md2pptx_main"
 md2pdf  = "md2star.cli:md2pdf_main"
 # Modern click front-end over the same conversion pipeline (md2star/click_cli.py).
-md2star-x = "md2star.click_cli:cli"
+md2star-x = "md2star.click_cli:main"
 # HTTP + MCP servers (install with the [api] / [api,mcp] extras).
 md2star-api = "md2star.api:main"
 md2star-mcp = "md2star.mcp:main"
