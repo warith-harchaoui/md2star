@@ -4,6 +4,17 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **API**: `/convert` and `/extract` leaked their per-request temp directory
+  on every failure. Cleanup was registered via `background.add_task(...)`
+  before the risky work — which looks right, but FastAPI silently drops
+  tasks already added to the injected `BackgroundTasks` object when the
+  endpoint raises rather than returns a `Response` (verified empirically).
+  Both endpoints now clean up explicitly in their `except` blocks; the
+  background task is only registered right before a successful return.
+
 ## [3.1.1] — 2026-08-15
 
 ### Fixed

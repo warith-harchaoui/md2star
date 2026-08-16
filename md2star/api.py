@@ -228,11 +228,17 @@ async def convert(
             detail=f"fmt must be one of {sorted(_FORMAT_MEDIA)}; got {fmt!r}",
         )
 
-    # One temp dir per request holds the upload + the rendered output. We
-    # register its cleanup as a background task so it runs AFTER FileResponse
-    # has finished streaming — deleting it earlier would truncate the download.
+    # One temp dir per request holds the upload + the rendered output. Cleanup
+    # is registered as a background task for the SUCCESS path only — it runs
+    # after FileResponse finishes streaming, so deleting it earlier would
+    # truncate the download. On any failure we clean up immediately in the
+    # except block below instead: FastAPI silently drops background tasks
+    # already added to `background` when the endpoint raises rather than
+    # returns (verified — this is not the `add_task`-too-late bug fixed
+    # elsewhere in the suite this session; it's `BackgroundTasks` itself
+    # discarding tasks on the exception path), so relying on `background`
+    # alone here would leak the temp dir on every failed request.
     work = osh.make_temporary_directory(prefix="md2star_api_")
-    background.add_task(shutil.rmtree, work, ignore_errors=True)
 
     # md2star's converter is path-in / path-out; stage the upload on disk and
     # give it an explicit output path so we know exactly what to stream back.
@@ -242,30 +248,40 @@ async def convert(
     stem = Path(file.filename or "document").stem or "document"
     in_path = os.path.join(work, f"{stem}.md")
     out_path = os.path.join(work, f"{stem}.{fmt}")
-    with open(in_path, "wb") as f:
-        f.write(await file.read())
-
-    # Translate the optional query params into the same CLI flags the converter
-    # already understands — only appending a flag when the caller supplied it.
-    argv = [in_path, "-o", out_path]
-    for flag, value in (("--author", author), ("--lang", lang), ("--date", date)):
-        if value:
-            argv += [flag, value]
 
     try:
+        with open(in_path, "wb") as f:
+            f.write(await file.read())
+
+        # Translate the optional query params into the same CLI flags the
+        # converter already understands — only appending a flag when the
+        # caller supplied it.
+        argv = [in_path, "-o", out_path]
+        for flag, value in (("--author", author), ("--lang", lang), ("--date", date)):
+            if value:
+                argv += [flag, value]
+
         _convert(fmt, argv)
+
+        if not os.path.exists(out_path):  # pragma: no cover — defensive
+            raise HTTPException(status_code=500, detail="conversion produced no output file")
     except MissingDependencyError as exc:
         # A required system tool (Pandoc / LibreOffice) is absent — this is an
         # environment problem, not a bad request; 503 tells the caller to retry
         # against a properly provisioned host.
+        shutil.rmtree(work, ignore_errors=True)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except InvalidInputError as exc:
+        shutil.rmtree(work, ignore_errors=True)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Md2starError as exc:
+        shutil.rmtree(work, ignore_errors=True)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception:
+        shutil.rmtree(work, ignore_errors=True)
+        raise
 
-    if not os.path.exists(out_path):  # pragma: no cover — defensive
-        raise HTTPException(status_code=500, detail="conversion produced no output file")
+    background.add_task(shutil.rmtree, work, ignore_errors=True)
 
     return FileResponse(
         out_path, media_type=_FORMAT_MEDIA[fmt], filename=os.path.basename(out_path)
@@ -335,19 +351,25 @@ async def extract(
             detail=f"unsupported input {suffix!r}; expected .docx, .pptx or .pdf",
         )
 
-    # Stage the upload on disk (Kreuzberg is path-in) and clean up after streaming.
+    # Stage the upload on disk (Kreuzberg is path-in). Cleanup is registered as
+    # a background task for the SUCCESS path only; on any failure we clean up
+    # immediately in the except block below instead — FastAPI silently drops
+    # background tasks already added to `background` when the endpoint raises
+    # rather than returns (verified empirically), so relying on `background`
+    # alone here would leak the temp dir on every failed request.
     work = osh.make_temporary_directory(prefix="md2star_api_")
-    background.add_task(shutil.rmtree, work, ignore_errors=True)
     in_path = os.path.join(work, f"{stem}{suffix}")
-    with open(in_path, "wb") as f:
-        f.write(await file.read())
 
     # diagrams can't happen without keeping the images, so it implies twin.
     want_twin = twin or diagrams
 
     try:
+        with open(in_path, "wb") as f:
+            f.write(await file.read())
+
         if not want_twin:
             markdown = to_markdown(in_path)
+            shutil.rmtree(work, ignore_errors=True)
             return {"filename": f"{stem}.md", "markdown": markdown}
 
         # Only build the AI handler when diagrams are requested AND the stack is
@@ -361,25 +383,35 @@ async def extract(
 
         out_dir = os.path.join(work, "twin")
         md_path = to_markdown_twin(in_path, out_dir, image_handler=handler)
+
+        # Bundle <stem>.md + assets/ into one zip so the twin travels as a unit.
+        zip_path = os.path.join(work, f"{stem}.zip")
+        assets_dir = Path(out_dir) / "assets"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.write(md_path, arcname=md_path.name)
+            if assets_dir.is_dir():
+                # Preserve the assets/ prefix so the archived links keep resolving.
+                for asset in sorted(assets_dir.rglob("*")):
+                    if asset.is_file():
+                        zf.write(
+                            asset, arcname=str(Path("assets") / asset.relative_to(assets_dir))
+                        )
     except ReverseUnavailable as exc:
         # Optional feature not installed — an environment problem, so 503 tells
         # the caller to provision `pip install 'md2star[ocr]'` and retry.
+        shutil.rmtree(work, ignore_errors=True)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except (ValueError, FileNotFoundError) as exc:
+        shutil.rmtree(work, ignore_errors=True)
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
+        shutil.rmtree(work, ignore_errors=True)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    except Exception:
+        shutil.rmtree(work, ignore_errors=True)
+        raise
 
-    # Bundle <stem>.md + assets/ into one zip so the twin travels as a unit.
-    zip_path = os.path.join(work, f"{stem}.zip")
-    assets_dir = Path(out_dir) / "assets"
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.write(md_path, arcname=md_path.name)
-        if assets_dir.is_dir():
-            # Preserve the assets/ prefix so the archived links keep resolving.
-            for asset in sorted(assets_dir.rglob("*")):
-                if asset.is_file():
-                    zf.write(asset, arcname=str(Path("assets") / asset.relative_to(assets_dir)))
+    background.add_task(shutil.rmtree, work, ignore_errors=True)
 
     return FileResponse(zip_path, media_type="application/zip", filename=f"{stem}.zip")
 

@@ -118,6 +118,63 @@ def test_convert_markdown_to_docx(
     assert len(r.content) > 1000
 
 
+def test_convert_cleans_up_temp_dir_on_failure(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A failed ``/convert`` (after the temp dir is staged) must not leak it.
+
+    ``BackgroundTasks`` added via the injected ``background`` parameter are
+    silently dropped by FastAPI when the endpoint raises rather than returns
+    (verified against a minimal FastAPI app) — so the temp-dir cleanup for the
+    failure path can't rely on ``background.add_task`` alone the way the
+    success path does; the endpoint must clean up explicitly in its except
+    blocks.
+    """
+    from md2star.errors import Md2starError
+
+    def _boom(fmt, argv):  # noqa: ANN001, ANN202, ARG001
+        raise Md2starError("simulated conversion failure")
+
+    monkeypatch.setattr("md2star.api._convert", _boom, raising=True)
+    monkeypatch.setattr(
+        "md2star.api.osh.make_temporary_directory",
+        lambda **_kw: str(tmp_path),
+        raising=True,
+    )
+    r = client.post(
+        "/convert?fmt=docx",
+        files={"file": ("note.md", "# Hi\n", "text/markdown")},
+    )
+    assert r.status_code == 500
+    assert not tmp_path.exists(), "the temp dir must be removed on a failed /convert"
+
+
+def test_extract_cleans_up_temp_dir_on_failure(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A failed ``/extract`` (after the temp dir is staged) must not leak it.
+
+    Same reasoning as the ``/convert`` cleanup-on-failure test above.
+    """
+
+    def _boom(_path):  # noqa: ANN001, ANN202
+        raise RuntimeError("simulated extraction failure")
+
+    monkeypatch.setattr("md2star.reverse.to_markdown", _boom, raising=True)
+    monkeypatch.setattr(
+        "md2star.api.osh.make_temporary_directory",
+        lambda **_kw: str(tmp_path),
+        raising=True,
+    )
+    r = client.post(
+        "/extract",
+        files={"file": ("note.docx", b"fake-docx",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+    )
+    assert r.status_code == 500
+    assert not tmp_path.exists(), "the temp dir must be removed on a failed /extract"
+
+
 def test_extract_rejects_unsupported_format(client: TestClient) -> None:
     """``/extract`` refuses a non-document upload with a 400 (not a 500)."""
     r = client.post(
