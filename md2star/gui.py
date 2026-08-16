@@ -1,22 +1,22 @@
 """
-md2star — minimal single-page GUI ("conversion bench") served by the API.
+md2star: minimal single-page GUI ("conversion bench") served by the API.
 
 This module holds nothing but the self-contained HTML document served by the
 FastAPI app at ``GET /gui`` (see :mod:`md2star.api`). It is deliberately
 build-step-free: one string of HTML + Tailwind (via CDN) + vanilla ES-module
-JavaScript. There is no bundler, no framework, no npm — the whole page is a
+JavaScript. There is no bundler, no framework, no npm, the whole page is a
 static asset the API returns verbatim.
 
 Two GUIs, on purpose
 --------------------
 md2star ships two browser front-ends for two different jobs:
 
-* **This bench** (`GET /gui` on ``md2star-api``) — a tiny drop-a-file,
+* **This bench** (`GET /gui` on ``md2star-api``), a tiny drop-a-file,
   pick-a-format, download-the-result page. It aligns md2star with the rest of
   the AI Helpers suite (``audio_helper.gui`` / ``vocal_helper`` …), where every
   package's FastAPI app serves a minimal ``/gui``. It adds zero server logic:
   it POSTs to the same ``/convert`` endpoint the CLI and MCP surfaces reach.
-* **The editor** (`md2star gui`, :mod:`md2star.gui_server`) — the rich,
+* **The editor** (`md2star gui`, :mod:`md2star.gui_server`), the rich,
   Overleaf-style Markdown editor with a live PDF preview, folder browser,
   template upload and draft autosave. That is the primary *human* surface and
   is unaffected by this file.
@@ -33,12 +33,12 @@ What the page does
 - Choose a target format (docx / pptx / pdf) and optional metadata
   (author / language).
 - POST a ``multipart/form-data`` request to the SAME ``/convert`` endpoint the
-  CLI and MCP surfaces use — the GUI adds zero new server logic.
+  CLI and MCP surfaces use, the GUI adds zero new server logic.
 - Offer a download link for the rendered document.
 
 Author
 ------
-Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
+Warith Harchaoui, Ph.D., https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

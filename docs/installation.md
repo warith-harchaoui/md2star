@@ -18,7 +18,7 @@ That gets you `md2docx`, `md2pptx`, `md2pdf`, and `md2star` on your
 PATH, plus the click front-end `md2star-x` (`click` is a core
 dependency). If you cloned the repository instead, `bash
 scripts/install.sh` runs the same check and then `pipx install .`
-from the local copy (**conservative by default** — it does not
+from the local copy (**conservative by default**: it does not
 auto-install Pandoc / LibreOffice; pass `--install-system-deps` to
 have it run the platform's package manager).
 
@@ -33,10 +33,10 @@ Python packages for other surfaces:
 | `api` | `pip install 'md2star[api]'` | FastAPI HTTP server (`md2star-api`). |
 | `mcp` | `pip install 'md2star[mcp]'` | FastAPI-MCP server (`md2star-mcp`). |
 | `ai`  | `pip install 'md2star[ai]'`  | Official `ollama` client for the opt-in `--lint` / alt-text passes (they otherwise work via a zero-dependency `urllib` fallback). |
-| `gui` | `pip install 'md2star[gui]'` | Self-documenting alias — resolves to the **same** wheel as plain `md2star`; the GUI is already bundled and adds no Python packages. |
+| `gui` | `pip install 'md2star[gui]'` | Self-documenting alias: resolves to the **same** wheel as plain `md2star`; the GUI is already bundled and adds no Python packages. |
 
 md2star also packages itself as a **Claude Skill / OpenCode skill**
-under `skills/md2star/` so an agent can drive it — see
+under `skills/md2star/` so an agent can drive it: see
 [`skills/README.md`](../skills/README.md) for the copy-into-place
 install.
 
@@ -155,8 +155,8 @@ md2docx --help          # per-format flags
 md2star-x doctor        # same diagnostic via the click front-end
 ```
 
-The single-file, zero-dependency **minimal GUI** — a hackable stdlib
-preview server that exposes `md → PDF` on one endpoint — runs straight
+The single-file, zero-dependency **minimal GUI** (a hackable stdlib
+preview server that exposes `md → PDF` on one endpoint) runs straight
 from the repo without installing anything extra:
 
 ```bash
@@ -187,7 +187,7 @@ md2pdf  assets/example.md           # → assets/example.pdf (needs LibreOffice)
 | `md2docx: command not found`                             | `~/.local/bin` (pipx PATH) not on `$PATH`            | Restart your shell; `pipx ensurepath` updates rc files but the running shell is unaware.  |
 | `pandoc: command not found`                              | Pandoc not installed                                 | Per-OS install instructions above; rerun `md2star doctor` to confirm.                     |
 | `md2pdf: LibreOffice not found`                          | `soffice` not on PATH                                | Install LibreOffice per-OS above. The `md2pdf` path requires it.                          |
-| `md2pdf` table cells render empty in the PDF             | Known issue — soffice ↔ bundled template interaction | See `CHANGELOG.md` v1.1.1. Workaround: export the `.docx`, open in Word.                  |
+| `md2pdf` table cells render empty in the PDF             | Known issue: soffice ↔ bundled template interaction | See `CHANGELOG.md` v1.1.1. Workaround: export the `.docx`, open in Word.                  |
 | Mermaid block stays as code, no image                    | Node.js not on PATH, or `npx` fetch failed           | Install Node.js per-OS above. The first run downloads `@mermaid-js/mermaid-cli` via npx.  |
 | `md2docx … --bib refs.bib` produces no bibliography      | Pandoc citeproc not enabled in your build            | Check `pandoc --version` lists `+citeproc`; install a newer Pandoc if not.                |
 | `md2star: skipped remote image https://…`                | Default offline mode blocks remote images            | Pass `--allow-remote-images` to opt in, or download the image locally.                    |
@@ -217,7 +217,7 @@ bash scripts/uninstall.sh --clear-cache      # also wipe $XDG_CACHE_HOME/md2star
 ```
 
 This removes the pipx-managed `md2star` package and all its console
-scripts (`md2docx`, `md2pptx`, `md2pdf`, `md2star`, `md2star-x`, and —
-when the `api`/`mcp` extras are installed — `md2star-api` /
+scripts (`md2docx`, `md2pptx`, `md2pdf`, `md2star`, `md2star-x`, and,
+when the `api`/`mcp` extras are installed, `md2star-api` /
 `md2star-mcp`). It does NOT uninstall Pandoc / LibreOffice / Node /
-Ollama — those are system-wide and the user may want to keep them.
+Ollama: those are system-wide and the user may want to keep them.

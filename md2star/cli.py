@@ -2,7 +2,7 @@
 
 This module replaces the legacy heredoc'd shell wrappers (``scripts/install.sh``
 used to write ``~/.local/bin/md2docx`` and ``~/.local/bin/md2pptx`` directly).
-Now there is exactly one source of truth — this file — and four console
+Now there is exactly one source of truth (this file) and four console
 entry points (registered in ``pyproject.toml`` ``[project.scripts]``):
 
 * ``md2docx <input.md> [options...]``     → :func:`md2docx_main`
@@ -25,14 +25,14 @@ everything else verbatim to pandoc, and orchestrates the four-step pipeline:
    ``--no-remote-templates`` / ``--offline`` skip the fetch.
 3. **Invoke pandoc** with the bundled Lua filter, metadata defaults, and
    resolved reference doc.
-4. **Postprocess** (DOCX only) — re-inject the ``MyTable`` / ``MyTableSmall``
+4. **Postprocess** (DOCX only), re-inject the ``MyTable`` / ``MyTableSmall``
    table styles that Pandoc strips when rewriting ``word/styles.xml``.
 
 The PDF format is implemented as a wrapper: it produces the DOCX first
-(so all the md2star polish — mermaid, table styles, slide-aware tweaks —
-applies) and then asks headless LibreOffice (``soffice --headless
---convert-to pdf``) to render that DOCX to PDF. This guarantees the PDF
-visually matches the DOCX you would ship.
+(so all of md2star's polish, from mermaid diagrams to table styles to
+slide-aware tweaks, is already applied) and then asks headless LibreOffice
+(``soffice --headless --convert-to pdf``) to render that DOCX to PDF. This
+guarantees the PDF visually matches the DOCX you would ship.
 
 
 Author

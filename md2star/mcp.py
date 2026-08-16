@@ -1,10 +1,10 @@
 """
-md2star — Model Context Protocol (MCP) surface.
+md2star: Model Context Protocol (MCP) surface.
 
 Adapter that exposes the FastAPI app defined in :mod:`md2star.api` as MCP tools,
 so an MCP-aware client (Claude Desktop, custom agents, IDE integrations, …) can
 call ``health`` / ``doctor`` / ``convert`` as first-class tools. Uses
-:mod:`fastapi_mcp` (https://github.com/tadata-org/fastapi_mcp) — one line wraps
+:mod:`fastapi_mcp` (https://github.com/tadata-org/fastapi_mcp), one line wraps
 the whole existing HTTP surface, so the route definitions are never duplicated.
 
 Install the extra to pull in ``fastapi-mcp``::
@@ -25,7 +25,7 @@ Usage Example
 
 Author
 ------
-Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
+Warith Harchaoui, Ph.D., https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

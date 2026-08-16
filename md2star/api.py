@@ -1,5 +1,5 @@
 """
-md2star — FastAPI HTTP surface.
+md2star: FastAPI HTTP surface.
 
 Exposes the md2star Markdown → DOCX / PPTX / PDF bridge as HTTP endpoints so it
 can sit behind any reverse proxy and be consumed by other services. Kept
@@ -10,20 +10,20 @@ document.
 
 Exposed surface:
 
-- ``GET  /`` — redirect to the browser bench at ``/gui``.
-- ``GET  /gui`` — a minimal single-page conversion bench (drop a ``.md``, pick a
+- ``GET  /``: redirect to the browser bench at ``/gui``.
+- ``GET  /gui``: a minimal single-page conversion bench (drop a ``.md``, pick a
   format, download the result). The self-contained HTML lives in
   :mod:`md2star.gui`; the page POSTs to ``/convert`` and adds no server logic.
   (For the full Overleaf-style editor with a live PDF preview, run
-  ``md2star gui`` — that is :mod:`md2star.gui_server`, a separate stdlib server.)
-- ``GET  /health`` — liveness probe.
-- ``GET  /doctor`` — the same environment diagnostic as ``md2star doctor
+  ``md2star gui``, that is :mod:`md2star.gui_server`, a separate stdlib server.)
+- ``GET  /health``: liveness probe.
+- ``GET  /doctor``: the same environment diagnostic as ``md2star doctor
   --json`` (which tools are present, per-format feature status).
-- ``POST /convert`` — upload a ``.md`` file, pick a target format
+- ``POST /convert``: upload a ``.md`` file, pick a target format
   (``docx`` / ``pptx`` / ``pdf``), and stream back the rendered document.
-- ``POST /extract`` — the reverse direction: upload a ``.docx`` / ``.pptx`` /
+- ``POST /extract``: the reverse direction: upload a ``.docx`` / ``.pptx`` /
   ``.pdf`` and get its Markdown back as JSON, or pass ``twin=true`` (optionally
-  ``diagrams=true``) to receive a zip of ``<stem>.md`` + an ``assets/`` folder —
+  ``diagrams=true``) to receive a zip of ``<stem>.md`` + an ``assets/`` folder,
   a self-contained, re-renderable Markdown twin. Needs the optional ``[ocr]``
   extra (Kreuzberg); returns 503 with an install hint when it is absent.
 
@@ -52,7 +52,7 @@ Usage Example
 
 Author
 ------
-Warith Harchaoui, Ph.D. — https://linkedin.com/in/warith-harchaoui/
+Warith Harchaoui, Ph.D., https://linkedin.com/in/warith-harchaoui/
 """
 
 from __future__ import annotations

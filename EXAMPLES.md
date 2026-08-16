@@ -240,7 +240,7 @@ md2docx report.md
 
 Go the *other* way: turn a finished document back into an editable
 Markdown source. `md2star twin` recovers prose + GFM tables, scrapes
-every embedded image out to an `assets/` folder, and re-links them —
+every embedded image out to an `assets/` folder, and re-links them,
 so the result is a real source you can edit and re-render, not a flat
 text dump. Works on **any PDF, or anything LibreOffice can convert to
 one** (`.docx`, `.pptx`, `.odt`, `.rtf`, `.html`, …). Needs the `[ocr]`

@@ -1,4 +1,4 @@
-"""Click front-end for md2star — a modern alternative to the argparse CLI.
+"""Click front-end for md2star, a modern alternative to the argparse CLI.
 
 md2star's primary command-line surface is argparse-based (``md2docx`` /
 ``md2pptx`` / ``md2pdf`` / ``md2star …``), which is what forwards unknown flags

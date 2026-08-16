@@ -1,4 +1,4 @@
-"""md2star — typed exceptions for the CLI / pipeline.
+"""md2star: typed exceptions for the CLI / pipeline.
 
 Two purposes:
 

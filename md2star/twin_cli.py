@@ -1,9 +1,9 @@
-"""``md2star twin`` — read any document back into an editable Markdown twin.
+"""``md2star twin``: read any document back into an editable Markdown twin.
 
 The forward path turns Markdown into a polished DOCX/PPTX/PDF. This is the
 inverse *as a document*, not just as text: given a PDF (or anything LibreOffice
 can convert to one), it recovers prose + GFM tables, scrapes every embedded
-raster back out as PNGs, and — with ``--diagrams`` — re-authors node-and-edge
+raster back out as PNGs, and (with ``--diagrams``) re-authors node-and-edge
 figures as Mermaid via the target-matching eyeball loop. The result is a
 ``<stem>.md`` plus an ``assets/`` folder you can edit and re-render.
 

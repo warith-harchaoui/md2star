@@ -12,11 +12,11 @@ The split it enforces is deliberate: **diagnostics** (warnings, errors,
 progress narration) go through this logging surface to *stderr*, while program
 **output** (a rendered document path, the ``doctor --json`` payload, the
 ``templates list`` table) stays on ``print``/*stdout*. Keeping the two streams
-separate is what lets ``md2star ... | some-tool`` keep working — a warning must
+separate is what lets ``md2star ... | some-tool`` keep working, a warning must
 never land in the piped payload.
 
-The actual logging setup is delegated to :func:`os_helper.init_logging` — the
-suite's shared logging primitive — in its CLI-friendly mode: a *named* logger
+The actual logging setup is delegated to :func:`os_helper.init_logging`, the
+suite's shared logging primitive, in its CLI-friendly mode: a *named* logger
 (``"md2star"``), a bare ``%(message)s`` format, a **live** stderr handler that
 re-resolves ``sys.stderr`` on each emit (so pytest's ``capsys`` and any stream
 redirection keep working), idempotent so repeated calls never double-print, and

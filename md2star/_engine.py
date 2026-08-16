@@ -1,7 +1,7 @@
 """Lazy accessor for md2star's resolved LLM/VLM engine descriptor.
 
-md2star's three opt-in AI passes — the Markdown syntax lint, empty-alt-text
-drafting, and diagram/figure reconstruction — all route their model calls
+md2star's three opt-in AI passes, the Markdown syntax lint, empty-alt-text
+drafting, and diagram/figure reconstruction, all route their model calls
 through ``best_engine_ai_helper.llm.chat``. Which backend and model those calls
 use is decided *once*, by the suite's brief -> engine contract:
 
@@ -12,7 +12,7 @@ use is decided *once*, by the suite's brief -> engine contract:
   ``md2star/llm.engine.yaml``; every later run just loads the engine file.
 
 This module owns the single lazy cache of that descriptor so the resolution
-happens at most once per process and never at import time — the first AI pass to
+happens at most once per process and never at import time, the first AI pass to
 run triggers it, and a conversion that uses no AI pass never touches it. There is
 no hard-coded model tag anywhere in the package; the tag lives only in the
 resolved engine file.

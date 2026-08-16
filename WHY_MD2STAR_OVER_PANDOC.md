@@ -85,9 +85,9 @@ never lost.
 Pandoc does not do this. Its readers/writers are format-to-format on
 structured inputs; it does not OCR a scanned PDF, scrape rasters, or
 reconstruct diagrams. Reaching for "just use Pandoc" here means reaching for
-an entirely *different* toolchain (Kreuzberg, OCR, a VLM, and a
-render/compare loop), which is exactly the pipeline md2star already assembles
-and tests.
+an entirely *different* toolchain (Kreuzberg, optical character recognition,
+a vision-language model, and a render/compare loop), which is exactly the
+pipeline md2star already assembles and tests.
 
 And the forward and reverse paths are wired together into a **guarantee**, not
 a vibe: `md → docx → pdf → text` is the exact identity `g(f(x)) = x` for

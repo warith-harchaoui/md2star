@@ -18,7 +18,7 @@ Cache layout::
     ├── cell/             # cell-fitted images, keyed by source-path MD5
     └── mermaid/          # rendered mermaid PNGs + resolved config JSON
 
-The hash-keyed filenames make collisions across users impossible — two
+The hash-keyed filenames make collisions across users impossible: two
 different source files with the same basename do not stomp each other.
 
 Usage

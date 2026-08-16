@@ -31,7 +31,7 @@ graph TD;
 
 ## 🐍 1. Python Preprocessing Engine
 
-**Entry point:** [`md2star/cli.py`](../md2star/cli.py) — the single Python module that registers the `md2docx`, `md2pptx`, `md2pdf`, and `md2star` console scripts. A second front-end, [`md2star/click_cli.py`](../md2star/click_cli.py) (`md2star-x docx|pptx|pdf|gui|doctor`), is a thin click adapter that reconstructs the flag list and delegates to the same `md2star.cli._convert`, so the two surfaces can never drift.
+**Entry point:** [`md2star/cli.py`](../md2star/cli.py): the single Python module that registers the `md2docx`, `md2pptx`, `md2pdf`, and `md2star` console scripts. A second front-end, [`md2star/click_cli.py`](../md2star/click_cli.py) (`md2star-x docx|pptx|pdf|gui|doctor`), is a thin click adapter that reconstructs the flag list and delegates to the same `md2star.cli._convert`, so the two surfaces can never drift.
 
 **Implementation:** [`md2star/preprocessing/`](../md2star/preprocessing/) (9 modules; run `wc -l md2star/preprocessing/*.py` for an up-to-date total)
 
@@ -44,7 +44,7 @@ Runs **before** Pandoc touches the file. The CLI reads the input, hands off to `
 | `pipeline.py` | Orchestrator: runs phases in order, handles list-spacing, fenced-block tracking, Mermaid extraction, and PPTX slide isolation (images **and** tables) |
 | `tables.py` | `<table>` HTML → Pandoc pipe-table; **pipe-table separator normalization** (proportional dashes, soft-break injection, long-cell `<br/>` wrap) |
 | `images.py` | `{width=100%}` injection, in-cell physical resize (Pillow), `http(s)://` image download, **relative-path absolutization** so `md2docx subdir/file.md` resolves images regardless of cwd |
-| `mermaid.py` | Local diagram rendering via `npx @mermaid-js/mermaid-cli` (cached under `$XDG_CACHE_HOME/md2star/mermaid/` by MD5; cache key includes the active template body font — see "Mermaid font cache invariant" below) |
+| `mermaid.py` | Local diagram rendering via `npx @mermaid-js/mermaid-cli` (cached under `$XDG_CACHE_HOME/md2star/mermaid/` by MD5; cache key includes the active template body font, see "Mermaid font cache invariant" below) |
 | `language.py` | `langdetect` → `lang` + `date_format` YAML injection |
 | `lint.py` | Auto-enabled Ollama-based syntax fixer (text-only `gemma4:e2b-mlx` on macOS / `gemma4:e2b` elsewhere); pulls the model on first use if missing |
 | `math.py` | Unwraps backtick-wrapped LaTeX math (``` `$x^2$` ``` → `$x^2$`); merges mixed prose+math spans into a unified `$..$` expression; exposes `MATH_FORMULA_RE` for other passes to protect math chunks |
@@ -80,7 +80,7 @@ template's `word/styles.xml` (`md2star.preprocessing.mermaid._template_body_font
 and spliced into the mermaid theme so rendered diagrams visually match
 the surrounding prose. Practical consequence: **changing the reference
 template's body font invalidates every previously cached mermaid PNG.**
-This is intentional — without the font in the key, you would see stale
+This is intentional: without the font in the key, you would see stale
 diagrams in the wrong typeface after a template swap. If you ever need to
 force a re-render, `md2star clear-cache` is the escape hatch.
 
@@ -98,7 +98,7 @@ Intercepts the Pandoc AST during conversion and performs five operations:
 | # | Operation | Description |
 |---|-----------|-------------|
 | 1 | **Title extraction** | Captures the first `# H1 Heading` and promotes it to document `title` metadata. Removes the heading from the body to avoid duplication. |
-| 2 | **Author handling** | Reads `author` metadata when present and folds it into the subtitle. No placeholder is shipped by default — pass `--author "Name"` per-document. |
+| 2 | **Author handling** | Reads `author` metadata when present and folds it into the subtitle. No placeholder is shipped by default: pass `--author "Name"` per-document. |
 | 3 | **Date localization** | Maps `lang` to built-in translation dictionaries (7 languages: fr, es, de, it, pt, nl, ru). Replaces `%A` and `%B` in `date_format` with localized day/month names. Does **not** rely on `os.setlocale()`. |
 | 4 | **Subtitle injection** | Builds an "Author, Date" string, wraps it in `custom-style="Subtitle"`, and inserts it after the title. |
 | 5 | **Heading ID cleanup** | Strips automatic heading identifiers (`{#my-heading}`) which are meaningless in Office exports. |
@@ -133,9 +133,9 @@ much heavier than the core conversion pipeline needs.
 ### Unit tests (pytest)
 
 **Paths:**
-- [`tests/test_preprocessing.py`](../tests/test_preprocessing.py) — the preprocessor pipeline (~80 tests)
-- [`tests/test_lua_filter.py`](../tests/test_lua_filter.py) — drives `pandoc --lua-filter` against fixture Markdown (skipped if pandoc is not on PATH)
-- [`tests/test_postprocess.py`](../tests/test_postprocess.py) — `inject_table_styles` round-trip on a synthesised DOCX zip
+- [`tests/test_preprocessing.py`](../tests/test_preprocessing.py): the preprocessor pipeline (~80 tests)
+- [`tests/test_lua_filter.py`](../tests/test_lua_filter.py): drives `pandoc --lua-filter` against fixture Markdown (skipped if pandoc is not on PATH)
+- [`tests/test_postprocess.py`](../tests/test_postprocess.py): `inject_table_styles` round-trip on a synthesised DOCX zip
 
 | Test class | Coverage |
 |------------|----------|
@@ -174,19 +174,19 @@ make test
 Beyond the preprocessor unit tests, the suite also guards the newer
 surfaces and behavioural invariants:
 
-- **Surfaces** — `tests/test_click_cli.py` (the `md2star-x` click
+- **Surfaces**: `tests/test_click_cli.py` (the `md2star-x` click
   front-end), `tests/test_api.py` / `tests/test_mcp.py` (the FastAPI +
   FastAPI-MCP servers, skipped cleanly when the `api`/`mcp` deps are
   absent), and `tests/test_skill.py` (the agent skill).
-- **Idempotence** — `tests/test_idempotence.py` and
+- **Idempotence**: `tests/test_idempotence.py` and
   `tests/test_roundtrip.py` assert the `md → docx → md` fixed point
   (`g(g(x)) == g(x)`); `tests/test_roundtrip_ocr.py` (marker `slow`)
   proves the exact `md → docx → pdf → text` identity `g(f(x)) = x` via
   LibreOffice + kreuzberg.
-- **AI-eval** — `tests/test_ai_eval.py` (marker `ai_eval`) is a quality
+- **AI-eval**: `tests/test_ai_eval.py` (marker `ai_eval`) is a quality
   eval of the opt-in `--lint` / alt-text passes against a real local
   Ollama daemon; it skips cleanly in CI where no daemon runs.
-- **Skill triggers** — `scripts/check_triggers.py` (driven by
+- **Skill triggers**: `scripts/check_triggers.py` (driven by
   `tests/test_skill.py`, also a standalone CI step) asserts that
   `skills/md2star/SKILL.md`'s `description` covers every required
   trigger bucket plus an explicit SKIP clause, so the skill neither
@@ -202,7 +202,7 @@ md2star/
 │   ├── __init__.py                   # Re-exports preprocess_markdown, __version__
 │   ├── cli.py                        # md2docx / md2pptx / md2pdf / md2star console scripts (argparse)
 │   ├── click_cli.py                  # md2star-x docx|pptx|pdf|gui|doctor (click front-end → cli._convert)
-│   ├── api.py                        # FastAPI HTTP surface (md2star-api; [api] extra) — /gui, /health, /doctor, /convert
+│   ├── api.py                        # FastAPI HTTP surface (md2star-api; [api] extra): /gui, /health, /doctor, /convert
 │   ├── gui.py                        # Minimal single-page /gui bench served by api.py (self-contained HTML)
 │   ├── mcp.py                        # FastAPI-MCP server (md2star-mcp; [mcp] extra)
 │   ├── cache.py                      # $XDG_CACHE_HOME/md2star/ resolver
@@ -272,7 +272,7 @@ md2star/
 The Overleaf-style local web editor was **restored in v2.6.0**,
 **bundled in the core wheel** (no `md2star[gui]` extra needed).
 Invoke it with `md2star gui`. The server module is
-`md2star/gui_server.py` — pure Python stdlib `http.server` bound to
+`md2star/gui_server.py`, pure Python stdlib `http.server` bound to
 `127.0.0.1`, adding **zero** extra Python dependencies. The entire
 frontend (PDF.js, CodeMirror, Tailwind, the three-Roboto fonts) is
 vendored under `md2star/data/gui/`, which is why the wheel grew from
@@ -286,7 +286,7 @@ Markdown→PDF editor with live PDF preview (PDF.js).
 
 Separate from the bundled editor, `minimal-gui/server.py` is a
 single-file, zero-dependency stdlib preview server that exposes
-`md → PDF` on one `/render` endpoint — a hackable, embeddable starting
+`md → PDF` on one `/render` endpoint: a hackable, embeddable starting
 point when the full `md2star gui` is overkill. Run it straight from the
 repo with `python3 minimal-gui/server.py`. (This directory was renamed
 from the earlier `overleaf/`; the "Overleaf-style" adjective for the

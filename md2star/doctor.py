@@ -1,11 +1,11 @@
-"""md2star doctor — environment diagnostics.
+"""md2star doctor, environment diagnostics.
 
 Two layers, separated on purpose:
 
 1. **Pure logic** (``run_checks``): walks the dependency list, calls
    ``shutil.which`` / ``subprocess.run`` / filesystem probes, returns a
    structured :class:`Report` dataclass. No printing, no ``sys.exit``,
-   no colour — easy to unit-test via ``monkeypatch``.
+   no colour, easy to unit-test via ``monkeypatch``.
 
 2. **CLI renderer** (``main``): formats a :class:`Report` for a terminal,
    prints to stdout, and picks an exit code. Exits ``0`` unless a

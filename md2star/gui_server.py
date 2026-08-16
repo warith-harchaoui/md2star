@@ -1,11 +1,11 @@
-"""md2star local GUI server — Overleaf-style Markdown editor with live PDF preview.
+"""md2star local GUI server, Overleaf-style Markdown editor with live PDF preview.
 
 Launches a localhost-only HTTP server that fronts the existing
 ``md2star`` CLI: the browser sends Markdown + a small JSON options blob;
 the server invokes ``_convert(fmt, ...)`` from :mod:`md2star.cli` against
 a temp file and streams the resulting bytes back. The frontend renders
-the PDF result inline via PDF.js (no DOCX/PPTX rendering in the browser
-— those formats are simply offered as a download).
+the PDF result inline via PDF.js (no DOCX/PPTX rendering in the browser;
+those formats are simply offered as a download).
 
 Endpoints
 ---------
@@ -20,7 +20,7 @@ Endpoints
 
 The server binds to ``127.0.0.1`` only (no LAN exposure) and uses
 ``ThreadingHTTPServer`` so a slow ``/render`` does not block fast
-``/preview`` reads. There is no auth and no sandbox — it is intended
+``/preview`` reads. There is no auth and no sandbox, it is intended
 to run on the same machine as the user invoking it, just like Jupyter
 or Vite's dev server.
 

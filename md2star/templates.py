@@ -1,4 +1,4 @@
-"""``md2star templates {list,path}`` — inspect bundled / cached / per-project templates.
+"""``md2star templates {list,path}``: inspect bundled / cached / per-project templates.
 
 Module summary
 --------------
@@ -6,12 +6,12 @@ A diagnostic CLI verb that mirrors the resolution order of
 ``md2star.cli._resolve_reference_doc`` without actually converting
 anything. Two sub-verbs:
 
-* ``md2star templates list`` — prints a table of every template
+* ``md2star templates list``: prints a table of every template
   resolution candidate (per-project / cached / bundled) and
   whether it exists. Distinguishes ``docx`` from ``pptx`` rows so
   you can see at a glance which format is missing its template.
 
-* ``md2star templates path [--fmt {docx,pptx}] [INPUT]`` — prints
+* ``md2star templates path [--fmt {docx,pptx}] [INPUT]``: prints
   the absolute filesystem path of the template that md2star WOULD
   use for the given input (default: current directory + ``docx``).
   One line, parseable by shell scripts.

@@ -13,7 +13,7 @@ Gated by the same ``--lint`` flag as :mod:`md2star.preprocessing.lint`:
 Language + context (aligned with the suite's ``front-vision`` skill):
 
 * The alt text is written in the **document's own language**, auto-detected from
-  the surrounding prose (any language, not a hardcoded EN/FR toggle) — a French
+  the surrounding prose (any language, not a hardcoded EN/FR toggle), a French
   document gets French alt text. English is the fallback when detection fails.
 * Each image's **surrounding text** (nearest heading + nearby prose) is passed
   to the model so it describes what the image *means* in place, not just its

@@ -2,15 +2,15 @@
 
 Three concerns live here:
 
-1. **Size capping** — bare ``![](...)`` images get an aspect-ratio-aware
+1. **Size capping**, bare ``![](...)`` images get an aspect-ratio-aware
    ``{width=…cm}`` or ``{height=…cm}`` block appended so the image fits an
    A4 page in *both* dimensions. URL/data refs and unreadable files fall
    back to ``{width=100%}``.
-2. **In-cell resize** — images embedded inside pipe-table cells are physically
+2. **In-cell resize**, images embedded inside pipe-table cells are physically
    downscaled to a small pixel ceiling. Pandoc's ``{width=100%}`` attribute
    refers to the *full page width*, not the cell width, so a hard resize is
    the only reliable way to keep cell images from overflowing.
-3. **Remote download** — HTTP(S) image URLs are fetched to local temp files
+3. **Remote download**, HTTP(S) image URLs are fetched to local temp files
    so Pandoc can embed them in the OOXML output (it does not reliably embed
    network URLs).
 

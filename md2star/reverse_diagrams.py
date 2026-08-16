@@ -3,7 +3,7 @@
 The deterministic twin core (:mod:`md2star.reverse`) scrapes every raster a
 document carries and, by default, re-embeds each one verbatim as a PNG. This
 module is the opt-in layer that makes the twin *editable*: it looks at each
-scraped raster with a local vision model and decides what it really is —
+scraped raster with a local vision model and decides what it really is:
 
 * a **photo** (a screenshot, a portrait, a product shot): keep the PNG as-is;
 * a **diagram** expressible as a graph (a flowchart, a sequence/box-and-arrow
@@ -14,7 +14,7 @@ scraped raster with a local vision model and decides what it really is —
   **SVG** written alongside the scraped PNG, so the figure becomes a
   first-class, hand-tweakable vector asset instead of a flattened raster.
 
-Reconstruction is verified, not trusted. Each candidate — Mermaid or SVG — is
+Reconstruction is verified, not trusted. Each candidate (Mermaid or SVG) is
 put through a **target-matching Ralph Eyeball Loop**: render the candidate (the
 vendored ``mmdc`` for Mermaid, a detected SVG rasteriser for SVG), show *both*
 the candidate render and the original scraped image to the vision model, ask
@@ -25,7 +25,7 @@ as a caption fallback, so a poor reconstruction never loses the ground truth.
 
 Everything here is **best-effort and never load-bearing**: if the engine cannot
 be resolved, the backend/vision model is unreachable, ``mmdc`` or an SVG
-rasteriser is absent, every image degrades to the plain scraped PNG — exactly
+rasteriser is absent, every image degrades to the plain scraped PNG, exactly
 what the deterministic core would have produced. The backend and vision model
 come entirely from md2star's resolved engine descriptor (:mod:`md2star._engine`,
 the committed ``llm.brief.yaml`` → per-machine ``llm.engine.yaml`` contract);

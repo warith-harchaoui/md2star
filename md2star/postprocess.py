@@ -1,9 +1,9 @@
-"""postprocess.py — Re-inject Pandoc-stripped styles into the output DOCX.
+"""postprocess.py: re-inject Pandoc-stripped styles into the output DOCX.
 
 Pandoc's DOCX writer reads the reference template's ``word/styles.xml`` but
 rewrites it from its own catalogue on output. Paragraph and character styles
 defined in the reference *that Pandoc happens to use* survive; arbitrary
-custom-styled **table** styles do not — Pandoc drops them, leaving the
+custom-styled **table** styles do not, Pandoc drops them, leaving the
 ``<w:tblStyle w:val="X"/>`` references in the body pointing at nothing.
 
 This module reopens the produced ``.docx`` zip, locates ``word/styles.xml``,

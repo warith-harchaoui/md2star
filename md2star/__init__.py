@@ -1,4 +1,4 @@
-"""md2star — Markdown → DOCX/PPTX/PDF bridge built on Pandoc.
+"""md2star: Markdown → DOCX/PPTX/PDF bridge built on Pandoc.
 
 Module summary
 --------------

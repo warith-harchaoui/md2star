@@ -18,7 +18,7 @@ When enabled, :func:`lint_with_llm` sends the document to the model via
 :func:`best_engine_ai_helper.llm.chat` (``kind="llm"``, temperature 0) and keeps
 the response only if it passes a coarse length-sanity check (0.5×–2× of the
 original). Any failure (transport error, suspicious output) falls back to the
-original content unchanged — the lint is never load-bearing for a successful
+original content unchanged, the lint is never load-bearing for a successful
 conversion.
 
 The backend and model come entirely from the resolved engine descriptor

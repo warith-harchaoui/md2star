@@ -3,17 +3,17 @@
 The phase order matters and is not trivially permutable. From outermost to
 innermost:
 
-1. (opt-in) LLM lint — fix syntax-level errors before anything else parses.
-2. Download remote images — replace ``http(s)://`` refs with local paths.
-3. HTML table conversion — must run before line-splitting so multi-line
+1. (opt-in) LLM lint: fix syntax-level errors before anything else parses.
+2. Download remote images: replace ``http(s)://`` refs with local paths.
+3. HTML table conversion: must run before line-splitting so multi-line
    ``<table>`` blocks are still in one piece.
-4. Absolutize image paths — rewrite relative ``![](path)`` refs to absolute
+4. Absolutize image paths: rewrite relative ``![](path)`` refs to absolute
    paths so the temp Markdown is portable across cwds (URLs and absolute
    paths pass through untouched).
-5. Process image assets — render SVGs to PNG (via rsvg-convert or
+5. Process image assets: render SVGs to PNG (via rsvg-convert or
    cairosvg) and downscale oversized rasters with Gaussian-prefiltered
    Lanczos resampling so Pandoc gets clean, reasonably-sized media.
-6. Language detection — inject ``lang`` / ``date_format`` into YAML.
+6. Language detection: inject ``lang`` / ``date_format`` into YAML.
 7. Line-by-line pass: math-in-code unwrap, Mermaid render, blank-line-
    before-list normalization. Fenced code blocks are skipped wholesale so
    their content stays verbatim.
@@ -21,7 +21,7 @@ innermost:
 9. Pipe-table separator normalization (proportional dashes + trailing blank
    line) so Pandoc honours per-column width hints in DOCX/PPTX.
 10. ``{width=100%}`` injection on non-cell images.
-11. PPTX slide isolation — split images off slides containing tables.
+11. PPTX slide isolation: split images off slides containing tables.
 
 Each phase has a stable name (see :data:`PHASES`) so the CLI ``--skip-phase``
 flag can address it directly. Names are deliberately snake_case and stable

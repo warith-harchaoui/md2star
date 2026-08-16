@@ -6,9 +6,9 @@ own submodule so the pipeline is easy to test, extend, or swap.
 
 Public API
 ----------
-- :func:`preprocess_markdown`  — the orchestrator (only thing wrappers call)
-- :func:`render_mermaid_local` — re-exported for tests/mocks
-- :data:`PHASES`               — canonical phase-name set (for ``--skip-phase``)
+- :func:`preprocess_markdown`: the orchestrator (only thing wrappers call)
+- :func:`render_mermaid_local`: re-exported for tests/mocks
+- :data:`PHASES`: canonical phase-name set (for ``--skip-phase``)
 
 
 Author

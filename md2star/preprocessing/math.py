@@ -1,6 +1,6 @@
 """LaTeX math handling for the intermediate Markdown.
 
-Authors often wrap an inline LaTeX formula in backticks — either by reflex
+Authors often wrap an inline LaTeX formula in backticks, either by reflex
 (``\\`$x^2$\\```) or because they want to mix prose-style identifiers with
 math (``\\`quality_threshold $\\in [0,1]$\\```). Pandoc treats backtick
 content as a verbatim code span, so the math is rendered as monospace
