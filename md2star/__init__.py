@@ -25,7 +25,7 @@ from __future__ import annotations
 # so the wheel metadata, ``md2star --version``, the HTTP/MCP surfaces and
 # the GUI banner can never drift apart again — bump it here and nowhere
 # else. (v2.5.1/v2.5.2 drifted precisely because two copies existed.)
-__version__: str = "3.1.1"
+__version__: str = "3.1.2"
 
 from .preprocessing import (
     fill_empty_alt_text,

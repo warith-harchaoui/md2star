@@ -4,16 +4,23 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [3.1.2] — 2026-08-17
 
 ### Fixed
 - **API**: `/convert` and `/extract` leaked their per-request temp directory
   on every failure. Cleanup was registered via `background.add_task(...)`
-  before the risky work — which looks right, but FastAPI silently drops
+  before the risky work, which looks right, but FastAPI silently drops
   tasks already added to the injected `BackgroundTasks` object when the
   endpoint raises rather than returns a `Response` (verified empirically).
   Both endpoints now clean up explicitly in their `except` blocks; the
   background task is only registered right before a successful return.
+
+### Changed
+- Removed punctuation-dash asides (em/en dashes used mid-sentence) from
+  every module docstring and the handful of documentation files that had
+  them, per the project's writing charter. One unglossed acronym (VLM) in
+  `WHY_MD2STAR_OVER_PANDOC.md` spelled out on first use. Prose only, no
+  behavior change.
 
 ## [3.1.1] — 2026-08-15
 
