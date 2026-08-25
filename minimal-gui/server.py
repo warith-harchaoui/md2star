@@ -186,12 +186,13 @@ def render_markdown_to_pdf(markdown: str, fmt: str = "docx") -> bytes:
         if alt_bin is not None:
             md_proc = subprocess.run(
                 [alt_bin, str(md_path), "-o", str(out_path)],
-                capture_output=True, text=True, timeout=60,
+                capture_output=True,
+                text=True,
+                timeout=60,
             )
         if md_proc.returncode != 0 or not out_path.is_file():
             raise RuntimeError(
-                f"md2{fmt} step failed:\n"
-                + (md_proc.stderr or md_proc.stdout or "").strip()
+                f"md2{fmt} step failed:\n" + (md_proc.stderr or md_proc.stdout or "").strip()
             )
 
     # ── soffice → PDF ──────────────────────────────────────────────
@@ -213,8 +214,10 @@ def render_markdown_to_pdf(markdown: str, fmt: str = "docx") -> bytes:
             soffice,
             "--headless",
             f"-env:UserInstallation=file://{profile_dir}",
-            "--convert-to", convert_target,
-            "--outdir", str(job_dir),
+            "--convert-to",
+            convert_target,
+            "--outdir",
+            str(job_dir),
             str(out_path),
         ],
         capture_output=True,
@@ -283,8 +286,7 @@ class OverleafHandler(http.server.BaseHTTPRequestHandler):
             return
         fmt: str = (payload.get("format") or "docx").lower()
         if fmt not in ("docx", "pptx"):
-            self._send_json(HTTPStatus.BAD_REQUEST,
-                            {"error": f"unsupported format: {fmt}"})
+            self._send_json(HTTPStatus.BAD_REQUEST, {"error": f"unsupported format: {fmt}"})
             return
         try:
             with RENDER_LOCK:
@@ -323,6 +325,7 @@ class OverleafHandler(http.server.BaseHTTPRequestHandler):
         ``assets/``. The first match wins.
         """
         from urllib.parse import parse_qs, urlparse
+
         qs: dict[str, list[str]] = parse_qs(urlparse(self.path).query)
         kind: str = (qs.get("kind") or ["docx"])[0].lower()
         stem: str = "example_pptx" if kind == "pptx" else "example"
@@ -330,6 +333,7 @@ class OverleafHandler(http.server.BaseHTTPRequestHandler):
         candidates: list[Path] = []
         try:
             import md2star  # type: ignore
+
             pkg_dir: Path = Path(md2star.__file__).resolve().parent
             candidates.append(pkg_dir / "data" / f"{stem}.md")
         except Exception:
@@ -380,15 +384,20 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
-        "--bind", default="127.0.0.1",
+        "--bind",
+        default="127.0.0.1",
         help="Address to bind (default: 127.0.0.1 — loopback only).",
     )
     parser.add_argument(
-        "--port", type=int, default=8765,
+        "--port",
+        type=int,
+        default=8765,
         help="Port to bind (default: 8765).",
     )
     parser.add_argument(
-        "-q", "--quiet", action="store_true",
+        "-q",
+        "--quiet",
+        action="store_true",
         help="Suppress access logging.",
     )
     args: argparse.Namespace = parser.parse_args(argv)
@@ -416,24 +425,29 @@ def main(argv: list[str] | None = None) -> int:
     if args.bind != "127.0.0.1":
         bar = "═" * 64
         osh.warning(
-            "\n" + bar +
-            "\n  This preview server is bound to a NON-LOOPBACK address." +
-            f"\n     URL: http://{args.bind}:{args.port}/" +
-            "\n  It has NO AUTHENTICATION and runs md2docx against any markdown" +
-            "\n     a client sends — anyone who can reach this port can drive" +
-            "\n     LibreOffice on this machine." +
-            "\n  Appropriate ONLY for trusted local-network use. Otherwise bind" +
-            "\n     127.0.0.1 (the default) and use SSH port-forwarding." +
-            "\n" + bar
+            "\n"
+            + bar
+            + "\n  This preview server is bound to a NON-LOOPBACK address."
+            + f"\n     URL: http://{args.bind}:{args.port}/"
+            + "\n  It has NO AUTHENTICATION and runs md2docx against any markdown"
+            + "\n     a client sends — anyone who can reach this port can drive"
+            + "\n     LibreOffice on this machine."
+            + "\n  Appropriate ONLY for trusted local-network use. Otherwise bind"
+            + "\n     127.0.0.1 (the default) and use SSH port-forwarding."
+            + "\n"
+            + bar
         )
 
     server: http.server.ThreadingHTTPServer = http.server.ThreadingHTTPServer(
-        (args.bind, args.port), OverleafHandler,
+        (args.bind, args.port),
+        OverleafHandler,
     )
     url: str = f"http://{args.bind}:{args.port}/"
     osh.info(
         "md2star minimal GUI — serving on %s (static: %s, work: %s). Ctrl-C to stop.",
-        url, STATIC_DIR, WORK_DIR,
+        url,
+        STATIC_DIR,
+        WORK_DIR,
     )
     try:
         server.serve_forever()

@@ -58,8 +58,12 @@ def test_confinement_allows_inside_and_blocks_escapes(open_root) -> None:
 
     # Every escape attempt returns None.
     for bad in [
-        "../escape.md", "sub/../../escape.md", "../../../etc/passwd",   # traversal
-        "/etc/passwd", "/tmp/notes.md", "C:\\Windows\\System32\\foo",   # absolute
+        "../escape.md",
+        "sub/../../escape.md",
+        "../../../etc/passwd",  # traversal
+        "/etc/passwd",
+        "/tmp/notes.md",
+        "C:\\Windows\\System32\\foo",  # absolute
     ]:
         assert gui_server._safe_within_root(bad) is None, bad
 

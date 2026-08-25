@@ -79,8 +79,9 @@ class TestRoundTrip:
         from md2star.cli import _convert
 
         src_md = tmp_path / "in.md"
-        src_md.write_text("# Heading One\n\nA **bold** word and a list:\n\n- alpha\n- beta\n",
-                          encoding="utf-8")
+        src_md.write_text(
+            "# Heading One\n\nA **bold** word and a list:\n\n- alpha\n- beta\n", encoding="utf-8"
+        )
         docx = tmp_path / "out.docx"
         assert _convert("docx", [str(src_md), "-o", str(docx)]) == 0
         assert docx.is_file()

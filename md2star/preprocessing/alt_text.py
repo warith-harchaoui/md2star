@@ -65,13 +65,34 @@ _URL_PREFIXES = ("http://", "https://", "//", "data:", "file://")
 # detected language (not a bilingual EN/FR lock). Codes we can't name fall back
 # to English so a strange language never breaks the prompt.
 _LANG_NAMES: dict[str, str] = {
-    "en": "English", "fr": "French", "es": "Spanish", "de": "German",
-    "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "ru": "Russian",
-    "zh": "Chinese", "ja": "Japanese", "ko": "Korean", "ar": "Arabic",
-    "hi": "Hindi", "tr": "Turkish", "pl": "Polish", "sv": "Swedish",
-    "no": "Norwegian", "da": "Danish", "fi": "Finnish", "cs": "Czech",
-    "el": "Greek", "he": "Hebrew", "id": "Indonesian", "uk": "Ukrainian",
-    "ro": "Romanian", "hu": "Hungarian", "vi": "Vietnamese", "th": "Thai",
+    "en": "English",
+    "fr": "French",
+    "es": "Spanish",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "nl": "Dutch",
+    "ru": "Russian",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "ar": "Arabic",
+    "hi": "Hindi",
+    "tr": "Turkish",
+    "pl": "Polish",
+    "sv": "Swedish",
+    "no": "Norwegian",
+    "da": "Danish",
+    "fi": "Finnish",
+    "cs": "Czech",
+    "el": "Greek",
+    "he": "Hebrew",
+    "id": "Indonesian",
+    "uk": "Ukrainian",
+    "ro": "Romanian",
+    "hu": "Hungarian",
+    "vi": "Vietnamese",
+    "th": "Thai",
 }
 
 
@@ -99,13 +120,14 @@ def _build_alt_prompt(lang_name: str, context: str) -> str:
     ctx_line = (
         f" Surrounding document text (use it to judge what the image means "
         f"in context — do not quote it): {context}"
-        if context else ""
+        if context
+        else ""
     )
     return (
         f"Write concise alt text for this image in {lang_name}, for a screen "
         f"reader.{ctx_line} Follow W3C guidance: under ~125 characters; describe "
         f"the meaning and key information the image conveys (not its visual "
-        f"style); do not start with \"image of\" / \"picture of\" or the "
+        f'style); do not start with "image of" / "picture of" or the '
         f"equivalent in {lang_name}. Reply with the alt text only — no quotes, "
         f"no markdown, no explanation."
     )
@@ -144,10 +166,10 @@ def _surrounding_context(content: str, src: str, window: int = 280) -> str:
         return ""
     # Grab a window either side of the reference and drop the image/link syntax
     # so the model sees prose, not URLs.
-    chunk = content[max(0, pos - window): pos + len(src) + window]
-    chunk = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", chunk)      # images → drop
-    chunk = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", chunk)    # links → label
-    chunk = re.sub(r"[#>*_`~]+", " ", chunk)                  # md punctuation
+    chunk = content[max(0, pos - window) : pos + len(src) + window]
+    chunk = re.sub(r"!\[[^\]]*\]\([^)]*\)", " ", chunk)  # images → drop
+    chunk = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", chunk)  # links → label
+    chunk = re.sub(r"[#>*_`~]+", " ", chunk)  # md punctuation
     chunk = " ".join(chunk.split())
 
     # Prepend the nearest heading before the image for section context.
@@ -329,9 +351,7 @@ def fill_empty_alt_text(
             except OSError as e:
                 # A failed cache write is non-fatal: we still return the alt
                 # text, we just don't persist it for next time.
-                logger.warning(
-                    f"md2star warning: could not cache alt-text for {path}: {e}"
-                )
+                logger.warning(f"md2star warning: could not cache alt-text for {path}: {e}")
 
         # Record what we're applying (fresh or cached) for the run summary.
         drafted.append((src, alt))
@@ -362,6 +382,8 @@ def fill_empty_alt_text(
         lines = "\n".join(f'  {src} → "{alt}"' for src, alt in drafted)
         logger.info(
             "md2star: drafted alt text (%s) for %d image(s):\n%s",
-            lang_name, len(drafted), lines,
+            lang_name,
+            len(drafted),
+            lines,
         )
     return "\n".join(out_lines)

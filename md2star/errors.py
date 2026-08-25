@@ -73,8 +73,7 @@ class MissingDependencyError(Md2starError):
     """
 
     default_hint = (
-        "Run `md2star doctor` for a full environment report and install "
-        "instructions per platform."
+        "Run `md2star doctor` for a full environment report and install instructions per platform."
     )
 
 

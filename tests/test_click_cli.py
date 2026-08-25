@@ -23,17 +23,33 @@ def test_argv_translation_covers_all_option_kinds() -> None:
     argv = click_cli._argv_from_options(
         "doc.md",
         {
-            "output": "out.docx", "author": "Ada", "bib": "refs.bib",
-            "bibliography_name": "Works", "lang": "en", "date": "2026",
-            "reference_doc": "tpl.docx", "skip_phase": "mermaid",
-            "offline": True, "no_remote_templates": True, "allow_remote_images": True,
-            "verbose": True, "quiet": False, "lint": True,
+            "output": "out.docx",
+            "author": "Ada",
+            "bib": "refs.bib",
+            "bibliography_name": "Works",
+            "lang": "en",
+            "date": "2026",
+            "reference_doc": "tpl.docx",
+            "skip_phase": "mermaid",
+            "offline": True,
+            "no_remote_templates": True,
+            "allow_remote_images": True,
+            "verbose": True,
+            "quiet": False,
+            "lint": True,
         },
     )
     assert argv[0] == "doc.md"
-    for flag, val in [("--output", "out.docx"), ("--author", "Ada"), ("--bib", "refs.bib"),
-                      ("--bibliography-name", "Works"), ("--lang", "en"), ("--date", "2026"),
-                      ("--reference-doc", "tpl.docx"), ("--skip-phase", "mermaid")]:
+    for flag, val in [
+        ("--output", "out.docx"),
+        ("--author", "Ada"),
+        ("--bib", "refs.bib"),
+        ("--bibliography-name", "Works"),
+        ("--lang", "en"),
+        ("--date", "2026"),
+        ("--reference-doc", "tpl.docx"),
+        ("--skip-phase", "mermaid"),
+    ]:
         assert argv[argv.index(flag) + 1] == val
     assert "--offline" in argv and "--allow-remote-images" in argv
     assert "--verbose" in argv and "--quiet" not in argv
@@ -50,7 +66,9 @@ def test_format_command_delegates_and_propagates(monkeypatch, tmp_path, fmt) -> 
     """Each format command calls _convert(fmt, …) and mirrors its exit code."""
     rc_box = {"rc": 0}
     calls: list[tuple[str, list[str]]] = []
-    monkeypatch.setattr(click_cli, "_convert", lambda f, argv: calls.append((f, argv)) or rc_box["rc"])
+    monkeypatch.setattr(
+        click_cli, "_convert", lambda f, argv: calls.append((f, argv)) or rc_box["rc"]
+    )
     src = tmp_path / "in.md"
     src.write_text("# hi\n")
 
@@ -84,7 +102,9 @@ def test_gui_doctor_and_main_wrapper(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(gs, "main", lambda argv: seen.__setitem__("gui", argv) or 0)
     monkeypatch.setattr(doc, "main", lambda argv: seen.__setitem__("doctor", argv) or 0)
 
-    assert CliRunner().invoke(click_cli.cli, ["gui", "--port", "9000", "--no-browser"]).exit_code == 0
+    assert (
+        CliRunner().invoke(click_cli.cli, ["gui", "--port", "9000", "--no-browser"]).exit_code == 0
+    )
     assert "--port" in seen["gui"] and "9000" in seen["gui"] and "--no-browser" in seen["gui"]
     assert CliRunner().invoke(click_cli.cli, ["doctor", "--json"]).exit_code == 0
     assert seen["doctor"] == ["--json"]

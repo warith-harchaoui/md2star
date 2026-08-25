@@ -47,7 +47,9 @@ class TestTwinCore:
     def test_resolve_images_replaces_placeholder(self, tmp_path: Path) -> None:
         img = reverse.TwinImage(data=b"z", format="png", image_index=0, page_number=1)
         md = "Intro\n\n![](image_0.png)\n\nOutro\n"
-        out = reverse._resolve_images(md, [img], tmp_path / "assets", reverse._default_image_handler)
+        out = reverse._resolve_images(
+            md, [img], tmp_path / "assets", reverse._default_image_handler
+        )
         assert "![](assets/img-p1-0.png)" in out
         assert "image_0.png" not in out  # the placeholder is gone
 
@@ -115,7 +117,9 @@ class TestDiagramParsing:
 
     def test_extract_svg_from_element(self) -> None:
         # The <svg> element is pulled out regardless of surrounding prose/fences.
-        got = reverse_diagrams._extract_svg('Sure:\n```svg\n<svg viewBox="0 0 1 1"><rect/></svg>\n```')
+        got = reverse_diagrams._extract_svg(
+            'Sure:\n```svg\n<svg viewBox="0 0 1 1"><rect/></svg>\n```'
+        )
         assert got == '<svg viewBox="0 0 1 1"><rect/></svg>'
 
     def test_extract_svg_none_without_element(self) -> None:

@@ -118,8 +118,8 @@ pytestmark = [
 # form (English "Saturday, July 18, 2026" or French "18 juillet 2026"). It is the one
 # element the pipeline adds that is absent from the source, so N removes it (step 4).
 _DATE_SUBTITLE = re.compile(
-    r"^(?:\w+,\s+\w+\s+\d{1,2},\s+\d{4}"   # English: Saturday, July 18, 2026
-    r"|\d{1,2}\s+\w+\s+\d{4})$"            # French:  18 juillet 2026
+    r"^(?:\w+,\s+\w+\s+\d{1,2},\s+\d{4}"  # English: Saturday, July 18, 2026
+    r"|\d{1,2}\s+\w+\s+\d{4})$"  # French:  18 juillet 2026
 )
 
 # A line is a bullet if it starts with an ASCII list marker OR LibreOffice's
@@ -138,8 +138,8 @@ _BULLET = re.compile(
 # ``[^label]: text``. The label may be numeric (``[^1]``) or named (``[^aa]``);
 # md2star/LibreOffice renumber every footnote 1, 2, 3\u2026 by reference order, so the
 # label never survives verbatim \u2014 and does not need to (the footnote *text* does).
-_FN_DEF = re.compile(r"(?m)^\[\^[^\]]+\]:\s*(.*)$")   # a definition line; group 1 = its text
-_FN_REF = re.compile(r"\[\^[^\]]+\]")                 # an inline reference in the body
+_FN_DEF = re.compile(r"(?m)^\[\^[^\]]+\]:\s*(.*)$")  # a definition line; group 1 = its text
+_FN_REF = re.compile(r"\[\^[^\]]+\]")  # an inline reference in the body
 # A rendered footnote superscript in the extracted text: a digit run glued directly
 # to the preceding word/punctuation (``citation.1``) \u2014 distinct from a real number,
 # which is preceded by a space (``page 42``), so this never eats genuine figures.
@@ -235,7 +235,7 @@ def _normal_form(text: str) -> str:
     # both sides: the renderer replaces it with a running number, so only the text
     # is recoverable (and only the text needs to be).
     fn_texts: list[str] = []
-    text = _FN_DEF.sub(lambda m: (fn_texts.append(m.group(1).strip()) or ""), text)
+    text = _FN_DEF.sub(lambda m: fn_texts.append(m.group(1).strip()) or "", text)
     text = _FN_REF.sub("", text)
 
     out: list[str] = []
@@ -259,17 +259,17 @@ def _normal_form(text: str) -> str:
         line = _SUPERSCRIPT.sub("", raw.strip())
         line = re.sub(r"\s+", " ", line).strip()
         if not line:
-            continue                                   # blank lines
+            continue  # blank lines
         if re.fullmatch(r"\d+", line):
-            continue                                   # page-number footer OR footnote marker
+            continue  # page-number footer OR footnote marker
         if _DATE_SUBTITLE.match(line):
-            continue                                   # injected date subtitle
+            continue  # injected date subtitle
         if _BULLET.match(line):
             # a bullet ends the current prose run and emits a canonical item.
             flush()
             out.append("- " + _BULLET.sub("", line).strip())
             continue
-        buf.append(line)                               # accumulate prose to reflow
+        buf.append(line)  # accumulate prose to reflow
 
     flush()
     return "\n".join(out)

@@ -31,16 +31,8 @@ from unittest.mock import patch
 
 from md2star.preprocessing import preprocess_markdown
 
-MD_WITH_REMOTE_IMG = (
-    "Some prose.\n\n"
-    "![hero](https://example.invalid/banner.png)\n\n"
-    "More prose.\n"
-)
-MD_WITH_LOCAL_IMG = (
-    "Some prose.\n\n"
-    "![local](./images/foo.png)\n\n"
-    "More prose.\n"
-)
+MD_WITH_REMOTE_IMG = "Some prose.\n\n![hero](https://example.invalid/banner.png)\n\nMore prose.\n"
+MD_WITH_LOCAL_IMG = "Some prose.\n\n![local](./images/foo.png)\n\nMore prose.\n"
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -98,7 +90,8 @@ def test_remote_image_download_gate_across_flag_combos():
         ) as mock_dl:
             preprocess_markdown(
                 MD_WITH_REMOTE_IMG,
-                inject_metadata=False, lint_enabled=False,
+                inject_metadata=False,
+                lint_enabled=False,
                 **kwargs,
             )
             # Gate: downloader invoked iff explicitly allowed and online.
@@ -173,7 +166,9 @@ def test_reference_doc_uses_bundled_template_without_network(tmp_path):
         # to prove it is never reached when remote is opted out / offline.
         with patch("md2star.cli.osh.download_file") as mock_dl:
             resolved = _resolve_reference_doc(
-                input_path, "docx", **resolve_kwargs,
+                input_path,
+                "docx",
+                **resolve_kwargs,
             )
             # Network must not be reached, and the bundled template wins.
             assert not mock_dl.called, resolve_kwargs

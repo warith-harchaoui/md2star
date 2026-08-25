@@ -156,8 +156,7 @@ def _resolve_reference_doc(
     if legacy.exists():
         # Still honoured, but nudge the user toward the current name.
         logger.warning(
-            f"md2star: '.pandoc-reference.{fmt}' is deprecated; "
-            f"rename it to 'template.{fmt}'."
+            f"md2star: '.pandoc-reference.{fmt}' is deprecated; rename it to 'template.{fmt}'."
         )
         return legacy
 
@@ -174,16 +173,13 @@ def _resolve_reference_doc(
             osh.download_file(url, str(cached), progress=False)
             # Informational: confirm the (default) network fetch happened.
             # INFO so it stays visible by default but --quiet can hide it.
-            logger.info(
-                f"md2star: cached default template from {url} → {cached}"
-            )
+            logger.info(f"md2star: cached default template from {url} → {cached}")
             return cached
         except Exception as exc:
             # Leave no partial file behind.
             cached.unlink(missing_ok=True)
             logger.warning(
-                f"md2star: template download failed ({exc}); "
-                "falling back to the bundled default."
+                f"md2star: template download failed ({exc}); falling back to the bundled default."
             )
 
     bundled = _bundled_template(fmt)
@@ -237,6 +233,7 @@ def _localized_bibliography_heading(content: str, explicit_lang: str | None) -> 
     else:
         try:
             from .preprocessing.language import get_language_metadata
+
             meta = get_language_metadata(content)
             if meta and meta.get("lang"):
                 lang_prefix = meta["lang"].split("-")[0].lower()
@@ -276,10 +273,14 @@ def _run_pandoc(
     cmd = [
         pandoc,
         str(preprocessed_md),
-        "-o", str(output),
-        "-t", fmt,
-        "--lua-filter", str(_data_path("filters", "md2star.lua")),
-        "--metadata-file", str(_data_path("metadata.yaml")),
+        "-o",
+        str(output),
+        "-t",
+        fmt,
+        "--lua-filter",
+        str(_data_path("filters", "md2star.lua")),
+        "--metadata-file",
+        str(_data_path("metadata.yaml")),
     ]
     if reference_doc is not None:
         # The user can override us via --reference-doc in extra_args; pandoc
@@ -298,7 +299,7 @@ def _run_pandoc(
 _FORMAT_HELP = {
     "docx": "Microsoft Word (.docx)",
     "pptx": "Microsoft PowerPoint (.pptx)",
-    "pdf":  "Portable Document Format (.pdf, via headless LibreOffice)",
+    "pdf": "Portable Document Format (.pdf, via headless LibreOffice)",
 }
 
 
@@ -308,15 +309,15 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
         prog=f"md2{fmt}",
         description=f"Markdown → {_FORMAT_HELP[fmt]} via md2star + Pandoc.",
         epilog=(
-            "Unknown flags are forwarded to pandoc verbatim. "
-            "Run `pandoc --help` for the full list."
+            "Unknown flags are forwarded to pandoc verbatim. Run `pandoc --help` for the full list."
         ),
         add_help=True,
     )
     # ── Positional + output ───────────────────────────────────────────
     parser.add_argument("input", help="Path to the input .md file.")
     parser.add_argument(
-        "-o", "--output",
+        "-o",
+        "--output",
         help="Output path (default: <input>.<fmt>).",
     )
     # ── Document metadata forwarded to Pandoc ─────────────────────────
@@ -327,26 +328,31 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--bibliography-name",
-        default=None,    # resolved below to the language-detected value
-        help=("Heading inserted before the bibliography. When omitted, "
-              "md2star uses the localized default for the document's "
-              "language ('Bibliography' / 'Bibliographie' / 'Bibliografía' "
-              "/ 'Literatur' / 'Bibliografia' / 'Bibliografie' / "
-              "'Библиография' / fallback 'Bibliography')."),
+        default=None,  # resolved below to the language-detected value
+        help=(
+            "Heading inserted before the bibliography. When omitted, "
+            "md2star uses the localized default for the document's "
+            "language ('Bibliography' / 'Bibliographie' / 'Bibliografía' "
+            "/ 'Literatur' / 'Bibliografia' / 'Bibliografie' / "
+            "'Библиография' / fallback 'Bibliography')."
+        ),
     )
     parser.add_argument("--lang", help="Document language metadata (BCP 47, e.g. en-US).")
     parser.add_argument(
         "--date",
-        help=("Override the auto-generated date in the subtitle. The string "
-              "you pass is used verbatim (e.g. '21 juin 2026', '2026-Q2', "
-              "'submitted 14 March'). When omitted, md2star formats today's "
-              "date via the language-aware `date_format` metadata."),
+        help=(
+            "Override the auto-generated date in the subtitle. The string "
+            "you pass is used verbatim (e.g. '21 juin 2026', '2026-Q2', "
+            "'submitted 14 March'). When omitted, md2star formats today's "
+            "date via the language-aware `date_format` metadata."
+        ),
     )
 
     # ── Lint toggle (mutually exclusive so --lint/--no-lint can't clash) ─
     lint_group = parser.add_mutually_exclusive_group()
     lint_group.add_argument(
-        "--lint", action="store_true",
+        "--lint",
+        action="store_true",
         help=(
             "Opt in to the local LLM linter (off by default). Also fills "
             "empty image alt text with a vision-model description. The backend "
@@ -355,12 +361,16 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
         ),
     )
     lint_group.add_argument(
-        "--no-lint", action="store_true",
+        "--no-lint",
+        action="store_true",
         help="Explicit no-op (same as the default).",
     )
 
     parser.add_argument(
-        "--skip-phase", action="append", default=[], metavar="NAME",
+        "--skip-phase",
+        action="append",
+        default=[],
+        metavar="NAME",
         help=(
             "Skip a preprocessing phase. Repeatable. Known phases: "
             "lint, remote_images, html_tables, html_images, absolutize, "
@@ -375,32 +385,42 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
 
     # ── Network policy (offline-by-default since v1.2.0) ──────────
     parser.add_argument(
-        "--offline", action="store_true",
-        help=("Forbid every network-touching phase (overrides "
-              "--allow-remote-*). Useful for air-gapped runs and to "
-              "make the refusal explicit in scripts."),
+        "--offline",
+        action="store_true",
+        help=(
+            "Forbid every network-touching phase (overrides "
+            "--allow-remote-*). Useful for air-gapped runs and to "
+            "make the refusal explicit in scripts."
+        ),
     )
     parser.add_argument(
-        "--no-remote-templates", action="store_true",
-        help=("Opt OUT of the deraison.ai default template. Since "
-              "v2.5.0 md2star fetches https://deraison.ai/template."
-              "{docx,pptx} whenever no local template.{docx,pptx} is "
-              "found, caching it under XDG. Pass this (or --offline) "
-              "to skip the fetch and use the bundled template."),
+        "--no-remote-templates",
+        action="store_true",
+        help=(
+            "Opt OUT of the deraison.ai default template. Since "
+            "v2.5.0 md2star fetches https://deraison.ai/template."
+            "{docx,pptx} whenever no local template.{docx,pptx} is "
+            "found, caching it under XDG. Pass this (or --offline) "
+            "to skip the fetch and use the bundled template."
+        ),
     )
     parser.add_argument(
         # Back-compat no-op: remote templates are now the default, so the
         # old opt-in flag has nothing left to enable. Accepted silently so
         # existing scripts/CI that still pass it don't error out.
-        "--allow-remote-templates", action="store_true",
+        "--allow-remote-templates",
+        action="store_true",
         help=argparse.SUPPRESS,
     )
     parser.add_argument(
-        "--allow-remote-images", action="store_true",
-        help=("Opt in to downloading ``![](https://...)`` images "
-              "referenced in the markdown. Off by default — the "
-              "preprocessor leaves remote refs in place and warns "
-              "once on stderr when any were skipped."),
+        "--allow-remote-images",
+        action="store_true",
+        help=(
+            "Opt in to downloading ``![](https://...)`` images "
+            "referenced in the markdown. Off by default — the "
+            "preprocessor leaves remote refs in place and warns "
+            "once on stderr when any were skipped."
+        ),
     )
     # ── Verbosity (routes md2star's own diagnostics through logging) ──
     # Mutually exclusive: --verbose lowers the threshold to DEBUG, --quiet
@@ -408,16 +428,22 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
     # pre-logging behaviour where every diagnostic printed unconditionally.
     verbosity_group = parser.add_mutually_exclusive_group()
     verbosity_group.add_argument(
-        "-v", "--verbose", action="store_true",
+        "-v",
+        "--verbose",
+        action="store_true",
         help="Show debug-level diagnostics on stderr.",
     )
     verbosity_group.add_argument(
-        "-q", "--quiet", action="store_true",
+        "-q",
+        "--quiet",
+        action="store_true",
         help="Suppress info + warnings; only errors reach stderr.",
     )
 
     parser.add_argument(
-        "-V", "--version", action="version",
+        "-V",
+        "--version",
+        action="version",
         version=f"md2star {__version__}",
     )
     return parser
@@ -450,9 +476,7 @@ def _convert(fmt: str, argv: list[str]) -> int:
         )
 
     out_path = (
-        Path(args.output).expanduser().resolve()
-        if args.output
-        else in_path.with_suffix(f".{fmt}")
+        Path(args.output).expanduser().resolve() if args.output else in_path.with_suffix(f".{fmt}")
     )
 
     # PDF detours through DOCX. The temp DOCX lives next to the requested
@@ -493,7 +517,8 @@ def _convert(fmt: str, argv: list[str]) -> int:
         # Remote templates are the default since v2.5.0; --no-remote-templates
         # (and the hard --offline switch, handled inside the resolver) opt out.
         reference_doc = _resolve_reference_doc(
-            in_path, docx_fmt,
+            in_path,
+            docx_fmt,
             allow_remote_templates=not args.no_remote_templates,
             offline=args.offline,
         )
@@ -517,7 +542,8 @@ def _convert(fmt: str, argv: list[str]) -> int:
     #    user supplied it.
     if args.bib:
         heading = args.bibliography_name or _localized_bibliography_heading(
-            raw, args.lang,
+            raw,
+            args.lang,
         )
         processed = f"{processed}\n\n# {heading}\n"
 
@@ -543,8 +569,7 @@ def _convert(fmt: str, argv: list[str]) -> int:
             inject_table_styles(str(docx_path))
         except Exception as exc:
             logger.warning(
-                f"md2star warning: postprocess failed ({exc}); "
-                "the .docx is otherwise complete."
+                f"md2star warning: postprocess failed ({exc}); the .docx is otherwise complete."
             )
         try:
             center_standalone_images(str(docx_path))
@@ -623,22 +648,25 @@ def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> int:
         cmd = [
             soffice,
             "--headless",
-            "--convert-to", "pdf",
-            "--outdir", workdir,
+            "--convert-to",
+            "pdf",
+            "--outdir",
+            workdir,
             str(docx_path),
         ]
         try:
             proc = subprocess.run(
-                cmd, capture_output=True, timeout=120, check=False,
+                cmd,
+                capture_output=True,
+                timeout=120,
+                check=False,
             )
         except subprocess.TimeoutExpired:
             logger.error("md2pdf: LibreOffice timed out after 120s.")
             return 1
         if proc.returncode != 0:
             stderr = proc.stderr.decode("utf-8", errors="replace").strip()
-            logger.error(
-                f"md2pdf: LibreOffice exited {proc.returncode}: {stderr}"
-            )
+            logger.error(f"md2pdf: LibreOffice exited {proc.returncode}: {stderr}")
             return proc.returncode
 
         produced = Path(workdir) / (docx_path.stem + ".pdf")
@@ -768,20 +796,24 @@ def main(argv: list[str] | None = None) -> int:
     # pays the import cost of doctor/templates it won't use.
     if sub == "doctor":
         from .doctor import main as doctor_main
+
         return doctor_main(rest)
     if sub == "templates":
         from .templates import main as templates_main
+
         return templates_main(rest)
     if sub == "twin":
         # Reverse direction: any document → an editable Markdown twin. Lazy
         # import so a plain forward conversion never loads Kreuzberg/AI code.
         from .twin_cli import main as twin_main
+
         return twin_main(rest)
     if sub == "gui":
         # The GUI ships its ~4 MB vendored frontend (PDF.js, CodeMirror,
         # Tailwind, fonts) inside md2star/data/gui/. Import is lazy so a
         # plain md2docx run never pays for the http.server machinery.
         from .gui_server import main as gui_main
+
         return gui_main(rest)
     # cache-dir / clear-cache both emit their result to stdout (script-friendly).
     if sub == "cache-dir":

@@ -47,6 +47,7 @@ def test_lint_applies_only_a_sane_fix(monkeypatch) -> None:
         ("success", True),
     ]:
         if scenario == "transport_error":
+
             def _chat(*_a, **_k):
                 raise RuntimeError("backend unreachable")
         else:
@@ -66,6 +67,7 @@ def test_lint_applies_only_a_sane_fix(monkeypatch) -> None:
 
 def test_unresolved_engine_falls_back_to_original(monkeypatch) -> None:
     """A missing brief / unresolvable engine degrades to the untouched document."""
+
     def _boom():
         raise RuntimeError("no brief to resolve")
 

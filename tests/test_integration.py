@@ -42,6 +42,7 @@ def _docx_text(body: str) -> str:
     """
     return "".join(re.findall(r"<w:t[^>]*>([^<]*)</w:t>", body))
 
+
 FIXTURES = Path(__file__).parent / "fixtures"
 
 PANDOC = shutil.which("pandoc")
@@ -57,13 +58,16 @@ SOFFICE = (
 NODE = shutil.which("node")
 
 needs_pandoc = pytest.mark.skipif(
-    PANDOC is None, reason="pandoc not on PATH",
+    PANDOC is None,
+    reason="pandoc not on PATH",
 )
 needs_soffice = pytest.mark.skipif(
-    SOFFICE is None, reason="LibreOffice (soffice) not on PATH",
+    SOFFICE is None,
+    reason="LibreOffice (soffice) not on PATH",
 )
 needs_node = pytest.mark.skipif(
-    NODE is None, reason="node.js not on PATH — mermaid rendering requires it",
+    NODE is None,
+    reason="node.js not on PATH — mermaid rendering requires it",
 )
 
 
@@ -78,6 +82,7 @@ def _convert(fmt: str, in_path: Path, out_path: Path, *extra: str) -> int:
     ``--no-remote-templates`` itself — we don't double it up.
     """
     from md2star.cli import _convert as cli_convert
+
     net_neutral = {"--offline", "--no-remote-templates"}
     prefix = () if net_neutral & set(extra) else ("--no-remote-templates",)
     argv = [str(in_path), "-o", str(out_path), *prefix, *extra]
@@ -111,8 +116,18 @@ class TestDocx:
         # Expect a French month name somewhere in the rendered date
         # subtitle (any of the 12; the day-of-month / year vary).
         french_months = (
-            "janvier", "février", "mars", "avril", "mai", "juin",
-            "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+            "janvier",
+            "février",
+            "mars",
+            "avril",
+            "mai",
+            "juin",
+            "juillet",
+            "août",
+            "septembre",
+            "octobre",
+            "novembre",
+            "décembre",
         )
         assert any(m in body.lower() for m in french_months), (
             "expected a French month name in the rendered subtitle"
@@ -121,9 +136,13 @@ class TestDocx:
     def test_bibliography_fixture_renders_citation(self, tmp_path):
         out = tmp_path / "bib.docx"
         rc = _convert(
-            "docx", FIXTURES / "bibliography.md", out,
-            "--bib", str(FIXTURES / "refs.bib"),
-            "--bibliography-name", "References",
+            "docx",
+            FIXTURES / "bibliography.md",
+            out,
+            "--bib",
+            str(FIXTURES / "refs.bib"),
+            "--bibliography-name",
+            "References",
         )
         assert rc == 0
         with zipfile.ZipFile(out) as z:
@@ -185,9 +204,9 @@ class TestRemoteImagesPolicy:
         assert rc == 0
         # The warning is the contract surface — without the flag, md2star logs
         # one line naming the blocked URL and the opt-in flag.
-        assert (
-            "--allow-remote-images" in caplog.text
-        ), "expected the soft-refusal warning to mention the opt-in flag"
+        assert "--allow-remote-images" in caplog.text, (
+            "expected the soft-refusal warning to mention the opt-in flag"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────

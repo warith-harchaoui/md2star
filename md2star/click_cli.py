@@ -115,16 +115,30 @@ def _shared_options(func):
     options = [
         click.option("-o", "--output", type=click.Path(), help="Output path."),
         click.option("--author", help="Document author metadata."),
-        click.option("--bib", type=click.Path(exists=True), help="BibTeX file for [@key] citations."),
+        click.option(
+            "--bib", type=click.Path(exists=True), help="BibTeX file for [@key] citations."
+        ),
         click.option("--bibliography-name", help="Heading for the references section."),
         click.option("--lang", help="Language code (e.g. en, fr); auto-detected if unset."),
         click.option("--date", help="Document date metadata."),
-        click.option("--reference-doc", type=click.Path(exists=True), help="Brand output with a template.docx/.pptx."),
+        click.option(
+            "--reference-doc",
+            type=click.Path(exists=True),
+            help="Brand output with a template.docx/.pptx.",
+        ),
         click.option("--skip-phase", help="Skip one preprocessing phase by name."),
-        click.option("--lint/--no-lint", default=None, help="Opt-in local-LLM syntax + alt-text pass (off by default)."),
+        click.option(
+            "--lint/--no-lint",
+            default=None,
+            help="Opt-in local-LLM syntax + alt-text pass (off by default).",
+        ),
         click.option("--offline", is_flag=True, help="Never touch the network."),
-        click.option("--no-remote-templates", is_flag=True, help="Do not fetch the default remote template."),
-        click.option("--allow-remote-images", is_flag=True, help="Download http(s) images for embedding."),
+        click.option(
+            "--no-remote-templates", is_flag=True, help="Do not fetch the default remote template."
+        ),
+        click.option(
+            "--allow-remote-images", is_flag=True, help="Download http(s) images for embedding."
+        ),
         click.option("-v", "--verbose", is_flag=True, help="Verbose logging."),
         click.option("-q", "--quiet", is_flag=True, help="Quiet logging."),
     ]
@@ -152,6 +166,7 @@ def _make_format_command(fmt: str):
     defined once; *fmt* is captured in the closure so each command targets its
     own format while sharing the option set and delegation logic.
     """
+
     # ``exists=True`` makes click reject a missing input with a usage error (2)
     # before we ever call the pipeline — matching the argparse CLI's behaviour.
     @click.command(name=fmt, help=f"Convert a Markdown file to .{fmt}.")

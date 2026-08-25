@@ -62,21 +62,23 @@ logger = get_logger(__name__)
 # ``md2star_skip:`` metadata key in a document's YAML front-matter) refers
 # to phases by these names. Phases that have no obvious skip semantics
 # (the line-by-line pass) are still listed for discoverability.
-PHASES: frozenset[str] = frozenset({
-    "lint",
-    "remote_images",
-    "html_tables",
-    "html_images",
-    "absolutize",
-    "image_assets",
-    "language",
-    "line_pass",
-    "table_resize",
-    "table_normalize",
-    "image_widths",
-    "grid_normalize",
-    "pptx_isolation",
-})
+PHASES: frozenset[str] = frozenset(
+    {
+        "lint",
+        "remote_images",
+        "html_tables",
+        "html_images",
+        "absolutize",
+        "image_assets",
+        "language",
+        "line_pass",
+        "table_resize",
+        "table_normalize",
+        "image_widths",
+        "grid_normalize",
+        "pptx_isolation",
+    }
+)
 
 
 # Standalone image line: ``![…](…)`` with optional ``{attrs}``.
@@ -101,6 +103,7 @@ def _warn_remote_images_blocked(content: str) -> None:
     breadcrumb pointing at the opt-in flag.
     """
     import re
+
     # Collect every remote ref up front so we can report an accurate count even
     # though we only surface the first URL as a concrete example.
     matches = re.findall(r"!\[[^\]]*\]\((https?://[^)]+)\)", content)
@@ -153,9 +156,7 @@ def _extract_skip_from_metadata(content: str) -> set[str]:
     block = m.group(1)
     # Try the compact inline list form first (``md2star_skip: [a, b]``). It is
     # the common hand-authored shape, so it is worth a cheap dedicated regex.
-    inline = re.search(
-        r"^md2star_skip\s*:\s*\[([^\]]*)\]", block, flags=re.MULTILINE
-    )
+    inline = re.search(r"^md2star_skip\s*:\s*\[([^\]]*)\]", block, flags=re.MULTILINE)
     if inline:
         # Strip surrounding quotes so both ``"language"`` and ``language`` parse.
         return {p.strip().strip("\"'") for p in inline.group(1).split(",") if p.strip()}
@@ -255,13 +256,14 @@ def preprocess_markdown(
             if not re.search(r"^lang\s*:", content, flags=re.MULTILINE | re.IGNORECASE):
                 injections.append(f"lang: {meta_injection['lang']}")
             if not re.search(r"^date_format\s*:", content, flags=re.MULTILINE | re.IGNORECASE):
-                injections.append(f"date_format: \"{meta_injection['date_format']}\"")
+                injections.append(f'date_format: "{meta_injection["date_format"]}"')
 
             if injections:
                 injection_str = "\n".join(injections) + "\n"
                 yaml_match = re.match(
                     r"^(---[\r\n]+)(.*?)([\r\n]+(?:---|\.\.\.)(?:[\r\n]+|$))",
-                    content, flags=re.DOTALL,
+                    content,
+                    flags=re.DOTALL,
                 )
                 if yaml_match:
                     # Splice the new keys just inside the existing ``---`` fence
@@ -270,7 +272,7 @@ def preprocess_markdown(
                         f"{yaml_match.group(1)}{injection_str}"
                         f"{yaml_match.group(2)}{yaml_match.group(3)}"
                     )
-                    content = new_yaml + content[yaml_match.end():]
+                    content = new_yaml + content[yaml_match.end() :]
                 else:
                     # No front-matter yet — wrap the injected keys in a new fence.
                     content = f"---\n{injection_str}---\n\n{content}"
@@ -314,9 +316,7 @@ def preprocess_markdown(
                     except Exception as e:
                         # Rendering failed: keep the original mermaid code
                         # fence so nothing is lost from the document.
-                        logger.warning(
-                            f"md2star warning: Mermaid rendering failed: {e}"
-                        )
+                        logger.warning(f"md2star warning: Mermaid rendering failed: {e}")
                         out_lines.append("```mermaid")
                         out_lines.extend(mermaid_lines)
                         out_lines.append("```")

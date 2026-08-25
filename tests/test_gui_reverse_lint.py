@@ -74,7 +74,8 @@ def test_lint_returns_buffer_and_never_crashes(server: str) -> None:
 def test_extract_rejects_unsupported_extension(server: str) -> None:
     """/extract refuses a non-document extension with a 415."""
     status, _ = _post(
-        server + "/extract", data=b"not a document",
+        server + "/extract",
+        data=b"not a document",
         headers={"X-Md2star-Ext": ".md"},
     )
     assert status == 415
@@ -96,9 +97,9 @@ def test_extract_twin_requires_open_folder(server: str) -> None:
     """Twin mode with no folder open is refused with a 409 (assets need a home)."""
     gui_server._set_folder_root(None)
     status, _ = _post(
-        server + "/extract", data=b"fake-doc",
-        headers={"X-Md2star-Ext": ".docx", "X-Md2star-Twin": "1",
-                 "X-Md2star-Name": "note.docx"},
+        server + "/extract",
+        data=b"fake-doc",
+        headers={"X-Md2star-Ext": ".docx", "X-Md2star-Twin": "1", "X-Md2star-Name": "note.docx"},
     )
     assert status == 409
 
@@ -111,9 +112,13 @@ def test_extract_twin_writes_assets_and_markdown(
     gui_server._set_folder_root(tmp_path)
     try:
         status, body = _post(
-            server + "/extract", data=b"fake-doc",
-            headers={"X-Md2star-Ext": ".docx", "X-Md2star-Twin": "1",
-                     "X-Md2star-Name": "My Report.docx"},
+            server + "/extract",
+            data=b"fake-doc",
+            headers={
+                "X-Md2star-Ext": ".docx",
+                "X-Md2star-Twin": "1",
+                "X-Md2star-Name": "My Report.docx",
+            },
         )
     finally:
         gui_server._set_folder_root(None)
@@ -142,7 +147,8 @@ def test_extract_docx_roundtrips_to_markdown(server: str, tmp_path) -> None:
     assert _convert("docx", [str(md), "-o", str(docx)]) == 0
 
     status, body = _post(
-        server + "/extract", data=docx.read_bytes(),
+        server + "/extract",
+        data=docx.read_bytes(),
         headers={"X-Md2star-Ext": ".docx"},
     )
     assert status == 200

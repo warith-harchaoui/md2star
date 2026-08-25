@@ -42,6 +42,7 @@ def _stub_engine(monkeypatch) -> None:
 def png_fixture(tmp_path: Path) -> Path:
     """Write a tiny 1×1 PNG the pass can hash + read."""
     from PIL import Image
+
     p = tmp_path / "x.png"
     Image.new("RGB", (1, 1), "white").save(p)
     return p
@@ -85,6 +86,7 @@ def test_rewrite_decision_and_edge_behaviours(tmp_path, png_fixture) -> None:
     # fresh distinct images (different bytes → different hash) to avoid reusing
     # the caption cached for png_fixture above.
     from PIL import Image
+
     img2 = tmp_path / "red.png"
     Image.new("RGB", (1, 1), "red").save(img2)
     img3 = tmp_path / "blue.png"

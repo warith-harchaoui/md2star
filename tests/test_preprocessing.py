@@ -117,9 +117,7 @@ def _separator_dashes(result: str) -> list[int]:
         Per-column count of ``-`` characters (alignment colons excluded,
         since they add no visual width).
     """
-    sep_line = next(
-        ln for ln in result.split("\n") if re.match(r"^\|[-:|]+\|$", ln.strip())
-    )
+    sep_line = next(ln for ln in result.split("\n") if re.match(r"^\|[-:|]+\|$", ln.strip()))
     inner = sep_line.strip()[1:-1]
     return [cell.count("-") for cell in inner.split("|")]
 
@@ -145,9 +143,8 @@ def _marker_between(result: str, start_pred, end_pred) -> bool:
     return any(ln.strip() == "##" for ln in lines[start + 1 : end])
 
 
-_HAS_SVG_BACKEND = (
-    __import__("shutil").which("rsvg-convert") is not None
-    or _module_importable("cairosvg")
+_HAS_SVG_BACKEND = __import__("shutil").which("rsvg-convert") is not None or _module_importable(
+    "cairosvg"
 )
 
 
@@ -216,8 +213,7 @@ def test_full_document_docx_scenario(mock_mermaid, tmp_path) -> None:
     # header/data cells appear as pipe cells with a separator row.
     assert "<table>" not in result
     assert "| Name" in result and "| Alice" in result
-    assert any(set(ln) <= set("|-: ") and ln.startswith("|")
-               for ln in result.split("\n"))
+    assert any(set(ln) <= set("|-: ") and ln.startswith("|") for ln in result.split("\n"))
 
     # Local image A4 cap: a 1500×500 (wide) PNG caps width, height auto.
     assert f"![figure]({photo}){{width=15cm}}" in result
@@ -284,8 +280,11 @@ def test_full_document_pptx_scenario(mock_mermaid) -> None:
     # A pipe-table-shaped block inside a code fence must NOT trigger a split:
     # no bare ``##`` may sit immediately before the fence.
     lines = result.split("\n")
-    fence_idx = next(i for i, ln in enumerate(lines)
-                     if ln.strip() == "```" and "| X" in "".join(lines[i:i + 3]))
+    fence_idx = next(
+        i
+        for i, ln in enumerate(lines)
+        if ln.strip() == "```" and "| X" in "".join(lines[i : i + 3])
+    )
     assert lines[fence_idx - 1].strip() != "##"
 
 
@@ -426,7 +425,8 @@ def test_table_rewriting_scenario() -> None:
     # must clear Pandoc's 72-col default so widths take effect, and the three
     # alignment markers (:---, :---:, ---:) must survive the rewrite.
     aligned_sep = next(
-        ln for ln in result.split("\n")
+        ln
+        for ln in result.split("\n")
         if ln.startswith("|") and set(ln) <= set("|-: ") and ":" in ln
     )
     cells = aligned_sep.strip("|").split("|")
@@ -503,9 +503,7 @@ def test_skip_phase_scenario() -> None:
     assert "{width=100%}" not in r1 and "![](/abs/img.png)" in r1
 
     # Front-matter skip is honored exactly like the per-call form.
-    r2 = _pp(
-        "---\nmd2star_skip: [image_widths]\n---\n\n![](/abs/img.png)\n"
-    )
+    r2 = _pp("---\nmd2star_skip: [image_widths]\n---\n\n![](/abs/img.png)\n")
     assert "{width=100%}" not in r2
 
     # An unknown phase name warns but has no effect: widths still get injected.
@@ -566,7 +564,7 @@ def test_blank_line_inserted_before_lists() -> None:
         ("Hello\n- item", "Hello\n\n- item"),
         ("Hello\n* item", "Hello\n\n* item"),
         ("Hello\n+ item", "Hello\n\n+ item"),
-        ("Intro\n10. Tenth", "Intro\n\n10. Tenth"),   # multi-digit ordered
+        ("Intro\n10. Tenth", "Intro\n\n10. Tenth"),  # multi-digit ordered
         ("- parent\n  - child", "- parent\n\n  - child"),  # nested indent kept
     ]
     for text, expected in cases:
@@ -663,9 +661,7 @@ def test_pipe_table_code_span_and_math_cells_not_soft_broken() -> None:
     assertions that would be blurred inside a general table scenario.
     """
     code_cell = (
-        "| Variant | Code |\n"
-        "|---|---|\n"
-        "| heuristic | `ROITELET_ROUTER_long_constant_name_here` |\n"
+        "| Variant | Code |\n|---|---|\n| heuristic | `ROITELET_ROUTER_long_constant_name_here` |\n"
     )
     code_res = _pp(code_cell)
     # The backtick identifier is copied out byte-for-byte (no injected ZWSP).
@@ -704,12 +700,7 @@ def test_single_word_column_gets_width_slack() -> None:
     assert dashes[0] > dashes[1], f"expected slack for column A, got {dashes}"
 
     # When every column wraps, none gets the slack: widths stay equal.
-    multi = (
-        "| A      | B      |\n"
-        "|---|---|\n"
-        "| a a b  | b b c  |\n"
-        "| c c d  | d d e  |\n"
-    )
+    multi = "| A      | B      |\n|---|---|\n| a a b  | b b c  |\n| c c d  | d d e  |\n"
     even = _separator_dashes(_pp(multi))
     assert even[0] == even[1], f"expected equal widths, got {even}"
 
@@ -731,11 +722,7 @@ def test_html_p_wrapped_img_flattened_to_markdown(tmp_path) -> None:
 
     img = tmp_path / "hero.png"
     PILImage.new("RGB", (200, 100), (0, 0, 0)).save(img)
-    text = (
-        '<p align="center">\n'
-        f'  <img src="{img.name}" alt="hero shot" width="100%">\n'
-        "</p>\n"
-    )
+    text = f'<p align="center">\n  <img src="{img.name}" alt="hero shot" width="100%">\n</p>\n'
     result = _pp(text, base_dir=str(tmp_path))
     # The raw HTML is gone; a Markdown image with the alt + width survives.
     assert "<p" not in result and "<img" not in result
@@ -777,9 +764,7 @@ def test_svg_rewritten_to_cached_png(tmp_path) -> None:
     assert "logo.svg" not in md_res
 
     # Raw <img src> pointing at an SVG is rewritten the same way.
-    html_res = _pp(
-        f'<img src="{svg.name}" alt="diagram" width="100%">', base_dir=str(tmp_path)
-    )
+    html_res = _pp(f'<img src="{svg.name}" alt="diagram" width="100%">', base_dir=str(tmp_path))
     assert "logo.svg" not in html_res
     assert any(str(p) in html_res for p in cache_dir("resized").glob("*_max*.png"))
 
@@ -795,11 +780,7 @@ def test_isolation_is_idempotent() -> None:
     (see tests/test_roundtrip.py) rests on. Two passes must yield identical
     output.
     """
-    text = (
-        "## Section\n\n"
-        "Some intro prose.\n\n"
-        "| A | B |\n|---|---|\n| 1 | 2 |\n"
-    )
+    text = "## Section\n\nSome intro prose.\n\n| A | B |\n|---|---|\n| 1 | 2 |\n"
     once = _pp(text)
     twice = _pp(once)
     # Fixed-point: the second pass changes nothing.

@@ -167,9 +167,7 @@ def doctor() -> dict:
             for c in report.checks
         ],
         # Per-format readiness (can we actually produce docx/pptx/pdf/mermaid?).
-        "features": {
-            fmt: report.feature_status(fmt) for fmt in ("docx", "pptx", "pdf", "mermaid")
-        },
+        "features": {fmt: report.feature_status(fmt) for fmt in ("docx", "pptx", "pdf", "mermaid")},
         # True when a core tool is missing — a quick top-level red/green flag.
         "core_failing": report.core_failing(),
         # Reverse direction (DOCX/PPTX/PDF → Markdown) needs the optional [ocr]
@@ -393,9 +391,7 @@ async def extract(
                 # Preserve the assets/ prefix so the archived links keep resolving.
                 for asset in sorted(assets_dir.rglob("*")):
                     if asset.is_file():
-                        zf.write(
-                            asset, arcname=str(Path("assets") / asset.relative_to(assets_dir))
-                        )
+                        zf.write(asset, arcname=str(Path("assets") / asset.relative_to(assets_dir)))
     except ReverseUnavailable as exc:
         # Optional feature not installed — an environment problem, so 503 tells
         # the caller to provision `pip install 'md2star[ocr]'` and retry.

@@ -158,6 +158,7 @@ def html_table_to_markdown(table_html: str, base_dir: str = ".") -> str:
         str
             The cell with each ``![alt](src)`` rewritten to a cell-safe size.
         """
+
         def _resize(m: re.Match) -> str:
             """Rewrite one image match with a cell-resized ``src``.
 
@@ -175,6 +176,7 @@ def html_table_to_markdown(table_html: str, base_dir: str = ".") -> str:
             src = m.group(2)
             resized = resize_image_for_cell(src, base_dir)
             return f"![{alt}]({resized})"
+
         return _CELL_IMG_RE.sub(_resize, cell)
 
     rows = [[_fix_cell_images(c) for c in row] for row in rows]
@@ -232,6 +234,7 @@ _TABLE_RE = re.compile(
 
 def convert_html_tables(content: str, base_dir: str = ".") -> str:
     """Replace every ``<table>`` block in *content* with a pipe-table equivalent."""
+
     def _replace(match: re.Match) -> str:
         """Convert one matched ``<table>`` block to a blank-line-padded pipe-table.
 
@@ -359,8 +362,7 @@ def _wrap_long_cell(
     # Skip cells that are mostly code or math — we don't want to break inside
     # a backtick span or split a formula on its inner ``, `` or ``. ``.
     protected_chars = sum(
-        len(m.group(0))
-        for m in re.finditer(rf"`[^`\n]+`|{MATH_FORMULA_RE.pattern}", cell)
+        len(m.group(0)) for m in re.finditer(rf"`[^`\n]+`|{MATH_FORMULA_RE.pattern}", cell)
     )
     if protected_chars > len(cell) * 0.7:
         return cell
@@ -381,7 +383,7 @@ def _wrap_long_cell(
                 # break so the visible cell content stays clean.
                 tail = out[-1]
                 stripped = tail.rstrip()
-                trailing_ws = tail[len(stripped):]
+                trailing_ws = tail[len(stripped) :]
                 out[-1] = stripped + trailing_ws.rstrip(" ")
                 out.append("<br/>")
                 line_len = 0

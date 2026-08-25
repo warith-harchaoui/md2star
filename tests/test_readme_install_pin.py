@@ -61,9 +61,7 @@ def test_no_markdown_pins_a_stale_git_version() -> None:
     rendered PyPI page. Scans every Markdown file, not just README/LISEZMOI.
     """
     name = _package_name()
-    pin = re.compile(
-        rf"git\+https://github\.com/warith-harchaoui/{re.escape(name)}\.git@v[0-9]"
-    )
+    pin = re.compile(rf"git\+https://github\.com/warith-harchaoui/{re.escape(name)}\.git@v[0-9]")
     offenders: list[str] = []
     for path in _markdown_files():
         if pin.search(path.read_text(encoding="utf-8")):

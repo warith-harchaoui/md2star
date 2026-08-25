@@ -34,8 +34,7 @@ try:
     from fastapi_mcp import FastApiMCP
 except ImportError as exc:  # pragma: no cover
     raise ImportError(
-        "The MCP surface requires the [mcp] extra. "
-        "Install with: pip install 'md2star[api,mcp]'"
+        "The MCP surface requires the [mcp] extra. Install with: pip install 'md2star[api,mcp]'"
     ) from exc
 
 # Reuse the exact same FastAPI app — MCP is a thin wrapper on top.

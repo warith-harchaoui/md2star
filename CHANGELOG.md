@@ -4,6 +4,22 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.3] — 2026-08-21
+
+### Fixed
+- **Lua filter**: the auto-dated subtitle's day/month name was never
+  capitalized for Russian (or any other script whose day name starts with a
+  multi-byte UTF-8 character). `string.sub`/`string.upper` from Lua's plain
+  `string` library operate on raw bytes, so slicing "the first character"
+  only ever grabbed the first byte of a 2-byte Cyrillic codepoint; upper-
+  casing that lone byte is a silent no-op in the standard C locale, leaving
+  the day name lowercase ("пятница" instead of "Пятница") while every Latin-
+  script language ("Vendredi", "Freitag", …) capitalized correctly. Switched
+  to `pandoc.text.sub`/`pandoc.text.upper` (Pandoc's UTF-8-codepoint-aware
+  text module) so the capitalization step works for every supported
+  language, not just ASCII ones. Covered by a new regression test in
+  `tests/test_lua_filter.py`.
+
 ## [3.1.2] — 2026-08-17
 
 ### Fixed

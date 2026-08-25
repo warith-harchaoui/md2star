@@ -48,20 +48,20 @@ from .cache import cache_dir
 # Status strings are intentionally short fixed-width tokens so terminal
 # output aligns into columns without ANSI escapes (which trip up
 # pipelines / CI logs / non-tty consumers).
-STATUS_OK      = "OK"
+STATUS_OK = "OK"
 STATUS_WARNING = "WARNING"
 STATUS_MISSING = "MISSING"
-STATUS_INFO    = "INFO"
-STATUS_ERROR   = "ERROR"
+STATUS_INFO = "INFO"
+STATUS_ERROR = "ERROR"
 
 # Severity ranks the statuses for the "are we healthy?" rollup.
 # Anything > _RANK[STATUS_WARNING] in a *core* check fails the run.
 _RANK = {
-    STATUS_OK:      0,
-    STATUS_INFO:    0,
+    STATUS_OK: 0,
+    STATUS_INFO: 0,
     STATUS_WARNING: 1,
     STATUS_MISSING: 2,
-    STATUS_ERROR:   3,
+    STATUS_ERROR: 3,
 }
 
 
@@ -136,6 +136,7 @@ class Report:
         ``pdf``     — needs pandoc + soffice.
         ``mermaid`` — needs node + (mermaid-cli or npx).
         """
+
         def ok(name: str) -> bool:
             """Report whether the named check exists and passed.
 
@@ -179,9 +180,11 @@ class Report:
 # ─────────────────────────────────────────────────────────────────────
 
 
-def _run_version(cmd: list[str], timeout: float = 5.0,
-                 runner: Callable[..., subprocess.CompletedProcess[str]] | None = None
-                 ) -> str | None:
+def _run_version(
+    cmd: list[str],
+    timeout: float = 5.0,
+    runner: Callable[..., subprocess.CompletedProcess[str]] | None = None,
+) -> str | None:
     """Return the first line of ``<cmd> --version`` stdout, or None on failure."""
     # Default to the real subprocess.run; tests inject a fake to avoid shelling
     # out and to simulate timeouts / missing binaries deterministically.
@@ -190,7 +193,11 @@ def _run_version(cmd: list[str], timeout: float = 5.0,
         # check=False: a non-zero exit is not an error here — some tools print
         # their version to stderr and exit 1, and we still want that text.
         proc = runner(
-            cmd, capture_output=True, text=True, timeout=timeout, check=False,
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
         )
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
         # Any spawn/timeout failure means "no usable version" — caller
@@ -209,7 +216,8 @@ def _check_pandoc(report: Report, which: Callable[[str], str | None]) -> None:
     # default Core section, which flips ``core_failing()`` and fails doctor.
     if path is None:
         report.add(
-            "Pandoc", STATUS_MISSING,
+            "Pandoc",
+            STATUS_MISSING,
             "Install: https://pandoc.org/installing.html",
         )
         return
@@ -225,15 +233,16 @@ def _check_libreoffice(report: Report, which: Callable[[str], str | None]) -> No
         which("soffice"),
         which("libreoffice"),
         "/Applications/LibreOffice.app/Contents/MacOS/soffice"
-            if Path("/Applications/LibreOffice.app/Contents/MacOS/soffice").exists()
-            else None,
+        if Path("/Applications/LibreOffice.app/Contents/MacOS/soffice").exists()
+        else None,
     ]
     # First hit wins; None means "not found anywhere".
     path = next((p for p in candidates if p), None)
     # Optional section: a miss degrades PDF to PARTIAL but never fails doctor.
     if path is None:
         report.add(
-            "LibreOffice", STATUS_MISSING,
+            "LibreOffice",
+            STATUS_MISSING,
             "Needed for md2pdf and the GUI's PDF preview. "
             "Install: brew install --cask libreoffice / apt install libreoffice",
             section="Optional",
@@ -250,7 +259,8 @@ def _check_node(report: Report, which: Callable[[str], str | None]) -> None:
     # rather than a warning — we don't want to alarm users who never use it.
     if path is None:
         report.add(
-            "Node.js", STATUS_INFO,
+            "Node.js",
+            STATUS_INFO,
             "Optional — needed only for ``` ```mermaid ``` ``` blocks. "
             "Install: https://nodejs.org/",
             section="Optional",
@@ -283,7 +293,8 @@ def _check_mermaid_cli(report: Report, which: Callable[[str], str | None]) -> No
     if mmdc is not None:
         version = _run_version([mmdc, "--version"]) or "(unknown)"
         report.add(
-            "Mermaid CLI", STATUS_OK,
+            "Mermaid CLI",
+            STATUS_OK,
             f"{version} (global mmdc) — {mmdc}",
             section="Optional",
         )
@@ -292,7 +303,8 @@ def _check_mermaid_cli(report: Report, which: Callable[[str], str | None]) -> No
     # because diagrams will still render (just with a first-run download).
     if npx is not None:
         report.add(
-            "Mermaid CLI", STATUS_INFO,
+            "Mermaid CLI",
+            STATUS_INFO,
             "No global mmdc; ``npx @mermaid-js/mermaid-cli`` will be used on demand.",
             section="Optional",
         )
@@ -300,7 +312,8 @@ def _check_mermaid_cli(report: Report, which: Callable[[str], str | None]) -> No
     # Neither mmdc nor npx: without Node the feature is unavailable, but mermaid
     # blocks degrade gracefully to plain code fences, so this stays INFO.
     report.add(
-        "Mermaid CLI", STATUS_INFO,
+        "Mermaid CLI",
+        STATUS_INFO,
         "Optional — no Node.js, so mermaid blocks are skipped (kept as code fences).",
         section="Optional",
     )
@@ -312,7 +325,8 @@ def _check_ollama(report: Report, which: Callable[[str], str | None]) -> None:
     # INFO for the same reason as Node: --lint is strictly opt-in.
     if path is None:
         report.add(
-            "Ollama", STATUS_INFO,
+            "Ollama",
+            STATUS_INFO,
             "Optional — needed only for the --lint LLM auto-fix pass.",
             section="Optional",
         )
@@ -330,7 +344,8 @@ def _check_templates(report: Report) -> None:
         pptx = resources.files("md2star.data").joinpath("template.pptx")
         if docx.is_file() and pptx.is_file():
             report.add(
-                "Bundled templates", STATUS_OK,
+                "Bundled templates",
+                STATUS_OK,
                 "template.docx + template.pptx — md2star/data/",
                 section="Templates",
             )
@@ -340,7 +355,8 @@ def _check_templates(report: Report) -> None:
     # Reaching here means the packaged data is missing — a corrupt/partial
     # install, hence ERROR (not just a warning): reinstalling is the fix.
     report.add(
-        "Bundled templates", STATUS_ERROR,
+        "Bundled templates",
+        STATUS_ERROR,
         "template.docx and/or template.pptx missing from the installed wheel — reinstall md2star.",
         section="Templates",
     )
@@ -366,13 +382,17 @@ def _check_cache(report: Report) -> None:
         probe.touch()
         probe.unlink()
         report.add(
-            "Cache directory", STATUS_OK, str(root), section="Templates",
+            "Cache directory",
+            STATUS_OK,
+            str(root),
+            section="Templates",
         )
     except OSError as exc:
         # Not fatal — md2star transparently falls back to /tmp — so WARNING,
         # not ERROR; we just want the user to know caching is degraded.
         report.add(
-            "Cache directory", STATUS_WARNING,
+            "Cache directory",
+            STATUS_WARNING,
             f"Not writable ({exc}); md2star will fall back to /tmp.",
             section="Templates",
         )
@@ -387,7 +407,8 @@ def _check_python(report: Report) -> None:
     # genuinely be broken.
     if (v.major, v.minor) < (3, 10):
         report.add(
-            "Python", STATUS_ERROR,
+            "Python",
+            STATUS_ERROR,
             f"{detail} — md2star requires Python ≥ 3.10.",
         )
         return
@@ -414,7 +435,8 @@ def _check_platform(report: Report) -> None:
     # Purely informational: never fails, but pins the exact OS/arch so
     # architecture-specific issues are diagnosable from a pasted report.
     report.add(
-        "Platform", STATUS_INFO,
+        "Platform",
+        STATUS_INFO,
         f"{platform.system()} {platform.release()} ({platform.machine()})",
         section="Optional",
     )
@@ -485,9 +507,9 @@ def render(report: Report) -> str:
     # is what the user actually cares about ("can I make a PDF?").
     out.append("Result:")
     targets = [
-        ("DOCX export",      report.feature_status("docx")),
-        ("PPTX export",      report.feature_status("pptx")),
-        ("PDF export",       report.feature_status("pdf")),
+        ("DOCX export", report.feature_status("docx")),
+        ("PPTX export", report.feature_status("pptx")),
+        ("PDF export", report.feature_status("pdf")),
         ("Mermaid diagrams", report.feature_status("mermaid")),
     ]
     width = max(len(name) for name, _ in targets)
@@ -498,9 +520,7 @@ def render(report: Report) -> str:
     # gaps already read as WARNING/INFO above and must not trigger it.
     if report.core_failing():
         out.append("")
-        out.append(
-            "✗ Core dependencies are broken — fix the items above before running md2star."
-        )
+        out.append("✗ Core dependencies are broken — fix the items above before running md2star.")
     return "\n".join(out)
 
 
@@ -511,7 +531,8 @@ def main(argv: list[str] | None = None) -> int:
         description="Print a diagnostic summary of the environment md2star runs in.",
     )
     parser.add_argument(
-        "--json", action="store_true",
+        "--json",
+        action="store_true",
         help="Emit the report as JSON instead of human-readable text.",
     )
     args = parser.parse_args(argv)
@@ -522,15 +543,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.json:
         # json is imported lazily: the common text path never pays for it.
         import json
+
         payload = {
             "checks": [
-                {"name": c.name, "status": c.status,
-                 "detail": c.detail, "section": c.section}
+                {"name": c.name, "status": c.status, "detail": c.detail, "section": c.section}
                 for c in report.checks
             ],
             "features": {
-                fmt: report.feature_status(fmt)
-                for fmt in ("docx", "pptx", "pdf", "mermaid")
+                fmt: report.feature_status(fmt) for fmt in ("docx", "pptx", "pdf", "mermaid")
             },
             "core_failing": report.core_failing(),
         }

@@ -6,7 +6,7 @@
 [![CI](https://github.com/warith-harchaoui/md2star/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/md2star/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![Licence : BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)
-![Statut : beta](https://img.shields.io/badge/status-beta-orange.svg)
+![Statut : stable](https://img.shields.io/badge/status-stable-brightgreen.svg)
 [![Local-first](https://img.shields.io/badge/privacy-local--first-2f6f5e.svg)](#la-promesse)
 
 > **md2star** convertit du Markdown en `.docx`, `.pptx` et `.pdf`
@@ -21,6 +21,16 @@ laisse en plan : espacement des listes, injection de bibliographie,
 formules LaTeX, diagrammes Mermaid, intégration d'images, largeur des
 tableaux, isolation des diapositives PPTX. Vous restez dans le
 Markdown, sans jamais rouvrir Word pour rattraper la mise en page.
+
+md2star a fait ses preuves : disponible sur PyPI, intégration continue au
+vert à chaque envoi, versions taguées selon le versionnage sémantique
+(actuellement v3.1.3, la deuxième version la plus élevée de la suite
+[AI Helpers](https://github.com/warith-harchaoui/ai-helpers)). Il s'appuie
+sur deux paquets sœurs de cette même suite : `os-helper` (primitives
+partagées de système de fichiers et de journalisation) et
+`best-engine-ai-helper` (le transport local des trois passes IA
+optionnelles : le correcteur syntaxique `--lint`, la rédaction de textes
+alternatifs, la reconstruction `--diagrams`).
 
 ## La promesse
 

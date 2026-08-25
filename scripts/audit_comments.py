@@ -80,8 +80,11 @@ def _docstring_line_numbers(src: str) -> set[int]:
         if not body:
             continue
         first = body[0]
-        if isinstance(first, ast.Expr) and isinstance(first.value, ast.Constant) \
-                and isinstance(first.value.value, str):
+        if (
+            isinstance(first, ast.Expr)
+            and isinstance(first.value, ast.Constant)
+            and isinstance(first.value.value, str)
+        ):
             const = first.value
             # Mark the whole span the literal covers (it may be multi-line).
             for ln in range(const.lineno, (const.end_lineno or const.lineno) + 1):
@@ -169,7 +172,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--floor", type=float, default=FLOOR, help="Hard floor ratio.")
     parser.add_argument("--target", type=float, default=TARGET, help="Advisory target ratio.")
     parser.add_argument(
-        "--advisory", action="store_true",
+        "--advisory",
+        action="store_true",
         help="Report only; always exit 0 (use while ratcheting a codebase up).",
     )
     args = parser.parse_args(argv)

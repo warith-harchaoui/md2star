@@ -86,7 +86,9 @@ def _docx_text(path: Path) -> str:
     """Extract DOCX text via Pandoc's native reader, trailing space stripped."""
     proc = subprocess.run(
         ["pandoc", str(path), "-t", "gfm", "--wrap=none"],
-        capture_output=True, check=True, timeout=30,
+        capture_output=True,
+        check=True,
+        timeout=30,
     )
     text = proc.stdout.decode("utf-8", errors="replace")
     # Drop trailing whitespace/blank lines — cosmetic render artefacts, never

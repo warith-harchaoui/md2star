@@ -109,9 +109,7 @@ def lint_with_llm(content: str, model: str | None = None) -> str:
     original_len = len(content.strip())
     fixed_len = len(fixed)
     if fixed_len < original_len * 0.5 or fixed_len > original_len * 2.0:
-        logger.warning(
-            "md2star warning: LLM lint output size too different, skipping"
-        )
+        logger.warning("md2star warning: LLM lint output size too different, skipping")
         return content
 
     # Passed the length sanity check → accept the model's corrected markdown.

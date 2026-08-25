@@ -6,7 +6,7 @@
 [![CI](https://github.com/warith-harchaoui/md2star/actions/workflows/ci.yml/badge.svg)](https://github.com/warith-harchaoui/md2star/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)
 ![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-green.svg)
-![Status: beta](https://img.shields.io/badge/status-beta-orange.svg)
+![Status: stable](https://img.shields.io/badge/status-stable-brightgreen.svg)
 [![Local-first](https://img.shields.io/badge/privacy-local--first-2f6f5e.svg)](#the-promise)
 
 **Convert Markdown into professional DOCX, PPTX and PDF documents
@@ -19,6 +19,14 @@ with a curated styling layer. It handles the parts Pandoc alone gets
 wrong: list spacing, bibliography injection, LaTeX math, Mermaid
 diagrams, image embedding, table widths, PPTX slide isolation. You stay
 in Markdown and never open Word to fix layout.
+
+md2star is battle-tested: it ships on PyPI, its CI runs green on every push,
+and its tagged releases follow semantic versioning, currently v3.1.3, the
+second-highest version number in the [AI Helpers](https://github.com/warith-harchaoui/ai-helpers)
+suite. It builds on two sibling packages from that suite: `os-helper`
+(shared filesystem and logging primitives) and `best-engine-ai-helper` (the
+local-model transport behind the three opt-in AI passes: the `--lint` syntax
+fixer, alt-text drafting, and `--diagrams` reconstruction).
 
 ## The Promise
 

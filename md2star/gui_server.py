@@ -199,42 +199,60 @@ def _native_folder_picker(prompt: str) -> Path | None:
     """
     try:
         if osh.macos():
-            script = (
-                f'POSIX path of (choose folder with prompt "{prompt}")'
+            script = f'POSIX path of (choose folder with prompt "{prompt}")'
+            out = (
+                subprocess.check_output(
+                    ["osascript", "-e", script],
+                    stderr=subprocess.DEVNULL,
+                    timeout=300,
+                )
+                .decode("utf-8", errors="replace")
+                .strip()
             )
-            out = subprocess.check_output(
-                ["osascript", "-e", script],
-                stderr=subprocess.DEVNULL,
-                timeout=300,
-            ).decode("utf-8", errors="replace").strip()
             return Path(out) if out else None
         if osh.linux():
             if shutil.which("zenity"):
-                out = subprocess.check_output(
-                    ["zenity", "--file-selection", "--directory",
-                     "--title", prompt],
-                    stderr=subprocess.DEVNULL, timeout=300,
-                ).decode("utf-8", errors="replace").strip()
+                out = (
+                    subprocess.check_output(
+                        ["zenity", "--file-selection", "--directory", "--title", prompt],
+                        stderr=subprocess.DEVNULL,
+                        timeout=300,
+                    )
+                    .decode("utf-8", errors="replace")
+                    .strip()
+                )
                 return Path(out) if out else None
             if shutil.which("kdialog"):
-                out = subprocess.check_output(
-                    ["kdialog", "--getexistingdirectory", str(Path.home()),
-                     "--title", prompt],
-                    stderr=subprocess.DEVNULL, timeout=300,
-                ).decode("utf-8", errors="replace").strip()
+                out = (
+                    subprocess.check_output(
+                        ["kdialog", "--getexistingdirectory", str(Path.home()), "--title", prompt],
+                        stderr=subprocess.DEVNULL,
+                        timeout=300,
+                    )
+                    .decode("utf-8", errors="replace")
+                    .strip()
+                )
                 return Path(out) if out else None
         if osh.windows():
             # PowerShell one-liner so we don't need a separate .ps1 asset.
             cmd = [
-                "powershell", "-NoProfile", "-Command",
+                "powershell",
+                "-NoProfile",
+                "-Command",
                 "Add-Type -AssemblyName System.Windows.Forms;"
                 "$d = New-Object System.Windows.Forms.FolderBrowserDialog;"
                 f"$d.Description = '{prompt}';"
                 "if ($d.ShowDialog() -eq 'OK') { Write-Output $d.SelectedPath }",
             ]
-            out = subprocess.check_output(
-                cmd, stderr=subprocess.DEVNULL, timeout=300,
-            ).decode("utf-8", errors="replace").strip()
+            out = (
+                subprocess.check_output(
+                    cmd,
+                    stderr=subprocess.DEVNULL,
+                    timeout=300,
+                )
+                .decode("utf-8", errors="replace")
+                .strip()
+            )
             return Path(out) if out else None
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
         return None
@@ -246,7 +264,7 @@ def _native_folder_picker(prompt: str) -> Path | None:
 # are the user-triggered downloads.
 _OUTPUT_MIME: dict[str, str] = {
     "html": "text/html; charset=utf-8",
-    "pdf":  "application/pdf",
+    "pdf": "application/pdf",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
@@ -296,6 +314,7 @@ def _sniff_ooxml_format(data: bytes) -> str | None:
     """
     import io
     import zipfile
+
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
             names = zf.namelist()
@@ -376,8 +395,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return
-            return self._send_bytes(target.read_bytes(),
-                                    "text/markdown; charset=utf-8")
+            return self._send_bytes(target.read_bytes(), "text/markdown; charset=utf-8")
         if path == "/template/status":
             return self._send_bytes(
                 json.dumps({"session_status": _session_template_status()}).encode("utf-8"),
@@ -390,9 +408,7 @@ class _Handler(BaseHTTPRequestHandler):
             # resolves against). Default editor content when no
             # localStorage / server draft is present.
             try:
-                example = resources.files("md2star.data").joinpath(
-                    "example.md"
-                ).read_bytes()
+                example = resources.files("md2star.data").joinpath("example.md").read_bytes()
                 return self._send_bytes(example, "text/markdown; charset=utf-8")
             except (FileNotFoundError, ModuleNotFoundError, OSError):
                 self.send_response(204)
@@ -406,7 +422,7 @@ class _Handler(BaseHTTPRequestHandler):
         if path == "/fs/read":
             return self._handle_fs_read()
         if path.startswith("/vendor/"):
-            rel = path[len("/vendor/"):]
+            rel = path[len("/vendor/") :]
             data = _read_vendor(rel)
             if data is None:
                 return self.send_error(404, f"unknown vendor asset {rel!r}")
@@ -531,11 +547,13 @@ class _Handler(BaseHTTPRequestHandler):
             # Failure (non-zero exit or no output file) → a JSON 500 carrying the
             # captured stderr so the editor can show *why* the render failed.
             if rc != 0 or not out_path.exists():
-                err_body = json.dumps({
-                    "ok": False,
-                    "exit_code": rc,
-                    "stderr": stderr_buf.captured,
-                }).encode("utf-8")
+                err_body = json.dumps(
+                    {
+                        "ok": False,
+                        "exit_code": rc,
+                        "stderr": stderr_buf.captured,
+                    }
+                ).encode("utf-8")
                 self.send_response(500)
                 self.send_header("Content-Type", "application/json")
                 self.send_header("Content-Length", str(len(err_body)))
@@ -599,18 +617,20 @@ class _Handler(BaseHTTPRequestHandler):
         if fmt not in ("docx", "pptx"):
             fmt = _sniff_ooxml_format(data) or ""
         if fmt not in ("docx", "pptx"):
-            return self.send_error(
-                415, "could not determine format (expected .docx or .pptx)"
-            )
+            return self.send_error(415, "could not determine format (expected .docx or .pptx)")
 
         # Persist under the per-process session dir; the next /render for this
         # format picks it up via _session_template.
         target = _session_dir() / f"template.{fmt}"
         target.write_bytes(data)
-        body = json.dumps({
-            "ok": True, "format": fmt, "bytes": len(data),
-            "session_status": _session_template_status(),
-        }).encode("utf-8")
+        body = json.dumps(
+            {
+                "ok": True,
+                "format": fmt,
+                "bytes": len(data),
+                "session_status": _session_template_status(),
+            }
+        ).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -621,9 +641,9 @@ class _Handler(BaseHTTPRequestHandler):
         """Delete every in-session uploaded template."""
         fmt = ""
         try:
-            payload = self._read_json() if int(
-                self.headers.get("Content-Length", "0") or "0"
-            ) > 0 else {}
+            payload = (
+                self._read_json() if int(self.headers.get("Content-Length", "0") or "0") > 0 else {}
+            )
             fmt = (payload.get("format") or "").lower()
         except Exception:
             fmt = ""
@@ -637,10 +657,13 @@ class _Handler(BaseHTTPRequestHandler):
                 p.unlink(missing_ok=True)
                 cleared.append(f)
 
-        body = json.dumps({
-            "ok": True, "cleared": cleared,
-            "session_status": _session_template_status(),
-        }).encode("utf-8")
+        body = json.dumps(
+            {
+                "ok": True,
+                "cleared": cleared,
+                "session_status": _session_template_status(),
+            }
+        ).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -712,10 +735,16 @@ class _Handler(BaseHTTPRequestHandler):
                     return self.send_error(400, str(exc))
                 except RuntimeError as exc:
                     return self.send_error(500, str(exc))
-            return self._json_ok({
-                "ok": True, "markdown": markdown, "bytes": len(data),
-                "ext": ext, "twin": False, "assets": 0,
-            })
+            return self._json_ok(
+                {
+                    "ok": True,
+                    "markdown": markdown,
+                    "bytes": len(data),
+                    "ext": ext,
+                    "twin": False,
+                    "assets": 0,
+                }
+            )
 
         # ── twin path: scraped assets need a persistent, confined home ──
         root = _folder_root()
@@ -763,10 +792,17 @@ class _Handler(BaseHTTPRequestHandler):
         markdown = md_path.read_text(encoding="utf-8")
         assets_dir = root / "assets"
         n_assets = sum(1 for _ in assets_dir.iterdir()) if assets_dir.is_dir() else 0
-        return self._json_ok({
-            "ok": True, "markdown": markdown, "bytes": len(data), "ext": ext,
-            "twin": True, "assets": n_assets, "filename": md_path.name,
-        })
+        return self._json_ok(
+            {
+                "ok": True,
+                "markdown": markdown,
+                "bytes": len(data),
+                "ext": ext,
+                "twin": True,
+                "assets": n_assets,
+                "filename": md_path.name,
+            }
+        )
 
     # ─────────────────────────────────────────────────────────────────
     # POST /lint — AI syntax-lint the editor's Markdown (Ollama, opt-in)
@@ -790,9 +826,13 @@ class _Handler(BaseHTTPRequestHandler):
         # lint_with_llm is self-guarding: it never raises and degrades to the
         # input on any failure, so a missing Ollama simply yields "no change".
         fixed = lint_with_llm(markdown, model=model)
-        body = json.dumps({
-            "ok": True, "markdown": fixed, "changed": fixed != markdown,
-        }).encode("utf-8")
+        body = json.dumps(
+            {
+                "ok": True,
+                "markdown": fixed,
+                "changed": fixed != markdown,
+            }
+        ).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -815,10 +855,13 @@ class _Handler(BaseHTTPRequestHandler):
         tmp = target.with_suffix(".tmp")
         tmp.write_bytes(data)
         tmp.replace(target)
-        body = json.dumps({
-            "ok": True, "bytes": len(data),
-            "path": str(target),
-        }).encode("utf-8")
+        body = json.dumps(
+            {
+                "ok": True,
+                "bytes": len(data),
+                "path": str(target),
+            }
+        ).encode("utf-8")
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
@@ -855,10 +898,12 @@ class _Handler(BaseHTTPRequestHandler):
         # Report whether a folder is open (and which) so the UI can show the
         # browser pane or the "open a folder" prompt.
         root = _folder_root()
-        self._json_ok({
-            "open": root is not None,
-            "root": str(root) if root else None,
-        })
+        self._json_ok(
+            {
+                "open": root is not None,
+                "root": str(root) if root else None,
+            }
+        )
 
     def _handle_fs_open(self) -> None:
         """Pick a folder (native dialog) or use a caller-supplied path."""
@@ -874,8 +919,7 @@ class _Handler(BaseHTTPRequestHandler):
             picked = _native_folder_picker("Pick a folder for md2star")
             if picked is None:
                 return self.send_error(
-                    501,
-                    "no native folder picker available; supply { \"path\": \"…\" }"
+                    501, 'no native folder picker available; supply { "path": "…" }'
                 )
             target = picked
         _set_folder_root(target.resolve())
@@ -905,17 +949,19 @@ class _Handler(BaseHTTPRequestHandler):
                 key=lambda e: (not e.is_dir(), e.name.lower()),
             ):
                 if entry.name.startswith("."):
-                    continue   # skip dot-files; cuts noise
+                    continue  # skip dot-files; cuts noise
                 rel_p = entry.relative_to(root).as_posix()
                 if entry.is_dir():
                     dirs.append({"name": entry.name, "path": rel_p})
                 elif entry.is_file():
-                    files.append({
-                        "name": entry.name,
-                        "path": rel_p,
-                        "size": entry.stat().st_size,
-                        "is_md": entry.suffix.lower() in (".md", ".markdown"),
-                    })
+                    files.append(
+                        {
+                            "name": entry.name,
+                            "path": rel_p,
+                            "size": entry.stat().st_size,
+                            "is_md": entry.suffix.lower() in (".md", ".markdown"),
+                        }
+                    )
         except PermissionError as exc:
             return self.send_error(403, f"permission denied: {exc}")
         return self._json_ok({"path": rel, "dirs": dirs, "files": files})
@@ -993,16 +1039,20 @@ class _Handler(BaseHTTPRequestHandler):
                 skipped.append(raw)
                 continue
             if target.suffix.lower() not in (".md", ".markdown"):
-                skipped.append(raw)   # safety: never delete non-md from here
+                skipped.append(raw)  # safety: never delete non-md from here
                 continue
             try:
                 target.unlink()
                 deleted.append(raw)
             except OSError:
                 skipped.append(raw)
-        return self._json_ok({
-            "ok": True, "deleted": deleted, "skipped": skipped,
-        })
+        return self._json_ok(
+            {
+                "ok": True,
+                "deleted": deleted,
+                "skipped": skipped,
+            }
+        )
 
     def _handle_shutdown(self) -> None:
         # We schedule the actual shutdown on a side thread so the response
@@ -1097,17 +1147,23 @@ def main(argv: list[str] | None = None) -> int:
         description="Launch the local Markdown → PDF preview GUI.",
     )
     parser.add_argument(
-        "--port", type=int, default=8765,
+        "--port",
+        type=int,
+        default=8765,
         help="Preferred port (default: %(default)s; auto-falls-back if in use).",
     )
     parser.add_argument(
-        "--no-browser", action="store_true",
+        "--no-browser",
+        action="store_true",
         help="Do not auto-open the browser. The URL is still printed.",
     )
     parser.add_argument(
-        "--bind", default="127.0.0.1",
-        help=("Bind address (default: %(default)s, localhost only). "
-              "Set to 0.0.0.0 to expose to the LAN (security risk; no auth)."),
+        "--bind",
+        default="127.0.0.1",
+        help=(
+            "Bind address (default: %(default)s, localhost only). "
+            "Set to 0.0.0.0 to expose to the LAN (security risk; no auth)."
+        ),
     )
     args = parser.parse_args(argv)
 
@@ -1123,17 +1179,20 @@ def main(argv: list[str] | None = None) -> int:
         # risks so anyone reading their logs sees the issue.
         banner = "═" * 64
         print(
-            "\n" + banner +
-            "\n  ⚠  md2star GUI is bound to a NON-LOOPBACK address." +
-            f"\n     URL: {url}" +
-            "\n  ⚠  The server has NO AUTHENTICATION and runs the md2star CLI" +
-            "\n     against any markdown a client sends. Anyone who can reach" +
-            "\n     this port can write files inside the open folder root and" +
-            "\n     upload arbitrary DOCX/PPTX templates." +
-            "\n  ⚠  This is appropriate ONLY for trusted local-network use." +
-            "\n     For anything else, bind to 127.0.0.1 (the default) and" +
-            "\n     use SSH port-forwarding to reach the GUI remotely." +
-            "\n" + banner + "\n",
+            "\n"
+            + banner
+            + "\n  ⚠  md2star GUI is bound to a NON-LOOPBACK address."
+            + f"\n     URL: {url}"
+            + "\n  ⚠  The server has NO AUTHENTICATION and runs the md2star CLI"
+            + "\n     against any markdown a client sends. Anyone who can reach"
+            + "\n     this port can write files inside the open folder root and"
+            + "\n     upload arbitrary DOCX/PPTX templates."
+            + "\n  ⚠  This is appropriate ONLY for trusted local-network use."
+            + "\n     For anything else, bind to 127.0.0.1 (the default) and"
+            + "\n     use SSH port-forwarding to reach the GUI remotely."
+            + "\n"
+            + banner
+            + "\n",
             file=sys.stderr,
         )
     print("Press Ctrl-C to stop (or use the in-page Quit button).")

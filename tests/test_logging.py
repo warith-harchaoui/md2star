@@ -84,9 +84,9 @@ def test_configure_installs_single_handler_and_is_idempotent() -> None:
 def test_configure_level_mapping() -> None:
     """Verbosity flags map to the documented thresholds; quiet outranks verbose."""
     for kwargs, expected in [
-        ({}, logging.INFO),                                 # default
-        ({"verbose": True}, logging.DEBUG),                 # --verbose: everything
-        ({"quiet": True}, logging.ERROR),                   # --quiet: errors only
+        ({}, logging.INFO),  # default
+        ({"verbose": True}, logging.DEBUG),  # --verbose: everything
+        ({"quiet": True}, logging.ERROR),  # --quiet: errors only
         ({"verbose": True, "quiet": True}, logging.ERROR),  # quiet wins
     ]:
         configure(**kwargs)

@@ -61,6 +61,7 @@ def _bundled_template_path(fmt: str) -> Path:
     table).
     """
     from importlib import resources
+
     # joinpath one component at a time: Python 3.10's MultiplexedPath only
     # accepts a single arg per call, so the multi-arg form would break there.
     ref = resources.files("md2star.data")
@@ -87,9 +88,9 @@ def _candidates(input_dir: Path, fmt: str) -> list[tuple[str, Path]]:
     # surfaces as a populated "cached" row after the first online run.
     return [
         ("per-project (template)", input_dir / f"template.{fmt}"),
-        ("per-project (legacy)",   input_dir / f".pandoc-reference.{fmt}"),
-        ("cached",                 cache_dir("templates") / f"template.{fmt}"),
-        ("bundled",                _bundled_template_path(fmt)),
+        ("per-project (legacy)", input_dir / f".pandoc-reference.{fmt}"),
+        ("cached", cache_dir("templates") / f"template.{fmt}"),
+        ("bundled", _bundled_template_path(fmt)),
     ]
 
 
@@ -152,11 +153,7 @@ def cmd_path(args: argparse.Namespace) -> int:
     branding). Exits with code 2 + a stderr message if no template
     exists at any of the candidate locations (an install bug).
     """
-    input_dir = (
-        Path(args.input).expanduser().resolve().parent
-        if args.input
-        else Path.cwd()
-    )
+    input_dir = Path(args.input).expanduser().resolve().parent if args.input else Path.cwd()
 
     winner = _first_existing(_candidates(input_dir, args.fmt))
     if winner is None:

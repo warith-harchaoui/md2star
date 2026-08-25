@@ -162,7 +162,10 @@ def _default_render() -> RenderFn:
 # on PATH wins; if none is present the SVG loop degrades to "keep the PNG".
 _SVG_CLI_RASTERISERS: tuple[tuple[str, Callable[[str, str], list[str]]], ...] = (
     ("rsvg-convert", lambda svg, png: ["rsvg-convert", "-o", png, svg]),
-    ("inkscape", lambda svg, png: ["inkscape", svg, "--export-type=png", f"--export-filename={png}"]),
+    (
+        "inkscape",
+        lambda svg, png: ["inkscape", svg, "--export-type=png", f"--export-filename={png}"],
+    ),
     ("magick", lambda svg, png: ["magick", "-background", "none", svg, png]),
     ("convert", lambda svg, png: ["convert", "-background", "none", svg, png]),
 )
@@ -206,7 +209,9 @@ def _rasterise_svg(source: str) -> str | None:
         try:
             subprocess.run(
                 build_argv(svg_path, png_path),
-                check=True, capture_output=True, timeout=60,
+                check=True,
+                capture_output=True,
+                timeout=60,
             )
         except (subprocess.SubprocessError, OSError) as exc:
             logger.debug("svg rasteriser %s failed: %s", name, exc)
@@ -377,9 +382,7 @@ def _reconstruct(
             vlm(compare_prompt, [target_png, candidate_png])
         )
         if verdict.matches:
-            logger.info(
-                "eyeball loop: matched %s target after %d iteration(s)", kind, iteration
-            )
+            logger.info("eyeball loop: matched %s target after %d iteration(s)", kind, iteration)
             return source
         if iteration == max_iterations:
             break  # budget spent — keep the last (closest) source
@@ -403,10 +406,15 @@ def reconstruct_mermaid(
     Returns the best Mermaid source, or ``None`` when nothing usable was drafted.
     """
     return _reconstruct(
-        "mermaid", target_png,
-        draft_prompt=_DRAFT_PROMPT, compare_prompt=_COMPARE_PROMPT,
-        revise_prompt=_REVISE_PROMPT, extract=_extract_mermaid,
-        vlm=vlm, render=render, max_iterations=max_iterations,
+        "mermaid",
+        target_png,
+        draft_prompt=_DRAFT_PROMPT,
+        compare_prompt=_COMPARE_PROMPT,
+        revise_prompt=_REVISE_PROMPT,
+        extract=_extract_mermaid,
+        vlm=vlm,
+        render=render,
+        max_iterations=max_iterations,
     )
 
 
@@ -420,10 +428,15 @@ def reconstruct_svg(
     was drafted (or no ``<svg>`` element could be parsed from the reply).
     """
     return _reconstruct(
-        "svg", target_png,
-        draft_prompt=_SVG_DRAFT_PROMPT, compare_prompt=_COMPARE_FIGURE_PROMPT,
-        revise_prompt=_SVG_REVISE_PROMPT, extract=_extract_svg,
-        vlm=vlm, render=render, max_iterations=max_iterations,
+        "svg",
+        target_png,
+        draft_prompt=_SVG_DRAFT_PROMPT,
+        compare_prompt=_COMPARE_FIGURE_PROMPT,
+        revise_prompt=_SVG_REVISE_PROMPT,
+        extract=_extract_svg,
+        vlm=vlm,
+        render=render,
+        max_iterations=max_iterations,
     )
 
 

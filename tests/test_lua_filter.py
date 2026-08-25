@@ -52,9 +52,12 @@ def _run_pandoc(markdown: str, to_fmt: str, *extra: str) -> str:
     """Run pandoc with the md2star Lua filter and return stdout as text."""
     cmd = [
         "pandoc",
-        "--from", "markdown",
-        "--to", to_fmt,
-        "--lua-filter", _filter_path(),
+        "--from",
+        "markdown",
+        "--to",
+        to_fmt,
+        "--lua-filter",
+        _filter_path(),
         *extra,
     ]
     proc = subprocess.run(
@@ -86,7 +89,8 @@ class TestTitleAndSubtitle:
             "# Hello World\n\nBody text.",
             "markdown",
             "--standalone",
-            "--metadata", "author=Alice",
+            "--metadata",
+            "author=Alice",
         )
         # The H1 should appear in the YAML metadata block as the title.
         assert "title: Hello World" in out
@@ -126,14 +130,29 @@ def test_date_localisation() -> None:
     system locale and must never pull a dictionary month.
     """
     french_months = (
-        "janvier", "février", "mars", "avril", "mai", "juin",
-        "juillet", "août", "septembre", "octobre", "novembre", "décembre",
+        "janvier",
+        "février",
+        "mars",
+        "avril",
+        "mai",
+        "juin",
+        "juillet",
+        "août",
+        "septembre",
+        "octobre",
+        "novembre",
+        "décembre",
     )
 
     def _render(lang: str) -> str:
         return _run_pandoc(
-            "# Titre\n\nCorps.\n", "markdown", "--standalone",
-            "--metadata", f"lang={lang}", "--metadata", "date_format=%B",
+            "# Titre\n\nCorps.\n",
+            "markdown",
+            "--standalone",
+            "--metadata",
+            f"lang={lang}",
+            "--metadata",
+            "date_format=%B",
         ).lower()
 
     # Supported language surfaces at least one French month name.
@@ -143,6 +162,46 @@ def test_date_localisation() -> None:
     # Unknown language must not pull French/German dict months.
     xx = _render("xx-YY")
     assert "février" not in xx and "februar" not in xx
+
+
+def test_date_localisation_capitalizes_multibyte_day_name() -> None:
+    """The subtitle's capitalize-first-character step must be UTF-8 aware.
+
+    Regression test: Lua's plain ``string`` library operates on raw bytes, so
+    slicing the first BYTE of a multi-byte UTF-8 character and upper-casing
+    just that byte is a silent no-op for any script outside ASCII. Every
+    Russian day name starts with a 2-byte Cyrillic codepoint, so this used to
+    leave the auto-dated subtitle lowercase ("пятница") while every Latin-
+    script language ("Vendredi", "Freitag", …) capitalized correctly. The
+    filter must use ``pandoc.text`` (codepoint-aware), not ``string``.
+    """
+    russian_days_lower = (
+        "воскресенье",
+        "понедельник",
+        "вторник",
+        "среда",
+        "четверг",
+        "пятница",
+        "суббота",
+    )
+    out = _run_pandoc(
+        "# Заголовок\n\nТело.\n",
+        "markdown",
+        "--standalone",
+        "--metadata",
+        "lang=ru-RU",
+        "--metadata",
+        "date_format=%A",
+    )
+    # Today's Russian day name must appear capitalized (first codepoint
+    # upper-cased) — never in its bare lowercase dictionary form.
+    capitalized_days = tuple(day[0].upper() + day[1:] for day in russian_days_lower)
+    assert any(day in out for day in capitalized_days), (
+        f"expected a capitalized Russian day name in: {out!r}"
+    )
+    assert not any(day in out for day in russian_days_lower), (
+        f"day name leaked lowercase (byte-sliced capitalization bug): {out!r}"
+    )
 
 
 # ──────────────────────────────────────────────────────────────────
@@ -178,10 +237,14 @@ def test_horizontal_rule_is_page_break_in_docx_only(tmp_path) -> None:
     subprocess.run(
         [
             "pandoc",
-            "--from", "markdown",
-            "--to", "docx",
-            "--lua-filter", _filter_path(),
-            "-o", str(out_docx),
+            "--from",
+            "markdown",
+            "--to",
+            "docx",
+            "--lua-filter",
+            _filter_path(),
+            "-o",
+            str(out_docx),
         ],
         input="Before page break.\n\n---\n\nAfter page break.\n".encode("utf-8"),
         check=True,

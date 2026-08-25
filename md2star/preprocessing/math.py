@@ -145,6 +145,7 @@ def unwrap_math_in_code_spans(text: str) -> str:
     single math expression with text portions wrapped in ``\\text{}``.
     Code spans with no math are returned verbatim.
     """
+
     def _replace(match: re.Match) -> str:
         """Rewrite one matched code span, or leave it verbatim if it has no math.
 

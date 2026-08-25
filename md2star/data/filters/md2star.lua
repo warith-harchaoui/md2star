@@ -270,12 +270,21 @@ function Pandoc(doc)
         table.insert(subtitle_blocks, pandoc.Para(subtitle_inlines))
     end
     if date_str then
-        -- The date is alone on its line; capitalize the first ASCII
-        -- character so localized weekdays read naturally ("lundi" →
-        -- "Lundi"). For "Sunday, June…" this is a no-op.
-        local first_char = date_str:sub(1, 1)
-        local rest = date_str:sub(2)
-        local capitalized = string.upper(first_char) .. rest
+        -- The date is alone on its line; capitalize the first character so
+        -- localized weekdays read naturally ("lundi" → "Lundi"). For
+        -- "Sunday, June…" this is a no-op.
+        --
+        -- Must use pandoc.text (UTF-8 codepoint aware), not the plain
+        -- ``string`` library: Lua's ``string.sub``/``string.upper`` operate
+        -- on raw BYTES, so on a multi-byte leading character (e.g. Russian
+        -- "пятница") ``string.upper(date_str:sub(1,1))`` only ever sees the
+        -- first byte of the UTF-8 sequence. In the "C" locale that byte is
+        -- silently left unchanged (toupper only maps ASCII), so the day
+        -- name stayed lowercase for every Russian-dated document while
+        -- every other supported language capitalized correctly.
+        local first_char = pandoc.text.sub(date_str, 1, 1)
+        local rest = pandoc.text.sub(date_str, 2, -1)
+        local capitalized = pandoc.text.upper(first_char) .. rest
         table.insert(subtitle_blocks, pandoc.Para({pandoc.Str(capitalized)}))
     end
 

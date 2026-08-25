@@ -39,8 +39,8 @@ _W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 _EMPTY_STYLES_XML = (
     '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
     f'<w:styles xmlns:w="{_W_NS}">'
-    '<w:docDefaults><w:rPrDefault><w:rPr/></w:rPrDefault></w:docDefaults>'
-    '</w:styles>'
+    "<w:docDefaults><w:rPrDefault><w:rPr/></w:rPrDefault></w:docDefaults>"
+    "</w:styles>"
 ).encode("utf-8")
 
 
@@ -79,9 +79,7 @@ def _has_style(root: ET.Element, style_id: str) -> bool:
 def _style_count(root: ET.Element, style_id: str) -> int:
     """Return how many ``<w:style>`` blocks in *root* carry *style_id*."""
     return sum(
-        1
-        for s in root.findall(f"{{{_W_NS}}}style")
-        if s.get(f"{{{_W_NS}}}styleId") == style_id
+        1 for s in root.findall(f"{{{_W_NS}}}style") if s.get(f"{{{_W_NS}}}styleId") == style_id
     )
 
 
@@ -125,10 +123,10 @@ def test_inject_adds_styles_then_is_idempotent_and_gap_filling(tmp_path) -> None
     pre_seeded = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f'<w:styles xmlns:w="{_W_NS}">'
-        '<w:docDefaults><w:rPrDefault><w:rPr/></w:rPrDefault></w:docDefaults>'
+        "<w:docDefaults><w:rPrDefault><w:rPr/></w:rPrDefault></w:docDefaults>"
         '<w:style w:type="table" w:customStyle="1" w:styleId="MyTable">'
         '<w:name w:val="MyTable"/></w:style>'
-        '</w:styles>'
+        "</w:styles>"
     ).encode("utf-8")
     with zipfile.ZipFile(partial, "w", zipfile.ZIP_DEFLATED) as zout:
         zout.writestr("word/styles.xml", pre_seeded)
@@ -160,22 +158,22 @@ def _build_docx_with_table_normal(path) -> None:
     styles = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f'<w:styles xmlns:w="{_W_NS}">'
-        '<w:docDefaults><w:rPrDefault><w:rPr/></w:rPrDefault></w:docDefaults>'
+        "<w:docDefaults><w:rPrDefault><w:rPr/></w:rPrDefault></w:docDefaults>"
         '<w:style w:type="table" w:customStyle="1" w:styleId="TableNormal0">'
         '<w:name w:val="TableNormal"/>'
-        '<w:tblPr><w:tblCellMar>'
+        "<w:tblPr><w:tblCellMar>"
         '<w:top w:w="100" w:type="dxa"/><w:left w:w="100" w:type="dxa"/>'
         '<w:bottom w:w="100" w:type="dxa"/><w:right w:w="100" w:type="dxa"/>'
-        '</w:tblCellMar></w:tblPr></w:style>'
-        '</w:styles>'
+        "</w:tblCellMar></w:tblPr></w:style>"
+        "</w:styles>"
     ).encode("utf-8")
     document = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f'<w:document xmlns:w="{_W_NS}"><w:body>'
         '<w:tbl><w:tblPr><w:tblStyle w:val="TableNormal0"/></w:tblPr>'
-        '<w:tr><w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr>'
-        '</w:tbl>'
-        '</w:body></w:document>'
+        "<w:tr><w:tc><w:p><w:r><w:t>cell</w:t></w:r></w:p></w:tc></w:tr>"
+        "</w:tbl>"
+        "</w:body></w:document>"
     ).encode("utf-8")
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zout:
         zout.writestr("word/styles.xml", styles)
@@ -220,13 +218,13 @@ def _build_docx_with_images(path) -> None:
     document = (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f'<w:document xmlns:w="{_W_NS}"><w:body>'
-        '<w:p><w:r><w:t>text only</w:t></w:r></w:p>'
-        '<w:p><w:r><w:drawing/></w:r></w:p>'                       # standalone image
-        '<w:p><w:r><w:t>caption </w:t></w:r><w:r><w:drawing/></w:r></w:p>'  # image + text
-        '<w:tbl><w:tr><w:tc>'
-        '<w:p><w:r><w:drawing/></w:r></w:p>'                       # image in a table cell
-        '</w:tc></w:tr></w:tbl>'
-        '</w:body></w:document>'
+        "<w:p><w:r><w:t>text only</w:t></w:r></w:p>"
+        "<w:p><w:r><w:drawing/></w:r></w:p>"  # standalone image
+        "<w:p><w:r><w:t>caption </w:t></w:r><w:r><w:drawing/></w:r></w:p>"  # image + text
+        "<w:tbl><w:tr><w:tc>"
+        "<w:p><w:r><w:drawing/></w:r></w:p>"  # image in a table cell
+        "</w:tc></w:tr></w:tbl>"
+        "</w:body></w:document>"
     ).encode("utf-8")
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zout:
         zout.writestr("word/document.xml", document)

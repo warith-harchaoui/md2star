@@ -32,9 +32,14 @@ def test_explicit_lang_precedence_and_english_fallback():
     """
     # Explicit lang beats detection for every shipped locale.
     cases = {
-        "fr-FR": "Bibliographie", "es-ES": "Bibliografía", "de-DE": "Literatur",
-        "it": "Bibliografia", "pt-BR": "Bibliografia", "nl": "Bibliografie",
-        "ru": "Библиография", "en-US": "Bibliography",
+        "fr-FR": "Bibliographie",
+        "es-ES": "Bibliografía",
+        "de-DE": "Literatur",
+        "it": "Bibliografia",
+        "pt-BR": "Bibliografia",
+        "nl": "Bibliografie",
+        "ru": "Библиография",
+        "en-US": "Bibliography",
     }
     for lang, expected in cases.items():
         assert _localized_bibliography_heading("body in English", lang) == expected

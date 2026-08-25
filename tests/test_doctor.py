@@ -44,8 +44,10 @@ def fake_which(present: dict[str, str | None]):
     Callable[[str], str | None]
         A drop-in replacement for :func:`shutil.which`.
     """
+
     def _which(name: str) -> str | None:
         return present.get(name)
+
     return _which
 
 
@@ -66,18 +68,22 @@ def _no_version_shellout(monkeypatch):
         Used to replace ``doctor._run_version`` and ``Path.exists``.
     """
     monkeypatch.setattr(
-        doctor, "_run_version",
+        doctor,
+        "_run_version",
         lambda cmd, **kw: f"{cmd[0]} fake-version-for-tests",
     )
     # Force Path.exists to return False for the macOS LibreOffice.app
     # fallback so the "soffice missing" assertions hold regardless of the
     # host environment. Other Path.exists calls are passed through.
     from pathlib import Path
+
     real_exists = Path.exists
+
     def _patched_exists(self):
         if str(self) == "/Applications/LibreOffice.app/Contents/MacOS/soffice":
             return False
         return real_exists(self)
+
     monkeypatch.setattr(Path, "exists", _patched_exists)
 
 
@@ -120,8 +126,20 @@ class TestDiagnosis:
         cases = [
             ({}, "Pandoc", doctor.STATUS_MISSING, "docx", "UNAVAILABLE"),
             ({"pandoc": "/usr/bin/pandoc"}, "LibreOffice", doctor.STATUS_MISSING, "pdf", "PARTIAL"),
-            ({"pandoc": "/usr/bin/pandoc"}, "Node.js", doctor.STATUS_INFO, "mermaid", "UNAVAILABLE"),
-            ({"pandoc": "/p", "node": "/n", "npx": "/x"}, "Mermaid CLI", doctor.STATUS_INFO, "mermaid", None),
+            (
+                {"pandoc": "/usr/bin/pandoc"},
+                "Node.js",
+                doctor.STATUS_INFO,
+                "mermaid",
+                "UNAVAILABLE",
+            ),
+            (
+                {"pandoc": "/p", "node": "/n", "npx": "/x"},
+                "Mermaid CLI",
+                doctor.STATUS_INFO,
+                "mermaid",
+                None,
+            ),
         ]
         for present, check, expected_status, feature, feature_status in cases:
             report = doctor.run_checks(which=fake_which(present))

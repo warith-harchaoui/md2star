@@ -50,22 +50,22 @@ _BORDERS = (
     '<w:right w:val="single" w:sz="4" w:space="0" w:color="9E9E9E"/>'
     '<w:insideH w:val="single" w:sz="4" w:space="0" w:color="9E9E9E"/>'
     '<w:insideV w:val="single" w:sz="4" w:space="0" w:color="9E9E9E"/>'
-    '</w:tblBorders>'
+    "</w:tblBorders>"
 )
 
 _MYTABLE = (
     f'<w:style xmlns:w="{_W_NS}" w:type="table" w:customStyle="1" w:styleId="MyTable">'
     '<w:name w:val="MyTable"/>'
-    '<w:tblPr>'
-    f'{_BORDERS}'
-    '<w:tblCellMar>'
+    "<w:tblPr>"
+    f"{_BORDERS}"
+    "<w:tblCellMar>"
     '<w:top w:w="60" w:type="dxa"/>'
     '<w:left w:w="108" w:type="dxa"/>'
     '<w:bottom w:w="60" w:type="dxa"/>'
     '<w:right w:w="108" w:type="dxa"/>'
-    '</w:tblCellMar>'
-    '</w:tblPr>'
-    '</w:style>'
+    "</w:tblCellMar>"
+    "</w:tblPr>"
+    "</w:style>"
 )
 
 _MYTABLE_SMALL = (
@@ -73,16 +73,16 @@ _MYTABLE_SMALL = (
     '<w:name w:val="MyTableSmall"/>'
     '<w:pPr><w:rPr><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr></w:pPr>'
     '<w:rPr><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr>'
-    '<w:tblPr>'
-    f'{_BORDERS}'
-    '<w:tblCellMar>'
+    "<w:tblPr>"
+    f"{_BORDERS}"
+    "<w:tblCellMar>"
     '<w:top w:w="30" w:type="dxa"/>'
     '<w:left w:w="72" w:type="dxa"/>'
     '<w:bottom w:w="30" w:type="dxa"/>'
     '<w:right w:w="72" w:type="dxa"/>'
-    '</w:tblCellMar>'
-    '</w:tblPr>'
-    '</w:style>'
+    "</w:tblCellMar>"
+    "</w:tblPr>"
+    "</w:style>"
 )
 
 
@@ -108,9 +108,7 @@ def inject_table_styles(docx_path: str) -> bool:
     except ET.ParseError as exc:
         # Defensive: a malformed styles.xml means we skip injection rather
         # than corrupt the .docx — warn and leave the document as pandoc built it.
-        logger.warning(
-            f"md2star warning: word/styles.xml parse failed ({exc}); skipping inject"
-        )
+        logger.warning(f"md2star warning: word/styles.xml parse failed ({exc}); skipping inject")
         return False
 
     changed = False
@@ -130,9 +128,10 @@ def inject_table_styles(docx_path: str) -> bool:
     # sibling temp file, swapping only word/styles.xml, then atomically move it
     # over the original — a crash mid-write can't corrupt the user's document.
     tmp_path = docx_path + ".tmp"
-    with zipfile.ZipFile(docx_path, "r") as zin, zipfile.ZipFile(
-        tmp_path, "w", zipfile.ZIP_DEFLATED
-    ) as zout:
+    with (
+        zipfile.ZipFile(docx_path, "r") as zin,
+        zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zout,
+    ):
         for item in zin.infolist():
             # Copy every member verbatim except the styles part we mutated.
             data = zin.read(item.filename)
@@ -250,9 +249,10 @@ def strip_table_normal_for_pdf(docx_path: str) -> bool:
         return False
 
     tmp_path = docx_path + ".tmp"
-    with zipfile.ZipFile(docx_path, "r") as zin, zipfile.ZipFile(
-        tmp_path, "w", zipfile.ZIP_DEFLATED
-    ) as zout:
+    with (
+        zipfile.ZipFile(docx_path, "r") as zin,
+        zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zout,
+    ):
         for item in zin.infolist():
             data = members.get(item.filename, zin.read(item.filename))
             zout.writestr(item, data)
@@ -288,7 +288,7 @@ def _center_images_xml(xml_bytes: bytes) -> tuple[bytes, bool]:
         if para.find(f".//{_DRAWING_TAG}") is None:
             continue
         if any((t.text or "").strip() for t in para.iter(_T_TAG)):
-            continue                                    # image mixed with text
+            continue  # image mixed with text
         ancestor, in_table = parents.get(para), False
         while ancestor is not None:
             if ancestor.tag == _TBL_TAG:
@@ -300,7 +300,7 @@ def _center_images_xml(xml_bytes: bytes) -> tuple[bytes, bool]:
         ppr = para.find(_PPR_TAG)
         if ppr is None:
             ppr = ET.Element(_PPR_TAG)
-            para.insert(0, ppr)                         # pPr must be the first child
+            para.insert(0, ppr)  # pPr must be the first child
         jc = ppr.find(_JC_TAG)
         if jc is None:
             jc = ET.Element(_JC_TAG)
@@ -335,9 +335,10 @@ def center_standalone_images(docx_path: str) -> bool:
     members["word/document.xml"] = new_bytes
 
     tmp_path = docx_path + ".tmp"
-    with zipfile.ZipFile(docx_path, "r") as zin, zipfile.ZipFile(
-        tmp_path, "w", zipfile.ZIP_DEFLATED
-    ) as zout:
+    with (
+        zipfile.ZipFile(docx_path, "r") as zin,
+        zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zout,
+    ):
         for item in zin.infolist():
             zout.writestr(item, members.get(item.filename, zin.read(item.filename)))
     shutil.move(tmp_path, docx_path)
@@ -348,6 +349,7 @@ if __name__ == "__main__":
     # Standalone debug entry (`python -m md2star.postprocess <file.docx>`):
     # configure logging ourselves since there's no CLI wrapper to do it.
     from .logging import configure as _configure_logging
+
     _configure_logging()
 
     if len(sys.argv) != 2:

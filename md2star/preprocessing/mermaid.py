@@ -76,9 +76,11 @@ def _template_body_font(template_docx: str) -> str | None:
 def _load_base_mermaid_config() -> dict | None:
     """Return the bundled ``mermaid-config.json`` as a dict, or ``None``."""
     try:
-        with resources.files("md2star.data").joinpath("mermaid-config.json").open(
-            "r", encoding="utf-8"
-        ) as f:
+        with (
+            resources.files("md2star.data")
+            .joinpath("mermaid-config.json")
+            .open("r", encoding="utf-8") as f
+        ):
             return json.load(f)
     except (FileNotFoundError, ModuleNotFoundError, json.JSONDecodeError, OSError):
         return None
@@ -164,9 +166,17 @@ def render_mermaid_local(content: str, out_dir: str) -> str:  # noqa: ARG001
     # global install. transparent background blends into any page; --scale 2
     # renders at 2× for crisp diagrams in print/PDF.
     cmd = [
-        "npx", "-y", "@mermaid-js/mermaid-cli",
-        "-i", tmp_input, "-o", filepath,
-        "-b", "transparent", "--scale", "2",
+        "npx",
+        "-y",
+        "@mermaid-js/mermaid-cli",
+        "-i",
+        tmp_input,
+        "-o",
+        filepath,
+        "-b",
+        "transparent",
+        "--scale",
+        "2",
     ]
     if config_path:
         cmd.extend(["-c", config_path])
@@ -176,9 +186,7 @@ def render_mermaid_local(content: str, out_dir: str) -> str:  # noqa: ARG001
     # ``.mmd`` file we just wrote ourselves, so disabling the sandbox is
     # the standard CI workaround (see https://pptr.dev/troubleshooting).
     try:
-        puppeteer_cfg = str(
-            resources.files("md2star.data").joinpath("puppeteer-config.json")
-        )
+        puppeteer_cfg = str(resources.files("md2star.data").joinpath("puppeteer-config.json"))
         if os.path.exists(puppeteer_cfg):
             cmd.extend(["-p", puppeteer_cfg])
     except (FileNotFoundError, ModuleNotFoundError):

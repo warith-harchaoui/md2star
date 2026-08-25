@@ -114,10 +114,10 @@ class TestCli:
         (argv_extra, local-template filename or None, use_src, expected suffix).
         """
         cases = [
-            ([], None, False, "template.docx"),                          # default fmt = docx
-            (["--fmt", "docx"], None, False, "template.docx"),           # explicit docx
+            ([], None, False, "template.docx"),  # default fmt = docx
+            (["--fmt", "docx"], None, False, "template.docx"),  # explicit docx
             (["--fmt", "pptx"], "template.pptx", False, "template.pptx"),  # local CWD override
-            (["--fmt", "pptx"], "template.pptx", True, "template.pptx"),   # source-dir keying
+            (["--fmt", "pptx"], "template.pptx", True, "template.pptx"),  # source-dir keying
         ]
         for i, (argv_extra, seed_local, use_src, expected_suffix) in enumerate(cases):
             # A fresh sub-CWD per case so seeded local templates don't leak across.

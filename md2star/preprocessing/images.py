@@ -57,9 +57,7 @@ _CELL_IMG_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)(?:\{[^}]*\})?")
 _IMAGE_NO_ATTR_RE = re.compile(r"(!\[[^\]]*\])\(([^)]+)\)(?!\s*\{)")
 
 # Matches ``![alt](URL)`` with optional trailing ``{attrs}`` for remote images.
-_REMOTE_IMG_RE = re.compile(
-    r"(!\[[^\]]*\])\((https?://[^)]+)\)(\{[^}]*\})?"
-)
+_REMOTE_IMG_RE = re.compile(r"(!\[[^\]]*\])\((https?://[^)]+)\)(\{[^}]*\})?")
 
 # Captures the path between the parens of any ``![alt](path)`` reference.
 _IMG_PATH_RE = re.compile(r"(!\[[^\]]*\]\()([^)]+)(\))")
@@ -163,6 +161,7 @@ def fix_image_widths(content: str) -> str:
     resized via :func:`resize_images_in_markdown_tables` instead. Applying a
     page-wide cap inside a cell would still overflow the cell.
     """
+
     def _attach(match: re.Match) -> str:
         """Append an A4-fitting attribute block to one matched bare image.
 
@@ -223,6 +222,7 @@ def resize_images_in_markdown_tables(content: str, base_dir: str = ".") -> str:
         # Only rewrite inside pipe-table rows — everything else keeps its
         # normal (page-sized) image handling.
         if PIPE_TABLE_ROW_RE.match(line):
+
             def _resize_match(m: re.Match) -> str:
                 """Rewrite one in-cell image to point at a downscaled copy.
 
@@ -326,10 +326,7 @@ def _html_img_to_markdown(img_tag: str) -> str:
     A missing ``src`` falls through as the original tag (nothing to convert).
     """
     # Parse all key="value" attrs (lower-cased keys) into a dict for lookup.
-    attrs = {
-        m.group("name").lower(): m.group("value")
-        for m in _HTML_ATTR_RE.finditer(img_tag)
-    }
+    attrs = {m.group("name").lower(): m.group("value") for m in _HTML_ATTR_RE.finditer(img_tag)}
     # No src → not a real image tag; hand it back unchanged.
     src = attrs.get("src")
     if not src:
@@ -382,18 +379,12 @@ def html_images_to_markdown(content: str) -> str:
 
     # 0. Stash fenced code blocks under NUL tokens so an <img> shown *as an
     #    example* inside a code fence isn't rewritten.
-    stashed = re.sub(
-        r"```[^\n]*\n.*?\n```", _stash, content, flags=re.DOTALL
-    )
+    stashed = re.sub(r"```[^\n]*\n.*?\n```", _stash, content, flags=re.DOTALL)
     # 1. Collapse wrapped ``<p|div|…><img></…>`` to just the Markdown image
     #    (the wrapper would make Pandoc drop the whole HTML block).
-    stashed = _WRAPPED_HTML_IMG_RE.sub(
-        lambda m: _html_img_to_markdown(m.group("img")), stashed
-    )
+    stashed = _WRAPPED_HTML_IMG_RE.sub(lambda m: _html_img_to_markdown(m.group("img")), stashed)
     # 2. Convert any remaining bare ``<img>`` tags in place.
-    stashed = _BARE_HTML_IMG_RE.sub(
-        lambda m: _html_img_to_markdown(m.group(0)), stashed
-    )
+    stashed = _BARE_HTML_IMG_RE.sub(lambda m: _html_img_to_markdown(m.group(0)), stashed)
     # 3. Restore the stashed code blocks verbatim.
     for token, block in placeholders.items():
         stashed = stashed.replace(token, block)
@@ -437,9 +428,7 @@ def _svg_to_png(svg_path: str, max_px: int) -> str | None:
             return out_path
         except Exception as e:
             # rsvg failed — fall through to the cairosvg / warn-and-keep path.
-            logger.warning(
-                f"md2star warning: rsvg-convert failed on {svg_path}: {e}"
-            )
+            logger.warning(f"md2star warning: rsvg-convert failed on {svg_path}: {e}")
 
     # Backend 2: cairosvg — pure-Python API, but needs the native cairo lib.
     try:
@@ -520,9 +509,7 @@ def _resize_raster(img_path: str, max_px: int) -> str:
         return out_path
     except Exception as e:
         # Resizing is best-effort: on any failure keep the original image.
-        logger.warning(
-            f"md2star warning: cannot resize {img_path}: {e}"
-        )
+        logger.warning(f"md2star warning: cannot resize {img_path}: {e}")
         return img_path
 
 
@@ -550,6 +537,7 @@ def process_image_assets(content: str, base_dir: str, max_px: int = 1600) -> str
     size up for no visible gain — so this pass is a defensive normalisation
     before Pandoc sees the document.
     """
+
     def _process_src(src: str) -> str:
         """Normalise a single image ``src``: SVG → PNG, downscale oversized rasters.
 
@@ -662,9 +650,9 @@ def download_remote_images(content: str, out_dir: str) -> str:  # noqa: ARG001
             The Markdown image pointing at the local cache copy, or the
             original match unchanged when the download fails.
         """
-        prefix = match.group(1)        # ![alt]
-        url = match.group(2)           # https://...
-        attrs = match.group(3) or ""   # {width=85%} or empty
+        prefix = match.group(1)  # ![alt]
+        url = match.group(2)  # https://...
+        attrs = match.group(3) or ""  # {width=85%} or empty
 
         url_hash = osh.hash_string(url, 12)
 
@@ -700,9 +688,7 @@ def download_remote_images(content: str, out_dir: str) -> str:  # noqa: ARG001
             except Exception as e:
                 # Download failed: leave the original remote reference in place
                 # so pandoc can still try (or the user can fix the URL).
-                logger.warning(
-                    f"md2star warning: Failed to download image {url}: {e}"
-                )
+                logger.warning(f"md2star warning: Failed to download image {url}: {e}")
                 return match.group(0)
 
         return f"{prefix}({local_path}){attrs}"

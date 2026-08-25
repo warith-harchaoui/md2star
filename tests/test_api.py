@@ -94,9 +94,7 @@ def test_convert_rejects_unknown_format(client: TestClient) -> None:
 
 
 @pytest.mark.skipif(shutil.which("pandoc") is None, reason="pandoc not installed")
-def test_convert_markdown_to_docx(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_convert_markdown_to_docx(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """A real /convert round-trip returns a non-empty DOCX (ZIP-based) file."""
     # Keep the test hermetic: the API defaults to fetching the deraison.ai
     # template (v2.5.0+) since the staged upload has no local template. Empty
@@ -110,9 +108,7 @@ def test_convert_markdown_to_docx(
         files={"file": ("note.md", md, "text/markdown")},
     )
     assert r.status_code == 200, r.text
-    assert r.headers["content-type"].startswith(
-        "application/vnd.openxmlformats-officedocument"
-    )
+    assert r.headers["content-type"].startswith("application/vnd.openxmlformats-officedocument")
     # A .docx is a ZIP container — its magic bytes are "PK".
     assert r.content[:2] == b"PK"
     assert len(r.content) > 1000
@@ -168,8 +164,13 @@ def test_extract_cleans_up_temp_dir_on_failure(
     )
     r = client.post(
         "/extract",
-        files={"file": ("note.docx", b"fake-docx",
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        files={
+            "file": (
+                "note.docx",
+                b"fake-docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
     )
     assert r.status_code == 500
     assert not tmp_path.exists(), "the temp dir must be removed on a failed /extract"
@@ -207,23 +208,31 @@ def test_extract_text_only_returns_json(
     monkeypatch.setattr("md2star.reverse.to_markdown", lambda _p: "# Recovered\n", raising=True)
     r = client.post(
         "/extract",
-        files={"file": ("note.docx", b"fake-docx",
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        files={
+            "file": (
+                "note.docx",
+                b"fake-docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
     )
     assert r.status_code == 200, r.text
     body = r.json()
     assert body == {"filename": "note.md", "markdown": "# Recovered\n"}
 
 
-def test_extract_twin_returns_zip(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_extract_twin_returns_zip(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     """``/extract`` with ``twin=true`` streams a zip of <stem>.md + assets/."""
     monkeypatch.setattr("md2star.reverse.to_markdown_twin", _fake_twin, raising=True)
     r = client.post(
         "/extract",
-        files={"file": ("note.docx", b"fake-docx",
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        files={
+            "file": (
+                "note.docx",
+                b"fake-docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
         data={"twin": "true"},
     )
     assert r.status_code == 200, r.text
@@ -252,8 +261,13 @@ def test_extract_docx_roundtrips_to_markdown(
     # Reverse: DOCX → Markdown.
     rev = client.post(
         "/extract",
-        files={"file": ("note.docx", fwd.content,
-                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document")},
+        files={
+            "file": (
+                "note.docx",
+                fwd.content,
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
     )
     assert rev.status_code == 200, rev.text
     body = rev.json()

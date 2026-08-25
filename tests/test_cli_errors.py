@@ -48,10 +48,16 @@ def test_render_error_logs_headline_then_indented_hint(caplog) -> None:
     indented record), and empty (headline only — proving no stray blank record).
     """
     cases = [
-        (errors.MissingDependencyError("pandoc not found", hint="install via brew / apt / winget"),
-         ["md2star: pandoc not found", "  install via brew / apt / winget"]),
-        (errors.MissingDependencyError("soffice missing", hint="line 1\nline 2"),
-         ["md2star: soffice missing", "  line 1", "  line 2"]),
+        (
+            errors.MissingDependencyError(
+                "pandoc not found", hint="install via brew / apt / winget"
+            ),
+            ["md2star: pandoc not found", "  install via brew / apt / winget"],
+        ),
+        (
+            errors.MissingDependencyError("soffice missing", hint="line 1\nline 2"),
+            ["md2star: soffice missing", "  line 1", "  line 2"],
+        ),
         (errors.Md2starError("naked error", hint=""), ["md2star: naked error"]),
     ]
     for exc, expected in cases:
@@ -99,6 +105,7 @@ def test_missing_pandoc_returns_127(caplog, monkeypatch, tmp_path) -> None:
 
     # shutil.which sees nothing, so the dependency probe fails.
     import shutil
+
     monkeypatch.setattr(shutil, "which", lambda name: None)
 
     rc = md2docx_main([str(md)])

@@ -50,8 +50,8 @@ pytestmark = pytest.mark.skipif(
 # of them before the fixed-point comparison. This is the *only* content
 # md2star adds that is not present in the source.
 _DATE_H1 = re.compile(
-    r"^#\s+(?:\w+,\s+\w+\s+\d{1,2},\s+\d{4}"     # English: Sunday, July 5, 2026
-    r"|\d{1,2}\s+\w+\s+\d{4})\s*$",              # French:  5 juillet 2026
+    r"^#\s+(?:\w+,\s+\w+\s+\d{1,2},\s+\d{4}"  # English: Sunday, July 5, 2026
+    r"|\d{1,2}\s+\w+\s+\d{4})\s*$",  # French:  5 juillet 2026
     re.MULTILINE,
 )
 
