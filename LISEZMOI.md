@@ -687,6 +687,19 @@ Voir **[CONTRIBUTING.md](https://github.com/warith-harchaoui/md2star/blob/main/C
 l'organisation du projet et la checklist de PR. En résumé : `make dev`
 + `python -m pytest tests/` + `ruff check md2star/ tests/`.
 
+## Variante Rust
+
+Un projet distinct, [`md2star-rs`](https://github.com/warith-harchaoui/md2star-rs), poursuit le
+même objectif « Markdown en entrée, DOCX/PPTX fidèle en sortie » sans Pandoc : un pipeline
+lecteur → AST → écrivain entièrement en Rust, compilé en un binaire statique unique sans
+dépendance d'exécution — pas d'installation de Pandoc requise, ce qui le rend utilisable sur
+téléphone, sur des machines verrouillées et (à terme) en WASM. La contrepartie : c'est un
+sous-ensemble ciblé, pas un remplacement — pas de bibliographie ni de citations (aucun
+processeur CSL Rust stable pour l'instant), pas de conversion mathématique vers OMML, pas
+d'images intégrées ni de relations d'hyperliens dans le moteur PPTX. Utilisez `md2star-rs` pour
+un binaire unique sans installation, pour du Markdown → Word/PowerPoint simple ; restez sur
+`md2star` (ce paquet) pour les citations, les mathématiques et la fidélité maximale.
+
 ## Auteur
 
 [Warith HARCHAOUI](https://linkedin.com/in/warith-harchaoui)
