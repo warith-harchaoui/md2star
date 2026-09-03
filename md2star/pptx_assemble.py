@@ -644,7 +644,14 @@ def eyeball_slides(
                 if isinstance(out, dict)
                 else (json.loads(out) if isinstance(out, str) else None)
             )
-            if not verdict or verdict.get("matches"):
+            if not verdict:
+                # A transport failure or unparseable reply is indistinguishable
+                # from "matches" to the caller below — surfaced here so a
+                # verbose run doesn't read as a silent, suspiciously perfect
+                # deck when the judge simply never weighed in.
+                logger.debug("eyeball loop: no verdict for slide %d, skipping", s.index)
+                continue
+            if verdict.get("matches"):
                 continue
             if iteration < max_iterations:
                 ov = _overrides_for(verdict)
@@ -653,6 +660,18 @@ def eyeball_slides(
                     # passes accumulates both fixes instead of losing the first.
                     s.overrides = {**(s.overrides or {}), **ov}
                     flagged += 1
+                else:
+                    # A real mismatch (matches=False) with none of the four
+                    # boolean flags set — e.g. a text-alignment discrepancy,
+                    # observed live during validation — has no corrective
+                    # lever today (see _overrides_for and docs/design/pptx-
+                    # template-intelligence.md follow-ups). Logged so this
+                    # gap is visible instead of reading as "nothing to fix".
+                    logger.info(
+                        "eyeball loop: slide %d flagged (%s) but no automatic fix applies",
+                        s.index,
+                        verdict.get("discrepancies", "").strip() or "no discrepancy text",
+                    )
         if iteration < max_iterations:
             if not flagged:
                 break  # nothing actionable left to fix — stop before a no-op re-assemble
