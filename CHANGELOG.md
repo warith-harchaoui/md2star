@@ -4,6 +4,32 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] — 2026-09-03
+
+### Added
+- **Template-intelligent PPTX (`md2pptx --smart-layout --template <designer.pptx>`)**:
+  maps each Markdown slide onto a real designer PowerPoint template's own
+  named layouts instead of Pandoc's ~7 generic ones. Two new modules —
+  `md2star/pptx_layout.py` (deterministic layout/placeholder catalog via
+  `zipfile`+`ElementTree`, an LLM text pass that picks the best-fitting
+  layout per slide, and a **VLM visual tie-break** that shows the vision
+  model actual candidate-layout thumbnails alongside the slide's content and
+  overrides the text pick on disagreement) and `md2star/pptx_assemble.py`
+  (a Seam-D `python-pptx` assembler that instantiates the *chosen* layout per
+  slide — not a fixed round-robin subset — sized from that layout's own
+  placeholder geometry, plus a **target-matching Ralph Eyeball Loop**
+  (`--eyeball-iterations N`) that compares a rendered candidate against the
+  chosen layout's own catalog thumbnail and applies bounded fixes). Both
+  stages route through `best_engine_ai_helper.llm.chat` via md2star's
+  resolved brief → engine contract, exactly like the existing alt-text/
+  diagram-reconstruction AI passes; `md2star/llm.brief.yaml` gained a fourth
+  job description and `structured_output: true` so the resolved engine
+  supports the strict-JSON layout decisions this pass needs. Opt-in
+  (`pip install 'md2star[pptx]'` for `python-pptx`) and best-effort: without
+  a resolvable LLM+VLM engine or `python-pptx`, `--smart-layout` raises a
+  clear, actionable error rather than silently falling back — the ordinary
+  Pandoc `md2pptx` path is unaffected either way.
+
 ## [3.1.3] — 2026-08-21
 
 ### Fixed

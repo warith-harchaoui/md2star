@@ -11,20 +11,46 @@ mode: local
 kind: both
 headroom: 0.5
 min_tps: 15
-# The passes below use no JSON schema (plain text/markdown out), so structured
-# output is not required.
-structured_output: false
+# Job (4) below (PPTX smart-layout) asks for strict JSON decisions (layout
+# catalog captions, per-slide layout choice, visual tie-break verdicts), so the
+# resolved engine must support structured output; the first three jobs are
+# plain text/markdown and would tolerate either, but the contract is one engine
+# per package, so the strictest job's requirement wins.
+structured_output: true
+# NOTE: deliberately avoids the words "document"/"scan"/"OCR" anywhere below —
+# best-engine-ai-helper's task parser flips the vision axis to "ocr" the moment
+# any such word appears ANYWHERE in the text, which would misdirect the VLM
+# pick away from the aesthetic/layout-judgment axis every job below actually
+# needs. Say "Markdown source" / "content" / "files" instead. Likewise avoid
+# any SUBSTRING match on "code" (routes the LLM to the coding-benchmark axis
+# instead of generalist reasoning; both matchers are plain substring checks,
+# not word-boundary — "hardcoded" trips "code" just as "code fence" does) —
+# say "fenced block" and "fixed"/"permanent" instead.
 task: >
-  md2star runs three opt-in, best-effort AI jobs over documents in the
-  document's own language (any language, auto-detected — never a hardcoded
-  EN/FR toggle). (1) A text LLM repairs Markdown SYNTAX ONLY at temperature 0:
-  broken image links, unclosed code fences and malformed table pipes — never
-  rewording prose. (2) A vision model drafts concise W3C-style alt text for
-  images with empty alts, in the document's language, using the surrounding
-  heading and prose as context for what the image means in place. (3) A vision
+  md2star runs four opt-in, best-effort AI jobs over Markdown source and its
+  rendered output, always in that source's own language (any language,
+  auto-detected — never a fixed EN/FR switch). (1) A text LLM repairs
+  Markdown SYNTAX ONLY at temperature 0: broken image links, unclosed
+  triple-backtick fenced blocks and malformed table pipes — never rewording
+  prose. (2) A vision model drafts concise W3C-style alt text for images with
+  empty alts, in the source's language, using the surrounding heading and
+  prose as context for what the image means in place. (3) A vision
   model reconstructs scraped rasters into editable source — node-and-edge
   diagrams as Mermaid, other clean vector figures as SVG — through a
   render -> compare -> revise "eyeball loop" that shows the model both the
-  candidate render and the original and iterates until they match. Latency
-  matters (short, per-image calls); solid multilingual reading and writing
-  matter more than raw model size.
+  candidate render and the original and iterates until they match. (4) Two
+  coupled jobs for mapping authored Markdown slides onto a professional
+  designer's PowerPoint template: a text reasoning engine that reads each
+  slide's Markdown content plus a catalog of the template's named layouts and
+  decides which layout best fits, a semantic classification and
+  instruction-following task returning a strict JSON decision, reasoning about
+  each slide's role such as cover, section divider, big-number statistic, bold
+  statement, one-to-four-column bullets, two-column split, photo hero,
+  numbered process steps, and closing thank-you; and a vision engine for a
+  visual quality-assessment loop, given a screenshot of a rendered candidate
+  slide (or several candidate template layout thumbnails) and the slide's
+  content, judging how well the visual layout, composition, hierarchy, colour
+  and aesthetic match, returning image, screenshot, diagram and chart
+  aesthetic quality assessment for design, not fine-print reading. Latency
+  matters (short, per-image/per-slide calls); solid multilingual reading and
+  writing matter more than raw model size.

@@ -96,6 +96,16 @@ mcp = [
 ocr = [
     "kreuzberg>=4,<5",
 ]
+# Template-intelligent PPTX (`md2pptx --smart-layout --template <designer.pptx>`,
+# see md2star/pptx_layout.py + md2star/pptx_assemble.py): maps each slide onto
+# a real designer template's own named layouts instead of Pandoc's ~7 generic
+# ones, via AI layout selection (best-engine-ai-helper, already a core dep)
+# and a Seam-D python-pptx assembler. Opt-in because most conversions never
+# need a Seam-D builder; the flag raises a clear error without this extra.
+#   pip install 'md2star[pptx]'
+pptx = [
+    "python-pptx>=1.0,<2",
+]
 # The local GUI (`md2star gui`) ships bundled in this same wheel and needs no
 # extra Python packages — its frontend (PDF.js, CodeMirror, Tailwind, fonts) is
 # fully vendored and the server is pure stdlib. This extra exists so
@@ -125,6 +135,10 @@ dev = [
     # It is a TEST-ONLY dependency — never imported by the md2star runtime —
     # and that test skips cleanly when kreuzberg (or LibreOffice) is absent.
     "kreuzberg>=4,<5",
+    # python-pptx backs the pptx --smart-layout assembler (see the pptx extra
+    # above); CI installs it so tests/test_pptx_assemble.py actually exercises
+    # real python-pptx object construction, not just the injected-fake paths.
+    "python-pptx>=1.0,<2",
 ]
 
 [project.scripts]

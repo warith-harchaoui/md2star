@@ -320,3 +320,42 @@ curl -sF file=@report.pdf -F twin=true \
 curl -sF file=@architecture.pdf -F diagrams=true \
      -o architecture.zip http://localhost:8000/extract
 ```
+
+## 12. Template-Intelligent PPTX
+
+Pandoc's PPTX writer only ever reaches its bundled template's ~7 generic
+named layouts. `md2pptx --smart-layout --template <designer.pptx>` maps
+each Markdown slide onto a **real designer template's own layout
+vocabulary** instead: an LLM reads each slide's content against a catalog
+of the template's named layouts and picks the best fit, a **VLM visually
+confirms or overrides** that pick against the candidate layouts' actual
+thumbnails (not just their captions), and a `python-pptx` assembler builds
+the deck directly on the chosen layout per slide. Needs the `[pptx]`
+extra (`pip install 'md2star[pptx]'`) and a resolved local LLM+VLM engine
+(the same `best_engine_ai_helper` stack `--lint`/`twin --diagrams` use).
+
+```bash
+md2pptx talk.md --template ./brand/Company-Template.pptx --smart-layout
+```
+
+Add `--eyeball-iterations N` (default 0, off) to run a **target-matching
+Ralph Eyeball Loop** after assembly: each pass renders the deck, shows the
+vision model both a candidate slide and the chosen layout's own catalog
+thumbnail, and applies bounded fixes (shrink an overflowing title, cap the
+bullet count, grow an undersized image) — never touching the picture
+itself, only the spec the assembler re-reads.
+
+```bash
+md2pptx talk.md --template ./brand/Company-Template.pptx \
+    --smart-layout --eyeball-iterations 2
+```
+
+> [!TIP]
+> `--no-visual-confirm` skips the VLM tie-break stage (cheaper, text-only
+> layout selection) when you want the LLM's first pick taken as final.
+
+`--smart-layout` bypasses Pandoc entirely for that run — `--template`
+plays the role a Pandoc reference-doc normally plays. The ordinary
+`md2pptx talk.md` (no `--smart-layout`) path is unaffected and stays the
+default. See `docs/design/pptx-template-intelligence.md` for the full
+design (catalog format, layout-selection prompts, the eyeball-loop shape).

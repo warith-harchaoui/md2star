@@ -8,8 +8,19 @@
 > render and drives revisions. The design itself always comes from the template.
 
 Author: Warith Harchaoui — <warith.harchaoui@deraison.ai>
-Status: investigation / design (not yet implemented). Reference template:
-`assets/templates/pptx/Jellysmack-Presentation-Template.pptx` (git-ignored, see §8).
+Status: **shipped in 3.2.0** as `md2pptx --smart-layout --template <designer.pptx>`
+(`md2star/pptx_layout.py` + `md2star/pptx_assemble.py`, see `EXAMPLES.md` §12).
+Ships the Phase 1-4 slice of §7's phased plan: catalog builder, LLM+VLM
+layout selection (the VLM stage described in §4.2 as "optional" is on by
+default — `visual_confirm()`, skippable with `--no-visual-confirm`), a
+curated-archetype Seam-D assembler (§4.3), and the target-matching eyeball
+loop (§4.4, `--eyeball-iterations`). Phase 5 (bench gemma3-JSON vs.
+qwen3-vl-lenient) and full placeholder-vs-overlay reconciliation (the
+harder half of §4.3/§6) remain open follow-ups; the rest of this document
+is the design record that shaped the implementation. Reference template used
+during investigation: `assets/templates/pptx/Jellysmack-Presentation-Template.pptx`
+(git-ignored, see §8) — the shipped code targets *any* designer PPTX, not
+just this one (its own offline tests build a synthetic template instead).
 
 ---
 

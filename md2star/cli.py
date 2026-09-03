@@ -446,6 +446,44 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
         action="version",
         version=f"md2star {__version__}",
     )
+
+    if fmt == "pptx":
+        # ── Template-intelligent PPTX (opt-in, bypasses Pandoc entirely) ──
+        parser.add_argument(
+            "--smart-layout",
+            action="store_true",
+            help=(
+                "Map each slide onto a real designer PowerPoint template's own "
+                "named layouts (AI layout selection, python-pptx assembly) "
+                "instead of Pandoc's ~7 generic layouts. Requires --template; "
+                "degrades to a clear error without a resolvable LLM+VLM engine "
+                "or python-pptx installed (`pip install 'md2star[pptx]'`)."
+            ),
+        )
+        parser.add_argument(
+            "--template",
+            help="Designer .pptx template for --smart-layout (its own file, not md2star's).",
+        )
+        parser.add_argument(
+            "--no-visual-confirm",
+            action="store_true",
+            help=(
+                "--smart-layout only: skip the VLM visual tie-break stage "
+                "(cheaper, text-only layout selection)."
+            ),
+        )
+        parser.add_argument(
+            "--eyeball-iterations",
+            type=int,
+            default=0,
+            metavar="N",
+            help=(
+                "--smart-layout only: run the target-matching Ralph Eyeball Loop "
+                "for N bounded revision passes after assembly (0 = off, the "
+                "default; each pass re-renders the deck and costs one VLM call "
+                "per slide)."
+            ),
+        )
     return parser
 
 
@@ -534,6 +572,12 @@ def _convert(fmt: str, argv: list[str]) -> int:
         offline=args.offline,
     )
 
+    # 1b. Template-intelligent PPTX detour: bypasses Pandoc entirely and
+    #     returns here. Checked with getattr since --smart-layout/--template
+    #     only exist on the pptx parser (fmt == "pptx").
+    if getattr(args, "smart_layout", False):
+        return _convert_smart_layout(fmt, in_path, out_path, processed, args)
+
     # 2. Append the bibliography heading if requested. We do this on the
     #    preprocessed text rather than the source so the user's source file
     #    is never mutated. The heading text defaults to the localized
@@ -602,6 +646,103 @@ def _convert(fmt: str, argv: list[str]) -> int:
             return rc
 
     print(f"Wrote: {out_path}")
+    return 0
+
+
+def _mermaid_renderer(out_dir: Path):
+    """Build a ``str -> Path | None`` Mermaid renderer for the smart-layout
+    assembler, or ``None`` when the Mermaid toolchain module can't be
+    imported (never fatal — Mermaid slides then degrade to title-only)."""
+    try:
+        from .preprocessing.mermaid import render_mermaid_local  # noqa: PLC0415
+    except ImportError:
+        return None
+
+    def _render(src: str) -> Path | None:
+        try:
+            return Path(render_mermaid_local(src, out_dir=str(out_dir)))
+        except Exception as exc:  # noqa: BLE001 — degrade to title-only slide
+            logger.debug("smart-layout: mermaid render failed: %s", exc)
+            return None
+
+    return _render
+
+
+def _convert_smart_layout(fmt: str, in_path: Path, out_path: Path, processed: str, args) -> int:
+    """Route ``md2pptx --smart-layout`` through the AI layout assembler.
+
+    Bypasses Pandoc and the whole reference-doc pipeline: ``--template``
+    (the designer's own PPTX) plays the role a Pandoc reference-doc normally
+    plays. See :mod:`md2star.pptx_layout` / :mod:`md2star.pptx_assemble` for
+    the catalog/selection/assembly/eyeball-loop stages this wires together.
+    """
+    if fmt != "pptx":
+        raise InvalidInputError(f"md2{fmt}: --smart-layout is only valid for pptx")
+    if not args.template:
+        raise InvalidInputError(
+            "md2pptx --smart-layout: --template <designer.pptx> is required",
+            hint="Point --template at the designer's own PPTX, not md2star's bundled template.",
+        )
+    template = Path(args.template).expanduser().resolve()
+    if not template.exists():
+        raise InvalidInputError(f"md2pptx: template not found: {template}")
+
+    try:
+        import pptx  # noqa: F401, PLC0415 — optional dep, probed here for a clear error
+    except ImportError as exc:
+        raise Md2starError(
+            "md2pptx --smart-layout needs python-pptx: pip install 'md2star[pptx]'"
+        ) from exc
+
+    from .pptx_assemble import assemble, eyeball_slides  # noqa: PLC0415
+    from .pptx_layout import (  # noqa: PLC0415
+        build_catalog,
+        segment,
+        select_layouts,
+        smart_layout_available,
+        visual_confirm,
+    )
+
+    if not smart_layout_available():
+        raise Md2starError(
+            "md2pptx --smart-layout needs a resolved LLM+VLM engine; run "
+            '`best-engine-ai-helper report --task "..."` or check '
+            "md2star/llm.engine.yaml for what best-engine-ai-helper resolved."
+        )
+
+    slides = segment(processed)
+    if not slides:
+        raise InvalidInputError(f"md2pptx: no slides found in {in_path}")
+
+    logger.info("smart-layout: cataloging %s", template)
+    catalog = build_catalog(template)
+    logger.info("smart-layout: selecting layouts for %d slides", len(slides))
+    select_layouts(slides, catalog)
+    if not args.no_visual_confirm:
+        logger.info("smart-layout: visual tie-break")
+        visual_confirm(slides, catalog, template=template)
+
+    render_mermaid = _mermaid_renderer(out_path.parent)
+    if args.eyeball_iterations > 0:
+        result = eyeball_slides(
+            slides,
+            catalog,
+            template,
+            out_path,
+            max_iterations=args.eyeball_iterations,
+            image_base_dir=in_path.parent,
+            render_mermaid=render_mermaid,
+        )
+    else:
+        result = assemble(
+            slides,
+            catalog,
+            template,
+            out_path,
+            image_base_dir=in_path.parent,
+            render_mermaid=render_mermaid,
+        )
+    print(f"Wrote: {result.pptx_path} ({result.placed}/{result.total} slides)")
     return 0
 
 
