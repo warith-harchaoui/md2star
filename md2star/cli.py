@@ -531,6 +531,26 @@ def _convert(fmt: str, argv: list[str]) -> int:
     else:
         docx_path = out_path
 
+    # 1. Preprocess
+    raw = in_path.read_text(encoding="utf-8")
+    processed = preprocess_markdown(
+        raw,
+        base_dir=str(in_path.parent),
+        lint_enabled=args.lint,
+        skip_phases=args.skip_phase,
+        allow_remote_images=args.allow_remote_images,
+        offline=args.offline,
+    )
+
+    # 1b. Template-intelligent PPTX detour: bypasses Pandoc AND the whole
+    #     reference-doc/metadata block below entirely (checked here, before
+    #     either does any work, so --smart-layout never triggers a wasted
+    #     remote-template fetch it would just discard). Checked with getattr
+    #     since --smart-layout/--template only exist on the pptx parser
+    #     (fmt == "pptx").
+    if getattr(args, "smart_layout", False):
+        return _convert_smart_layout(fmt, in_path, out_path, processed, args)
+
     # Build the pandoc metadata / flag list from our high-level options. Each
     # is appended only when supplied, so unset options fall back to the
     # template / metadata.yaml defaults rather than injecting empty values.
@@ -560,23 +580,6 @@ def _convert(fmt: str, argv: list[str]) -> int:
             allow_remote_templates=not args.no_remote_templates,
             offline=args.offline,
         )
-
-    # 1. Preprocess
-    raw = in_path.read_text(encoding="utf-8")
-    processed = preprocess_markdown(
-        raw,
-        base_dir=str(in_path.parent),
-        lint_enabled=args.lint,
-        skip_phases=args.skip_phase,
-        allow_remote_images=args.allow_remote_images,
-        offline=args.offline,
-    )
-
-    # 1b. Template-intelligent PPTX detour: bypasses Pandoc entirely and
-    #     returns here. Checked with getattr since --smart-layout/--template
-    #     only exist on the pptx parser (fmt == "pptx").
-    if getattr(args, "smart_layout", False):
-        return _convert_smart_layout(fmt, in_path, out_path, processed, args)
 
     # 2. Append the bibliography heading if requested. We do this on the
     #    preprocessed text rather than the source so the user's source file
