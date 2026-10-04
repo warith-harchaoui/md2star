@@ -255,8 +255,8 @@ are already rendered pre-pandoc, so that work survives either way.
 ### 4.4 Ralph Eyeball Loop for slides
 
 The **Ralph Eyeball Loop** (Warith Harchaoui's method — canonical definition:
-[EN](https://harchaoui.org/warith/sprezzature/ralph-eyeball-loop.html) ·
-[FR](https://harchaoui.org/warith/sprezzature/fr/ralph-eyeball-loop.html)) is
+[EN](https://sprezzature.ai/ralph-eyeball-loop.html) ·
+[FR](https://sprezzature.ai/fr/ralph-eyeball-loop.html)) is
 the capstone quality gate. Its four steps map directly onto slides —
 **Render** (deterministically, LibreOffice → `pdftoppm` PNG) → **Look** (is the
 point the first thing the eye finds? overflow / low-contrast / awkward void /

@@ -770,7 +770,7 @@ This is the PyPI debut. Two breaking changes drive the major bump.
 ### Added
 - **Branded Mermaid palette** — every rendered diagram now uses the
   Warith colour system from
-  [harchaoui.org/warith/colors](https://harchaoui.org/warith/colors):
+  [deraison.ai/colors](https://deraison.ai/colors):
   light-blue node fills (`#CCE4FF`) with blue borders (`#007AFF`),
   grey edges (`#808080`), light-yellow notes (`#FFF5CC`), and matching
   actor / activation / cluster colours for sequence and gantt

@@ -154,7 +154,7 @@ On installe le coin dont on a besoin, pas tout. Philosophie Unix : petits outil
 
 ![](assets/img/live/ai-helpers-landing.png)
 
-<!-- harchaoui.org/warith/ai-helpers, la landing publique. Sur la photo : moi, Mohamed Chelali, Bachir Zerroug. Montre que c'est un vrai projet documenté, pas un prototype. -->
+<!-- deraison.ai/ai-helpers, la landing publique. Sur la photo : moi, Mohamed Chelali, Bachir Zerroug. Montre que c'est un vrai projet documenté, pas un prototype. -->
 
 ***
 

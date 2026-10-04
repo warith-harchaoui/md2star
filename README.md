@@ -65,7 +65,7 @@ you pass `--allow-remote-images`. Neither ever sends your Markdown anywhere.
 
 ## Documentation
 
-[💻 Documentation](https://harchaoui.org/warith/ai-helpers/docs/md2star-doc/)
+[💻 Documentation](https://deraison.ai/ai-helpers/docs/md2star-doc/)
 
 [🗺️ Landscape](https://github.com/warith-harchaoui/md2star/blob/main/LANDSCAPE.md)
 

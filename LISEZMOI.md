@@ -71,7 +71,7 @@ jamais votre machine.
 
 ## Documentation
 
-[💻 Documentation](https://harchaoui.org/warith/ai-helpers/docs/md2star-doc/)
+[💻 Documentation](https://deraison.ai/ai-helpers/docs/md2star-doc/)
 
 [🗺️ Paysage](https://github.com/warith-harchaoui/md2star/blob/main/PAYSAGE.md)
 
