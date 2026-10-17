@@ -90,15 +90,14 @@ it from the name alone, and a VLM can confirm from the rendered picture.
 `best-engine-ai-helper` (v1.0.0) gives both *which model* and *the transport*:
 
 ```python
-import best_engine_ai_helper as beh                 # tag resolvers (used today)
-from best_engine_ai_helper.llm import chat          # transport (text + vision)
+import best_engine_ai_helper as beh  # tag resolvers (used today)
+from best_engine_ai_helper.llm import chat  # transport (text + vision)
 
 # text: layout decision as strict JSON (structured output)
-decision = chat(prompt, json_schema=LAYOUT_SCHEMA)          # -> dict
+decision = chat(prompt, json_schema=LAYOUT_SCHEMA)  # -> dict
 
 # vision: compare a rendered slide against the target layout picture
-verdict  = chat(compare_prompt, images=[cand_png, target_png],
-                json_schema=VERDICT_SCHEMA)                 # -> dict
+verdict = chat(compare_prompt, images=[cand_png, target_png], json_schema=VERDICT_SCHEMA)  # -> dict
 ```
 
 `chat(prompt, *, system=None, images: list[bytes]|None=None,
