@@ -1,9 +1,11 @@
 """Tests for the md2star Claude / OpenCode skill packaging.
 
-Goals 5 and 6 require md2star to ship as a well-formed skill with exhaustive,
-enforced triggers. These tests assert the SKILL.md exists, has the required
-frontmatter, and that ``scripts/check_triggers.py`` reports full trigger-bucket
-coverage — so a thin or drifted description fails CI, not production.
+The suite ships every helper with five surfaces: a library, two CLIs, a FastAPI
+HTTP app, MCP mounted on that same app, and an agent skill. These tests cover
+the fifth one: that ``skills/md2star/SKILL.md`` exists, is well-formed against
+the published Agent Skills standard, and that ``scripts/check_triggers.py``
+reports full trigger-bucket coverage — so a thin or drifted description fails
+the gate, not production.
 
 Author
 ------
@@ -16,7 +18,8 @@ import importlib.util
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parent.parent
-_SKILL = _REPO / "skills" / "md2star" / "SKILL.md"
+_SKILL_DIR = _REPO / "skills" / "md2star"
+_SKILL = _SKILL_DIR / "SKILL.md"
 
 
 def _load_checker():
@@ -24,26 +27,41 @@ def _load_checker():
     spec = importlib.util.spec_from_file_location(
         "check_triggers", _REPO / "scripts" / "check_triggers.py"
     )
-    mod = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
 def test_skill_md_exists_and_has_frontmatter() -> None:
-    """SKILL.md exists with name + description frontmatter and references."""
+    """SKILL.md opens with YAML frontmatter carrying the right name."""
     assert _SKILL.exists(), "skills/md2star/SKILL.md is missing"
     text = _SKILL.read_text(encoding="utf-8")
     assert text.startswith("---"), "SKILL.md must open with YAML frontmatter"
     assert "\nname: md2star" in text
     assert "description:" in text
-    # Progressive-disclosure reference files the body points to.
-    for ref in ("cli-reference.md", "surfaces.md", "triggers.md"):
-        assert (_SKILL.parent / "references" / ref).exists(), f"missing reference: {ref}"
 
 
-def test_triggers_fully_covered() -> None:
-    """The trigger checker reports zero uncovered buckets (goal 6 enforced)."""
-    checker = _load_checker()
-    failures = checker.check()
-    assert failures == [], f"trigger coverage gaps: {failures}"
+def test_progressive_disclosure_references_resolve() -> None:
+    """Every references/*.md the body points at actually exists."""
+    import re
+
+    body = _SKILL.read_text(encoding="utf-8").split("---", 2)[-1]
+    referenced = set(re.findall(r"references/([\w.-]+\.md)", body))
+    assert referenced, "SKILL.md should defer depth to references/*.md"
+    for ref in sorted(referenced):
+        assert (_SKILL_DIR / "references" / ref).exists(), f"missing references/{ref}"
+
+
+def test_triggers_catalogue_is_mirrored() -> None:
+    """The catalogue exists for both audiences: repo root and skill references."""
+    assert (_REPO / "TRIGGERS.md").exists(), "TRIGGERS.md missing at the repo root"
+    assert (_SKILL_DIR / "references" / "triggers.md").exists(), (
+        "skills/md2star/references/triggers.md missing"
+    )
+
+
+def test_trigger_buckets_are_covered() -> None:
+    """The description names every capability and carries a SKIP clause."""
+    failures = _load_checker().check()
+    assert not failures, "trigger coverage gaps:\n  - " + "\n  - ".join(failures)

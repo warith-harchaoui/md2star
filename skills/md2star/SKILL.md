@@ -2,35 +2,24 @@
 name: md2star
 description: >-
   Convert Markdown into professional DOCX (Word), PPTX (PowerPoint) and PDF
-  documents via the `md2star` CLI — a Pandoc wrapper with branded templates,
-  BibTeX citations, footnotes, Mermaid diagrams, math, and remote-image
-  embedding. Use it whenever a user wants a Markdown file turned into an Office
-  or PDF deliverable rather than raw HTML/LaTeX.
-
-  TRIGGER — any of: the user names a target format for a `.md` file ("convert
-  this markdown to Word / .docx / a Word document", "make a PowerPoint / .pptx /
-  slides / a deck from this markdown", "markdown to PDF", "export my README as a
-  PDF/DOCX"); the user types or references a wrapper command (`md2docx`,
-  `md2pptx`, `md2pdf`, `md2star docx|pptx|pdf|gui|doctor`); the user wants a
-  branded/templated Office document ("use our .docx/.pptx template", "corporate
-  template", "reference-doc styling"); the user wants citations/bibliography in
-  Word ("resolve [@key] against my .bib", "BibTeX to Word", "citeproc"),
-  footnotes, a Mermaid diagram rendered into a document, or LaTeX-style math in
-  DOCX/PPTX/PDF; the user asks for a local "Overleaf-style" Markdown→PDF preview
-  editor; the user wants the reverse direction — read a finished PDF/DOCX/PPTX
-  back into an editable Markdown *twin* ("turn this PDF/Word back into Markdown",
-  "recover the Markdown", "make an editable twin of this doc", `md2star twin`,
-  optionally `--diagrams` to re-author figures as Mermaid); the user asks how to
-  install/run any of the above or says "md2star".
-
-  SKIP when: the user wants only raw text/parsing out of a document with no
-  intent to get an editable Markdown source back (use a plain parser/OCR — the
-  twin path is for round-trippable Markdown); the user explicitly wants to run
-  Pandoc directly with their own flags; the target is a static website/HTML
-  (use a site generator) or a LaTeX-native workflow (use Overleaf/latexmk). For
-  drafting alt-text or captions as content, prefer the dedicated front-vision /
-  front-audio skills; md2star only fills EMPTY alts as an opt-in `--lint` side
-  effect.
+  documents through a Pandoc wrapper with branded templates, BibTeX citations,
+  footnotes, Mermaid diagrams, math and remote-image embedding — and read a
+  finished PDF / DOCX / PPTX back into an editable Markdown twin. Use when the
+  user says "convert this markdown to Word / .docx", "make a PowerPoint /
+  deck / slides from this markdown", "markdown to PDF", "export my README as a
+  PDF", "use our corporate template", "resolve [@key] against my .bib",
+  "BibTeX to Word", "render this Mermaid diagram into a document", "turn this
+  PDF back into Markdown", "make an editable twin of this doc", or types
+  `md2docx`, `md2pptx`, `md2pdf`, `md2star docx|pptx|pdf|gui|doctor|twin`,
+  `md2star-x`, `md2star-api`, `md2star-mcp`. Do NOT use to extract plain text
+  from a document, to author the Markdown itself, or for HTML output. The
+  exhaustive trigger catalogue is in `references/triggers.md`.
+license: BSD-3-Clause
+metadata:
+  author: Warith Harchaoui
+  package: md2star
+  suite: ai-helpers
+  homepage: https://deraison.ai/ai-helpers
 ---
 
 # md2star — Markdown → DOCX / PPTX / PDF

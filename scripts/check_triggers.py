@@ -1,18 +1,27 @@
 """Trigger-coverage checker for the md2star Claude / OpenCode skill.
 
-Goal 6 of the project's agent-surface work asks that the skill's triggers be
-*exhaustive and enforced*. A host model only ever sees the ``description:``
-field of ``skills/md2star/SKILL.md`` before deciding whether to load the skill,
-so that string — not the reference docs — is what must carry the triggers.
+The suite's agent-surface rule is that a skill's triggers must be **exhaustive
+and enforced**, not merely written down. A host model only ever sees the
+``description:`` field of ``skills/md2star/SKILL.md`` before deciding whether
+to load the skill, so that one string — not the reference docs — is what has to
+carry the triggers.
 
-This script parses the YAML frontmatter of ``SKILL.md`` and asserts that the
-``description`` mentions at least one token from every required trigger bucket
-(each format, each wrapper command, branding, citations, diagrams, math, the
-preview surfaces) *and* contains an explicit SKIP clause so the skill does not
-over-fire. It is deliberately dependency-free (stdlib only) so it can run in the
-same CI lane as ``audit_comments.py`` without installing anything.
+This script parses the YAML frontmatter and asserts that the ``description``:
 
-Run it directly or via ``pytest tests/test_skill.py``::
+* mentions at least one token from every required trigger bucket below,
+* carries an explicit SKIP / negative-trigger clause so the skill does not
+  over-fire,
+* stays inside the published 1024-character cap for the field,
+* names the skill in kebab-case, matching its folder,
+* contains no XML angle brackets (a frontmatter security restriction),
+
+and that the repo ships the companion catalogue (``TRIGGERS.md`` at the root,
+mirrored into ``skills/md2star/references/triggers.md``).
+
+It is deliberately dependency-free (stdlib only) so it runs in the lightest CI
+lane without installing anything.
+
+Run it directly or through ``pytest tests/test_skill.py``::
 
     python scripts/check_triggers.py            # exit 0 = every bucket covered
     python scripts/check_triggers.py --list     # print the buckets and verdicts
@@ -29,9 +38,17 @@ import re
 import sys
 from pathlib import Path
 
-# Resolve SKILL.md relative to the repo root (this script lives in scripts/),
-# so the checker works regardless of the caller's current directory.
-_SKILL_MD = Path(__file__).resolve().parent.parent / "skills" / "md2star" / "SKILL.md"
+# Resolve paths from the repo root (this script lives in scripts/), so the
+# checker works regardless of the caller's current directory.
+_REPO = Path(__file__).resolve().parent.parent
+_SKILL_DIR = _REPO / "skills" / "md2star"
+_SKILL_MD = _SKILL_DIR / "SKILL.md"
+_ROOT_TRIGGERS = _REPO / "TRIGGERS.md"
+_SKILL_TRIGGERS = _SKILL_DIR / "references" / "triggers.md"
+
+# The published Agent Skills standard caps the description, because the field
+# sits in the host model's system prompt for every conversation.
+_MAX_DESCRIPTION = 1024
 
 # Each bucket is (human label, [accepted lowercase tokens]). Coverage means the
 # description contains ANY token in the bucket — synonyms are alternatives, not
@@ -45,17 +62,23 @@ _REQUIRED_BUCKETS: list[tuple[str, list[str]]] = [
     ("citations / bibliography", ["bibtex", "citation", "citeproc", ".bib"]),
     ("diagrams", ["mermaid"]),
     ("math", ["math", "latex"]),
+    ("reverse / twin", ["twin", "back into markdown", "editable"]),
     ("preview / GUI", ["gui", "overleaf", "preview", "editor"]),
-    ("install / doctor", ["install", "doctor", "md2star"]),
 ]
 
 # A negative-trigger clause is mandatory: without a documented SKIP the skill
-# over-fires on extraction / raw-pandoc / website requests.
-_SKIP_MARKERS = ["skip when", "do not fire", "skip:"]
+# over-fires on neighbouring requests the rest of the suite already handles.
+_SKIP_MARKERS = ["skip when", "do not fire", "do not use", "skip:"]
+
+
+def _frontmatter(text: str) -> str:
+    """Return the raw YAML frontmatter block of a SKILL.md, or an empty string."""
+    fm = re.search(r"^---\s*\n(.*?)\n---\s*\n", text, re.DOTALL)
+    return fm.group(1) if fm else ""
 
 
 def _extract_description(text: str) -> str:
-    """Return the ``description:`` value from a SKILL.md YAML frontmatter block.
+    """Return the ``description:`` value, lowercased and whitespace-collapsed.
 
     Parameters
     ----------
@@ -65,19 +88,15 @@ def _extract_description(text: str) -> str:
     Returns
     -------
     str
-        The description text, lowercased and whitespace-collapsed. Empty string
-        if no frontmatter / description was found (treated as a failure upstream).
+        The description text as one lowercase line. Empty when no frontmatter
+        or no description was found (treated as a failure upstream).
     """
-    # Grab the first ``--- ... ---`` frontmatter block. DOTALL so the block can
-    # span many lines; non-greedy so we stop at the first closing fence.
-    fm = re.search(r"^---\s*\n(.*?)\n---\s*\n", text, re.DOTALL)
-    if not fm:
+    block = _frontmatter(text)
+    if not block:
         return ""
-    block = fm.group(1)
-
     # Match ``description:`` and everything up to the next top-level YAML key
-    # (a line starting with a non-space, non-dash character). This tolerates the
-    # ``>-`` folded-scalar style used in SKILL.md, where the value is indented.
+    # (a line starting with a non-space character). This tolerates the ``>-``
+    # folded-scalar style, where the value is indented across many lines.
     desc = re.search(
         r"^description:\s*(.*?)(?=\n[A-Za-z_][\w-]*:\s|\Z)",
         block,
@@ -85,12 +104,14 @@ def _extract_description(text: str) -> str:
     )
     if not desc:
         return ""
-    # Collapse the folded scalar into one lowercase line for token matching.
-    return re.sub(r"\s+", " ", desc.group(1)).strip().lower()
+    value = re.sub(r"\s+", " ", desc.group(1)).strip()
+    # Drop a leading folded-scalar indicator if the regex captured it.
+    value = re.sub(r"^>[-+]?\s*", "", value)
+    return value.lower()
 
 
 def check(verbose: bool = False) -> list[str]:
-    """Return the list of coverage failures (empty list = fully enforced).
+    """Return the list of failures (empty list = triggers fully enforced).
 
     Parameters
     ----------
@@ -100,16 +121,19 @@ def check(verbose: bool = False) -> list[str]:
     Returns
     -------
     list of str
-        One human-readable message per uncovered bucket or missing SKIP clause.
+        One human-readable message per uncovered bucket or broken rule.
     """
     if not _SKILL_MD.exists():
         return [f"SKILL.md not found at {_SKILL_MD}"]
 
-    description = _extract_description(_SKILL_MD.read_text(encoding="utf-8"))
+    text = _SKILL_MD.read_text(encoding="utf-8")
+    block = _frontmatter(text)
+    description = _extract_description(text)
     if not description:
         return ["could not parse a `description:` field from SKILL.md frontmatter"]
 
     failures: list[str] = []
+
     # Every capability bucket must be represented by at least one token.
     for label, tokens in _REQUIRED_BUCKETS:
         hit = any(tok in description for tok in tokens)
@@ -124,6 +148,40 @@ def check(verbose: bool = False) -> list[str]:
         print(f"  {'✓' if has_skip else '✗'} SKIP clause present")
     if not has_skip:
         failures.append("no SKIP / negative-trigger clause found in description")
+
+    # Spec conformance: the description rides in the system prompt, so its size
+    # is a hard budget rather than a style preference.
+    if len(description) > _MAX_DESCRIPTION:
+        failures.append(
+            f"description is {len(description)} characters, over the {_MAX_DESCRIPTION} cap"
+        )
+
+    # The name must be kebab-case and match the folder, or hosts cannot load it.
+    name = re.search(r"^name:\s*(.+)$", block, re.MULTILINE)
+    name = name.group(1).strip() if name else ""
+    if name != "md2star":
+        failures.append(f"frontmatter name {name!r} does not match folder 'md2star'")
+    if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", name):
+        failures.append(f"frontmatter name {name!r} is not kebab-case")
+
+    # Angle brackets are forbidden in frontmatter (prompt-injection surface).
+    # The leading ``>-`` folded-scalar indicator is YAML, not an XML tag.
+    scrubbed = re.sub(r"^description:\s*>[-+]?\s*$", "description:", block, flags=re.MULTILINE)
+    if re.search(r"[<>]", scrubbed):
+        failures.append("angle bracket found in frontmatter (forbidden by the spec)")
+
+    # The spec forbids a README inside the skill folder; ours lives one level up.
+    if (_SKILL_DIR / "README.md").exists():
+        failures.append(
+            "skills/md2star/README.md exists — the spec forbids it inside a skill folder"
+        )
+
+    # The catalogue must exist on both sides: user-facing at the repo root, and
+    # agent-facing under references/, so neither audience reads a stale list.
+    if not _ROOT_TRIGGERS.exists():
+        failures.append("TRIGGERS.md missing at the repo root")
+    if not _SKILL_TRIGGERS.exists():
+        failures.append("skills/md2star/references/triggers.md missing")
 
     return failures
 
