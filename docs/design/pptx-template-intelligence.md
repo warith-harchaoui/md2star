@@ -7,7 +7,7 @@
 > Ralph Eyeball Loop. An LLM chooses the layout per slide; a VLM checks the
 > render and drives revisions. The design itself always comes from the template.
 
-Author: Warith Harchaoui — <warith.harchaoui@deraison.ai>
+Author: Warith Harchaoui — <warithmetics@deraison.ai>
 Status: **shipped in 3.2.0** as `md2pptx --smart-layout --template <designer.pptx>`
 (`md2star/pptx_layout.py` + `md2star/pptx_assemble.py`, see `EXAMPLES.md` §12).
 Ships the Phase 1-4 slice of §7's phased plan: catalog builder, LLM+VLM
