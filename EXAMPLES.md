@@ -381,6 +381,20 @@ Wrote: talk.pptx (14/14 slides)
 layout audit: 2 findings on 2 slides (1 overlap, 1 overrun)
 ```
 
+It is also a tool on its own, pointed at **any** presentation — one a
+colleague sent you, one PowerPoint made, one you built years ago:
+
+```bash
+md2star audit theirs.pptx            # human-readable, one line per finding
+md2star audit theirs.pptx --json     # same findings, machine-readable
+md2star audit theirs.pptx --strict   # also fail on `overrun`
+```
+
+It exits `1` when it finds a **defect** (off-slide, overlap, ghost
+placeholder, illegible type) and `0` when it finds only observations, so it
+drops straight into a CI job or a pre-commit hook. The deck is read, never
+written.
+
 Run with `-v` to see each finding with its measurement:
 
 ```text

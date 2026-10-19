@@ -915,6 +915,8 @@ def main(argv: list[str] | None = None) -> int:
 
     * ``docx`` / ``pptx`` / ``pdf`` — convert (same flags as the standalone
       aliases ``md2docx`` / ``md2pptx`` / ``md2pdf``).
+    * ``audit`` — report overlaps / off-canvas shapes / unreadable type in
+      any ``.pptx`` (deterministic; no model, no network).
     * ``gui`` — launch the local Overleaf-style Markdown → PDF editor.
     * ``doctor`` — print an environment diagnostic.
     * ``cache-dir`` — print the resolved cache directory path.
@@ -958,6 +960,17 @@ def main(argv: list[str] | None = None) -> int:
         from .templates import main as templates_main
 
         return templates_main(rest)
+    if sub == "audit":
+        # Standalone deck inspector. Works on any .pptx, not only ones this
+        # tool built, so it is useful on a deck a colleague sent you. Lazy
+        # import: it needs python-pptx, an opt-in extra.
+        try:
+            from .pptx_audit import main as audit_main
+        except ImportError as exc:
+            logger.error("md2star audit needs python-pptx: pip install 'md2star[pptx]' (%s)", exc)
+            return 2
+
+        return audit_main(rest)
     if sub == "twin":
         # Reverse direction: any document → an editable Markdown twin. Lazy
         # import so a plain forward conversion never loads Kreuzberg/AI code.
@@ -1004,6 +1017,7 @@ def _print_top_level_help(file=sys.stdout) -> None:
         "  md2star pdf  <input.md> [options...]\n"
         "  md2star gui  [--port N] [--no-browser] [--bind ADDR]\n"
         "  md2star twin <input.(pdf|docx|pptx|...)> [--out DIR] [--diagrams]\n"
+        "  md2star audit <deck.pptx> [--json] [--strict]\n"
         "  md2star doctor [--json]\n"
         "  md2star templates {list,path} [...]\n"
         "  md2star cache-dir\n"

@@ -8,9 +8,10 @@ description: >-
   user says "convert this markdown to Word / .docx", "make a PowerPoint /
   deck / slides from this markdown", "markdown to PDF", "export my README as a
   PDF", "use our corporate template", "resolve [@key] against my .bib",
-  "BibTeX to Word", "render this Mermaid diagram into a document", "turn this
-  PDF back into Markdown", "make an editable twin of this doc", or types
-  `md2docx`, `md2pptx`, `md2pdf`, `md2star docx|pptx|pdf|gui|doctor|twin`,
+  "BibTeX to Word", "render Mermaid into a document", "turn this
+  PDF back into Markdown", "make an editable twin of this doc", "check this
+  PowerPoint for overlapping text", "lint / audit my .pptx", or types
+  `md2docx`, `md2pptx`, `md2pdf`, `md2star docx|pptx|pdf|gui|doctor|twin|audit`,
   `md2star-x`, `md2star-api`, `md2star-mcp`. Do NOT use to extract plain text
   from a document, to author the Markdown itself, or for HTML output. The
   exhaustive trigger catalogue is in `references/triggers.md`.
@@ -67,6 +68,24 @@ For the full flag matrix, template resolution rules, and the preprocessing
 pipeline, read `references/cli-reference.md`. For the non-CLI surfaces (HTTP
 API, MCP server, GUI), read `references/surfaces.md`.
 
+## The reverse and the inspection
+
+Two things md2star does that are not conversions:
+
+```bash
+md2star twin report.pdf              # any document → an editable Markdown twin
+md2star audit deck.pptx              # what is wrong with a deck, measured
+```
+
+`audit` reads **any** `.pptx`, not only one md2star produced, and reports
+overlapping text, shapes off the canvas, placeholders nobody filled, type
+under 12 pt, and text that needs more room than its box gives it. It needs no
+model, no renderer and no network, it never writes to the file, and it exits
+`1` when it finds a defect (`0` when only observations remain, `--strict` to
+count overruns too), so it can gate a CI job. `--json` gives the findings as
+data. Reach for it when a user asks why a slide looks wrong, or before handing
+a deck back.
+
 ## Rules of thumb
 
 - **Pick the format from the deliverable**, not the source: "a Word doc" → docx,
@@ -80,3 +99,6 @@ API, MCP server, GUI), read `references/surfaces.md`.
   pass `--bib`, else the keys render literally.
 - **After converting, confirm the output path** md2star printed (`Wrote: …`) and
   hand it back to the user; do not re-render unless something failed.
+- **Measure before you opine on a deck.** If asked whether a presentation has
+  layout problems, run `md2star audit` and quote its findings rather than
+  guessing from the Markdown — it reads the real geometry of the real file.

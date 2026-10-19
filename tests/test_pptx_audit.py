@@ -207,6 +207,59 @@ class TestReporting:
         assert text == "slide 3: overlap [Title 1] — they share 40%"
 
 
+# ── the `md2star audit` command ──────────────────────────────────────────────
+# The audit is a tool in its own right: it reads any .pptx, including ones
+# PowerPoint made, so the exit status has to be usable from a CI job.
+class TestCommandLine:
+    @pytest.fixture
+    def broken(self, tmp_path: Path) -> Path:
+        prs = _blank()
+        _text(prs.slides[0], (1, 1, 4, 1), "first", 18)
+        _text(prs.slides[0], (1.2, 1.1, 4, 1), "second", 18)
+        return _saved(prs, tmp_path, "broken.pptx")
+
+    @pytest.fixture
+    def dense(self, tmp_path: Path) -> Path:
+        """A deck whose only sin is too much text — an observation, not a defect."""
+        prs = _blank()
+        _text(prs.slides[0], (0.5, 1, 2, 0.5), "a sentence far too long for this little box", 24)
+        return _saved(prs, tmp_path, "dense.pptx")
+
+    def test_a_clean_deck_exits_zero(self, tmp_path: Path, capsys) -> None:
+        clean = _saved(_blank(), tmp_path, "clean.pptx")
+        assert au.main([str(clean)]) == 0
+        assert "clean" in capsys.readouterr().out
+
+    def test_a_defect_exits_one(self, broken: Path, capsys) -> None:
+        assert au.main([str(broken)]) == 1
+        assert "overlap" in capsys.readouterr().out
+
+    def test_an_overrun_alone_is_not_a_failure(self, dense: Path) -> None:
+        """PowerPoint auto-shrinks the text, so a dense deck is a choice."""
+        assert au.main([str(dense)]) == 0
+
+    def test_strict_makes_an_overrun_a_failure(self, dense: Path) -> None:
+        assert au.main([str(dense), "--strict"]) == 1
+
+    def test_json_output_is_parseable(self, broken: Path, capsys) -> None:
+        import json
+
+        assert au.main([str(broken), "--json"]) == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert payload[0]["kind"] == "overlap"
+        assert set(payload[0]) == {"slide", "kind", "detail", "shape"}
+
+    def test_a_missing_file_is_a_usage_error(self, tmp_path: Path, capsys) -> None:
+        assert au.main([str(tmp_path / "nope.pptx")]) == 2
+        assert "no such file" in capsys.readouterr().err
+
+    def test_a_file_that_is_not_a_deck_is_a_usage_error(self, tmp_path: Path, capsys) -> None:
+        notes = tmp_path / "notes.md"
+        notes.write_text("# not a deck")
+        assert au.main([str(notes)]) == 2
+        assert "cannot read" in capsys.readouterr().err
+
+
 def _one_pixel_png(path: Path) -> None:
     """Write the smallest valid PNG, so add_picture has real bytes to read."""
     from PIL import Image

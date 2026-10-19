@@ -11,6 +11,8 @@ more than the defaults (branding, citations, offline, phase control).
 | `md2pptx f.md` | `md2star pptx f.md` | `.pptx` | Pandoc |
 | `md2pdf f.md`  | `md2star pdf f.md`  | `.pdf`  | Pandoc + LibreOffice (`soffice`) |
 | —              | `md2star gui`       | browser editor | LibreOffice for live preview |
+| —              | `md2star twin f.pdf` | editable Markdown twin | `[ocr]` extra |
+| —              | `md2star audit d.pptx [--json] [--strict]` | layout defects, exit 1 on one | `[pptx]` extra |
 | —              | `md2star doctor [--json]` | environment report | — |
 | —              | `md2star templates {list,path}` | template introspection | — |
 | —              | `md2star cache-dir` / `clear-cache` | cache management | — |

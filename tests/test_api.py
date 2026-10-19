@@ -71,7 +71,7 @@ def test_root_redirects_to_gui(client: TestClient) -> None:
 def test_openapi_exposes_expected_routes(client: TestClient) -> None:
     """The OpenAPI schema must list the documented endpoints (drift guard)."""
     paths = client.get("/openapi.json").json()["paths"]
-    assert {"/health", "/doctor", "/convert", "/extract"} <= set(paths)
+    assert {"/health", "/doctor", "/convert", "/extract", "/audit"} <= set(paths)
 
 
 def test_doctor_reports_features(client: TestClient) -> None:
@@ -274,3 +274,39 @@ def test_extract_docx_roundtrips_to_markdown(
     assert body["filename"] == "note.md"
     assert "Heading One" in body["markdown"]
     assert "bold" in body["markdown"]
+
+
+# ── POST /audit ──────────────────────────────────────────────────────────────
+# The HTTP face of `md2star audit`. Read-only and model-free, which is what
+# makes it safe to expose: an upload is inspected, never rendered or executed.
+_PPTX_MEDIA = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+
+@pytest.mark.skipif(importlib.util.find_spec("pptx") is None, reason="needs the [pptx] extra")
+def test_audit_reports_findings_for_an_uploaded_deck(client: TestClient, tmp_path: Path) -> None:
+    """A deck with two stacked text boxes comes back with an overlap finding."""
+    import pptx
+    from pptx.util import Inches, Pt
+
+    prs = pptx.Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[6])  # blank: no placeholders
+    for left, top in ((1.0, 1.0), (1.2, 1.1)):
+        box = slide.shapes.add_textbox(Inches(left), Inches(top), Inches(4), Inches(1))
+        box.text_frame.text = "stacked"
+        box.text_frame.paragraphs[0].runs[0].font.size = Pt(18)
+    deck = tmp_path / "deck.pptx"
+    prs.save(str(deck))
+
+    r = client.post("/audit", files={"file": ("deck.pptx", deck.read_bytes(), _PPTX_MEDIA)})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["slides"] == 1
+    assert [f["kind"] for f in body["findings"]] == ["overlap"]
+    assert "1 overlap" in body["summary"]
+
+
+@pytest.mark.skipif(importlib.util.find_spec("pptx") is None, reason="needs the [pptx] extra")
+def test_audit_rejects_a_non_pptx_upload(client: TestClient) -> None:
+    r = client.post("/audit", files={"file": ("notes.md", b"# hi", "text/markdown")})
+    assert r.status_code == 400
+    assert ".pptx" in r.json()["detail"]

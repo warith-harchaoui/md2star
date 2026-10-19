@@ -38,6 +38,13 @@ host model actually sees, this file is the human-reviewable superset.
 - "extract the tables and images from this PDF into Markdown"
 - `md2star twin file.pdf`, `--diagrams` (re-author node-and-edge figures as Mermaid)
 
+**Deck audit (what is wrong with this .pptx?)**
+- "check this PowerPoint for overlapping text", "is anything off the slide?"
+- "why is the text so small on slide 7", "lint my .pptx", "audit this deck"
+- "does this deck have empty placeholders", "will this text fit on the slide"
+- `md2star audit deck.pptx` — any presentation, not only one md2star made;
+  exits 1 on a defect so it drops into CI; `--json` for machines
+
 ## Do NOT fire (negative triggers / SKIP)
 
 - Wanting only raw text/parsing out of a document with no intent to get an
@@ -48,6 +55,8 @@ host model actually sees, this file is the human-reviewable superset.
 - "I write in LaTeX / need a LaTeX-native PDF" → Overleaf/latexmk.
 - Drafting alt-text or captions as primary content → front-vision / front-audio
   (md2star only fills EMPTY alts as an opt-in `--lint` side effect).
+- Wanting a deck *redesigned* or its content rewritten — the audit measures a
+  file and reports; it never edits one.
 
 ## Enforcement checklist
 

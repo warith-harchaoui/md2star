@@ -127,6 +127,17 @@ class TestFrontMatter:
         assert meta == {}
         assert body == "# H\n\nbody\n"
 
+    def test_a_deck_that_opens_with_a_slide_break_keeps_its_first_slide(self) -> None:
+        """`---` opens a metadata block AND separates slides. Only the content
+        inside tells them apart, and guessing wrong deletes a slide."""
+        slides = pl.segment("---\n\n# First\n\nbody\n\n---\n\n# Second\n\nbody\n")
+        assert [s.title for s in slides] == ["First", "Second"]
+
+    def test_a_key_with_a_nested_value_still_counts_as_metadata(self) -> None:
+        body, meta = pl.split_front_matter("---\nauthor:\n  - Jane Roe\ntitle: T\n---\n\n# H\n")
+        assert meta["title"] == "T"
+        assert body.strip() == "# H"
+
 
 # ── speaker notes ────────────────────────────────────────────────────────────
 # Notes are the one part of a slide that must NOT be drawn on it: the body is

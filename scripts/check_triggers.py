@@ -64,6 +64,7 @@ _REQUIRED_BUCKETS: list[tuple[str, list[str]]] = [
     ("math", ["math", "latex"]),
     ("reverse / twin", ["twin", "back into markdown", "editable"]),
     ("preview / GUI", ["gui", "overleaf", "preview", "editor"]),
+    ("deck audit", ["audit", "overlapping", "lint"]),
 ]
 
 # A negative-trigger clause is mandatory: without a documented SKIP the skill

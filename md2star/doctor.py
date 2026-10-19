@@ -28,6 +28,7 @@ Author
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import platform
 import shutil
 import subprocess
@@ -420,6 +421,45 @@ def _check_md2star(report: Report) -> None:
     report.add("md2star", STATUS_OK, f"{__version__}")
 
 
+#: Each optional extra, the import that proves it is installed, and the one
+#: thing it unlocks. Pip extras leave no trace at runtime — the only honest
+#: test is whether the module imports — so this is what turns "md2pptx
+#: --smart-layout says it needs python-pptx" into something a user can find
+#: out *before* a conversion fails.
+_EXTRAS: tuple[tuple[str, str, str], ...] = (
+    ("pptx", "pptx", "md2pptx --smart-layout, md2star audit"),
+    ("ocr", "kreuzberg", "md2star twin, POST /extract"),
+    ("api", "fastapi", "md2star-api"),
+    ("mcp", "fastapi_mcp", "md2star-mcp"),
+)
+
+
+def _check_extras(report: Report) -> None:
+    """Report which optional Python extras are installed (Optional).
+
+    Parameters
+    ----------
+    report : Report
+        The report to append one row per extra to.
+
+    Returns
+    -------
+    None
+    """
+    for extra, module, unlocks in _EXTRAS:
+        found = importlib.util.find_spec(module) is not None
+        # MISSING rather than WARNING: these are genuinely absent features, and
+        # the Optional section means a missing one never fails the run.
+        report.add(
+            f"[{extra}] extra",
+            STATUS_OK if found else STATUS_MISSING,
+            f"{module} — {unlocks}"
+            if found
+            else f"not installed — pip install 'md2star[{extra}]' for {unlocks}",
+            section="Optional",
+        )
+
+
 def _check_platform(report: Report) -> None:
     """Record the host OS / release / arch for context in bug reports (Optional).
 
@@ -470,6 +510,7 @@ def run_checks(
     _check_ollama(report, which)
     _check_templates(report)
     _check_cache(report)
+    _check_extras(report)
     _check_platform(report)
     return report
 

@@ -393,6 +393,21 @@ Wrote: presentation.pptx (14/14 slides)
 layout audit: 2 findings on 2 slides (1 overlap, 1 overrun)
 ```
 
+C'est aussi un outil à part entière, pointé sur **n'importe quelle**
+présentation — celle qu'un collègue vous a envoyée, une faite sous
+PowerPoint, une que vous aviez montée il y a des années :
+
+```bash
+md2star audit lasienne.pptx            # lisible, un constat par ligne
+md2star audit lasienne.pptx --json     # les mêmes constats, exploitables
+md2star audit lasienne.pptx --strict   # échoue aussi sur `overrun`
+```
+
+Le code de sortie vaut `1` en présence d'un **défaut** (hors cadre,
+chevauchement, emplacement fantôme, corps illisible) et `0` s'il ne reste que
+des observations : il s'insère donc tel quel dans un job CI ou un hook
+pre-commit. La présentation est lue, jamais écrite.
+
 Avec `-v`, chaque constat apparaît avec sa mesure :
 
 ```text

@@ -115,6 +115,24 @@ class TestDiagnosis:
         assert report.feature_status("pdf") == doctor.STATUS_OK
         assert report.feature_status("mermaid") == doctor.STATUS_OK
 
+    def test_optional_extras_are_reported(self):
+        """A pip extra leaves no trace at runtime, so the doctor is where a
+        user finds out whether `md2star audit` or `twin` will work at all."""
+        report = doctor.run_checks(which=fake_which(_ALL_PRESENT))
+        rows = {c.name: c for c in report.checks if c.name.endswith("] extra")}
+        assert set(rows) == {"[pptx] extra", "[ocr] extra", "[api] extra", "[mcp] extra"}
+        # Whatever is installed here, a missing extra must never fail the run:
+        # these live in the Optional section precisely so they cannot.
+        assert all(row.section == "Optional" for row in rows.values())
+        assert report.core_failing() is False
+
+    def test_a_missing_extra_names_the_command_that_installs_it(self, monkeypatch):
+        monkeypatch.setattr(doctor.importlib.util, "find_spec", lambda name: None)
+        report = doctor.run_checks(which=fake_which(_ALL_PRESENT))
+        row = report.get("[pptx] extra")
+        assert row.status == doctor.STATUS_MISSING
+        assert "pip install 'md2star[pptx]'" in row.detail
+
     def test_missing_dependency_matrix(self):
         """Each missing tool drives the right check status and feature fallout.
 

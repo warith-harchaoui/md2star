@@ -29,6 +29,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the slide's title as the fallback — matching what Pandoc writes on the path
   this assembler bypasses, and reachable from md2star's own alt-text pass.
 
+- **A deck that *opens* with a slide break lost its first slide.** The fix
+  above consumed any leading `---` block, and `---` is both the metadata
+  delimiter and the horizontal rule this module splits slides on. Only the
+  content tells them apart, so a block whose first real line is not a YAML key
+  is now left alone — it is a slide, and eating it was silent.
+
 - **An empty title stayed empty.** `[_clean(s.title)] or ["(untitled)"]` never
   fired: a one-element list is truthy even when that element is `""`.
 
@@ -81,6 +87,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   already did the designing. It also writes up the **reference-slide seam**
   (clone a designer's *example slide*, not its layout) as the next real step,
   and what makes it hard.
+
+- **The audit is a tool, not just a step.** `md2star audit <deck.pptx>` runs
+  it against *any* presentation — one a colleague sent, one PowerPoint made,
+  one from years ago — with `--json` for machines and an exit status built for
+  CI: `1` on a defect (off-slide, overlap, ghost placeholder, illegible type),
+  `0` when only observations remain, and `--strict` to count `overrun` too.
+  The same capability is `POST /audit` on the HTTP surface, which means
+  `md2star-mcp` exposes it as an MCP tool for free. The deck is read, never
+  written, and nothing in the path needs a model, a renderer or the network.
+
+- **`md2star doctor` now reports the optional extras.** A pip extra leaves no
+  trace at runtime, so `[pptx]` / `[ocr]` / `[api]` / `[mcp]` each get a row
+  naming what they unlock and the exact `pip install` that provides them.
+  Previously the only way to discover that `--smart-layout` needed
+  `python-pptx` was to run a conversion and have it fail.
 
 ### Changed
 

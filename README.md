@@ -95,6 +95,8 @@ md2docx report.md             # markdown → DOCX
 md2pptx slides.md             # markdown → PPTX
 md2pdf  paper.md              # markdown → PDF (needs LibreOffice)
 md2star gui                   # local browser editor with live PDF preview
+md2star twin report.pdf       # any document → an editable Markdown twin
+md2star audit deck.pptx       # what is wrong with a deck: overlaps, overflow, tiny type
 ```
 
 Prefer plain `pip`? Two `requirements` files mirror the install profiles:
@@ -107,7 +109,7 @@ Prefer HTTP or MCP? md2star also ships a FastAPI surface and an MCP server:
 ```bash
 pip install 'md2star[api,mcp]'
 
-md2star-api                    # FastAPI: /gui, /health, /doctor, /convert, docs at /docs
+md2star-api                    # FastAPI: /gui, /health, /doctor, /convert, /extract, /audit, docs at /docs
 curl -F 'file=@report.md' 'http://localhost:8000/convert?fmt=docx' -o report.docx
 # open http://localhost:8000/gui for a minimal drop-a-file browser bench
 
@@ -474,7 +476,7 @@ Below are basic `.docx` and `.pptx` files generated dynamically during our test 
 - [x] **Date localization**: French weekday/month rendering and date-format injection.
 - [x] **Preprocessor invariants**: list spacing, code-block preservation, HTML-table conversion, pipe-table separator normalization, image width injection, language detection, mermaid fallback, math-in-code unwrapping, PPTX slide isolation.
 - [x] **Offline-mode enforcement**: every network-touching phase refuses to run with `--offline`.
-- [x] **Deck geometry**: `md2star.pptx_audit` measures an assembled PPTX for shapes off the canvas, text over text, unfilled placeholders, type under 12 pt, and text that overruns its box — model-free, so it is a real gate rather than an opinion, and it runs at the end of every `--smart-layout` conversion.
+- [x] **Deck geometry**: `md2star audit <deck.pptx>` measures any PPTX for shapes off the canvas, text over text, unfilled placeholders, type under 12 pt, and text that overruns its box — model-free, so it is a real gate rather than an opinion, and it runs at the end of every `--smart-layout` conversion.
 - [x] **Comparison integrity**: the star tables in LANDSCAPE / PAYSAGE must match the CSVs the positioning maps are drawn from, so the figure can never plot ratings the documents no longer claim.
 
 ### Integration tests (shell)

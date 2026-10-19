@@ -103,6 +103,8 @@ md2docx rapport.md            # markdown → DOCX
 md2pptx diapos.md             # markdown → PPTX
 md2pdf  article.md            # markdown → PDF (nécessite LibreOffice)
 md2star gui                   # éditeur navigateur local, aperçu PDF en direct
+md2star twin rapport.pdf      # n'importe quel document → un jumeau Markdown éditable
+md2star audit presentation.pptx  # ce qui cloche dans un deck : chevauchements, débordements, corps minuscule
 ```
 
 Vous préférez `pip` ? Deux fichiers `requirements` correspondent aux
@@ -116,7 +118,7 @@ serveur MCP :
 ```bash
 pip install 'md2star[api,mcp]'
 
-md2star-api                    # FastAPI : /gui, /health, /doctor, /convert, docs sur /docs
+md2star-api                    # FastAPI : /gui, /health, /doctor, /convert, /extract, /audit, docs sur /docs
 curl -F 'file=@rapport.md' 'http://localhost:8000/convert?fmt=docx' -o rapport.docx
 # ouvrez http://localhost:8000/gui pour un banc d'essai minimal dans le navigateur
 
@@ -490,7 +492,7 @@ La fiabilité est un objectif de conception. La suite de tests automatisée couv
 - [x] **Localisation des dates** : rendu des jours et mois en français, injection du format de date.
 - [x] **Invariants du préprocesseur** : espacement des listes, préservation des blocs de code, conversion des `<table>` HTML, normalisation des séparateurs de pipe-tables, injection de largeur d'image, détection de langue, repli Mermaid, dépliage du math-in-code, isolation PPTX.
 - [x] **Mode hors ligne** : toutes les phases à accès réseau refusent de tourner sous `--offline`.
-- [x] **Géométrie des présentations** : `md2star.pptx_audit` mesure un PPTX assemblé — formes hors du cadre, texte sur texte, emplacements non remplis, corps sous 12 pt, texte qui déborde de sa boîte. Sans modèle : c'est donc un vrai garde-fou et non un avis, exécuté à la fin de chaque conversion `--smart-layout`.
+- [x] **Géométrie des présentations** : `md2star audit <deck.pptx>` mesure n'importe quel PPTX — formes hors du cadre, texte sur texte, emplacements non remplis, corps sous 12 pt, texte qui déborde de sa boîte. Sans modèle : c'est donc un vrai garde-fou et non un avis, exécuté à la fin de chaque conversion `--smart-layout`.
 - [x] **Intégrité du comparatif** : les tableaux en étoiles de LANDSCAPE / PAYSAGE doivent correspondre aux CSV dont sont tirées les cartes de positionnement, pour que la figure ne trace jamais des notes que les documents ne revendiquent plus.
 
 ### Tests d'intégration (shell)

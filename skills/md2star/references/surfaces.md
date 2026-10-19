@@ -21,7 +21,9 @@ curl -F 'file=@report.md' 'http://localhost:8000/convert?fmt=docx' -o out.docx
 
 Endpoints: `GET /` (redirect to `/gui`), `GET /gui` (minimal browser bench),
 `GET /health`, `GET /doctor`, `POST /convert?fmt=docx|pptx|pdf` (multipart
-upload). Use when another service needs conversions over HTTP. Opening the
+upload), `POST /extract` (document → Markdown, `[ocr]` extra), and
+`POST /audit` (upload a `.pptx`, get its layout defects as JSON, `[pptx]`
+extra — read-only, no model, no renderer). Use when another service needs conversions over HTTP. Opening the
 server root in a browser lands on `/gui` — a drop-a-file, pick-a-format,
 download-the-result page that POSTs to the same `/convert` endpoint.
 

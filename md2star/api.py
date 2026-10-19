@@ -21,6 +21,10 @@ Exposed surface:
   --json`` (which tools are present, per-format feature status).
 - ``POST /convert``: upload a ``.md`` file, pick a target format
   (``docx`` / ``pptx`` / ``pdf``), and stream back the rendered document.
+- ``POST /audit``: upload a ``.pptx`` and get back what is wrong with it —
+  overlapping text, shapes off the canvas, unfilled placeholders, type under
+  the legibility floor, boxes that overrun. Deterministic and read-only (no
+  model, no renderer, no network); needs the ``[pptx]`` extra.
 - ``POST /extract``: the reverse direction: upload a ``.docx`` / ``.pptx`` /
   ``.pdf`` and get its Markdown back as JSON, or pass ``twin=true`` (optionally
   ``diagrams=true``) to receive a zip of ``<stem>.md`` + an ``assets/`` folder,
@@ -410,6 +414,74 @@ async def extract(
     background.add_task(shutil.rmtree, work, ignore_errors=True)
 
     return FileResponse(zip_path, media_type="application/zip", filename=f"{stem}.zip")
+
+
+@app.post("/audit", response_model=None)
+async def audit_deck(
+    file: UploadFile = File(..., description="A .pptx presentation to inspect."),
+) -> dict:
+    """Report what is wrong with an uploaded ``.pptx``, without rendering it.
+
+    The HTTP face of ``md2star audit`` (:mod:`md2star.pptx_audit`): overlapping
+    text, shapes past the canvas, placeholders nobody filled, type under the
+    legibility floor, and text that needs more room than its box gives it. The
+    deck is read, never written, and nothing here needs a model, a renderer or
+    the network — which is what makes it safe to expose as a service endpoint.
+
+    Any presentation is auditable, not only one md2star produced.
+
+    Parameters
+    ----------
+    file : fastapi.UploadFile
+        The presentation to inspect; the extension must be ``.pptx``.
+
+    Returns
+    -------
+    dict
+        ``{"filename": ..., "slides": n, "summary": str, "findings": [...]}``,
+        each finding a ``{slide, kind, detail, shape}`` object.
+
+    Raises
+    ------
+    fastapi.HTTPException
+        400 for a non-pptx upload or an unreadable file, 503 when the optional
+        ``[pptx]`` extra (python-pptx) is not installed.
+    """
+    try:
+        from .pptx_audit import audit, summarise
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="deck auditing needs python-pptx: pip install 'md2star[pptx]'",
+        ) from exc
+
+    name = file.filename or "deck.pptx"
+    if Path(name).suffix.lower() != ".pptx":
+        raise HTTPException(status_code=400, detail=f"expected a .pptx; got {name!r}")
+
+    # Staged on disk because python-pptx is path/stream-in and the audit opens
+    # the package twice (findings, then the slide count). Cleaned up inline on
+    # every path: this endpoint streams nothing back, so there is no response
+    # still reading from the directory when it returns.
+    work = osh.make_temporary_directory(prefix="md2star_audit_")
+    deck = Path(work) / Path(name).name
+    try:
+        deck.write_bytes(await file.read())
+        findings = audit(deck)
+        from pptx import Presentation
+
+        slides = len(Presentation(str(deck)).slides)
+    except Exception as exc:  # noqa: BLE001 — every reader failure is a bad upload
+        raise HTTPException(status_code=400, detail=f"cannot read {name}: {exc}") from exc
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+    return {
+        "filename": name,
+        "slides": slides,
+        "summary": summarise(findings, slides=slides),
+        "findings": [vars(f) for f in findings],
+    }
 
 
 def main() -> None:

@@ -24,6 +24,7 @@ generate websites or run a LaTeX-native workflow.
 | Markdown → PDF (needs LibreOffice) | `md2pdf paper.md` | `md2star pdf paper.md` | `POST /convert?fmt=pdf` |
 | Full browser editor (live PDF preview) | N/A | `md2star gui` | N/A |
 | Document → editable Markdown *twin* (reverse) | N/A | `md2star twin file.pdf [--diagrams]` | `POST /extract` |
+| Check a deck for layout defects | N/A | `md2star audit deck.pptx [--json] [--strict]` | `POST /audit` |
 | Environment diagnostic | N/A | `md2star doctor [--json]` | `GET /doctor` |
 
 Every conversion is also reachable through the click CLI (`md2star-x
@@ -50,6 +51,11 @@ docx|pptx|pdf|gui|doctor`, same delegation), the FastAPI HTTP surface
   Markdown from this document", "make an editable Markdown twin of this file",
   "extract the tables and images from this PDF into Markdown", "reverse-engineer
   this doc", `md2star twin file.pdf`, `--diagrams` (re-author figures as Mermaid).
+- **Deck audit**: "check this PowerPoint for overlapping text", "is anything
+  off the slide in this deck?", "why is the text so small on slide 7",
+  "lint my .pptx", "does this deck have empty placeholders", "audit this
+  presentation", `md2star audit deck.pptx` (exit 1 on a defect, so it drops
+  into CI).
 - **Surfaces**: "run the md2star API / MCP server", "open the md2star GUI",
   "install md2star".
 

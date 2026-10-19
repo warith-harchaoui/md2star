@@ -624,6 +624,13 @@ _FRONT_MATTER_RE = re.compile(
 #: guessing at the rest without a YAML parser would be worse than ignoring it.
 _META_LINE_RE = re.compile(r"(?m)^([A-Za-z][\w-]*)[ \t]*:[ \t]*(.+?)[ \t]*$")
 
+#: What the first non-blank line of a metadata block has to look like. Without
+#: this, a deck that *opens* with a horizontal-rule slide break — ``---`` on
+#: line 1, then the first slide — would have that slide eaten as metadata, and
+#: a `key:` with a nested value under it still has to count, so this tests the
+#: shape of the line rather than reusing the scalar pattern above.
+_YAML_KEY_RE = re.compile(r"\A[A-Za-z][\w-]*[ \t]*:")
+
 #: A Pandoc ``notes`` fenced div: ``::: notes`` / ``:::: {.notes}`` … ``:::``.
 #: Captured rather than merely skipped, because the text inside it is the one
 #: part of a slide that must NOT be drawn on the slide.
@@ -681,11 +688,24 @@ def split_front_matter(markdown: str) -> tuple[str, dict[str, str]]:
     >>> body, meta = split_front_matter("---\\ntitle: Q3\\n---\\n\\n# Q3\\n")
     >>> meta["title"], body.strip()
     ('Q3', '# Q3')
+
+    A deck that merely *opens* with a slide break keeps every slide:
+
+    >>> split_front_matter("---\\n\\n# First\\n\\n---\\n\\n# Second\\n")[0].lstrip()
+    '# First\\n\\n---\\n\\n# Second\\n'
     """
     m = _FRONT_MATTER_RE.match(markdown)
     if m is None:
         return markdown, {}
-    meta = {k.lower(): v for k, v in _META_LINE_RE.findall(m.group(1))}
+    block = m.group(1)
+    # Two delimiters that look alike: `---` opens a metadata block, and `---`
+    # on its own line is also the slide separator this module splits on. Only
+    # the content tells them apart, so a block whose first real line is not a
+    # YAML key is a slide, and consuming it would silently delete it.
+    first = next((line for line in block.splitlines() if line.strip()), "")
+    if not _YAML_KEY_RE.match(first.strip()):
+        return markdown, {}
+    meta = {k.lower(): v for k, v in _META_LINE_RE.findall(block)}
     return markdown[m.end() :], meta
 
 

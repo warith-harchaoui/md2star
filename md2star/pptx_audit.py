@@ -45,6 +45,7 @@ Author
 from __future__ import annotations
 
 import math
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -379,3 +380,73 @@ def log_findings(findings: list[Finding]) -> None:
         # text), so it is information; everything else is a real defect.
         level = logger.info if finding.kind == "overrun" else logger.warning
         level("%s", finding)
+
+
+# ── `md2star audit` ──────────────────────────────────────────────────────────
+#: The kinds that are defects rather than observations, and so decide the exit
+#: status. An overrun is left out on purpose: PowerPoint auto-shrinks the text,
+#: so a dense deck is a choice, not a breakage. `--strict` counts it too.
+DEFECT_KINDS = frozenset(KINDS) - {"overrun"}
+
+
+def main(argv: list[str] | None = None) -> int:
+    """``md2star audit <deck.pptx>`` — measure a deck and report what is wrong.
+
+    Works on **any** presentation, not only the ones md2star built: everything
+    it checks is read off the OOXML, so a deck somebody made in PowerPoint is
+    just as auditable. No model, no render, no network.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        Argument list; defaults to ``sys.argv[1:]`` as usual.
+
+    Returns
+    -------
+    int
+        ``0`` when nothing but observations were found, ``1`` when a defect
+        was (see :data:`DEFECT_KINDS`, and ``--strict``), ``2`` on a usage or
+        read error.
+    """
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(
+        prog="md2star audit",
+        description="Report overlaps, off-canvas shapes, unreadable type and "
+        "overfull boxes in a .pptx. Deterministic: no model, no network.",
+    )
+    parser.add_argument("deck", help="the .pptx to inspect (never modified)")
+    parser.add_argument("--json", action="store_true", help="machine-readable findings")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="also fail on `overrun`, which is otherwise an observation",
+    )
+    args = parser.parse_args(argv)
+
+    deck = Path(args.deck).expanduser()
+    # Checked before opening: python-pptx reports a missing file as
+    # "Package not found", which reads like a corrupt deck rather than a typo.
+    if not deck.is_file():
+        print(f"md2star audit: no such file: {deck}", file=sys.stderr)
+        return 2
+    try:
+        findings = audit(deck)
+    except Exception as exc:  # noqa: BLE001 — any reader error is the same answer
+        # python-pptx raises several unrelated types for "that is not a pptx"
+        # (PackageNotFoundError, KeyError, BadZipFile); the user needs one
+        # sentence, not the taxonomy.
+        print(f"md2star audit: cannot read {deck}: {exc}", file=sys.stderr)
+        return 2
+
+    slides = len(Presentation(str(deck)).slides)
+    if args.json:
+        print(json.dumps([vars(f) for f in findings], indent=2, ensure_ascii=False))
+    else:
+        for finding in findings:
+            print(finding)
+        print(summarise(findings, slides=slides))
+
+    failing = DEFECT_KINDS | ({"overrun"} if args.strict else set())
+    return 1 if any(f.kind in failing for f in findings) else 0
