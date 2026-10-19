@@ -749,6 +749,15 @@ def _convert_smart_layout(fmt: str, in_path: Path, out_path: Path, processed: st
             render_mermaid=render_mermaid,
         )
     print(f"Wrote: {result.pptx_path} ({result.placed}/{result.total} slides)")
+    # Deterministic last word on the deck we just wrote. Runs whatever the AI
+    # stages did or could not do — no model, no render — so a conversion on a
+    # machine with no VLM still reports whether anything overlaps, bleeds off
+    # the canvas, or needs type nobody can read. See md2star/pptx_audit.py.
+    from .pptx_audit import audit, log_findings, summarise  # noqa: PLC0415
+
+    findings = audit(result.pptx_path)
+    log_findings(findings)
+    print(summarise(findings, slides=result.total))
     return 0
 
 

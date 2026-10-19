@@ -326,3 +326,101 @@ curl -sF file=@report.pdf -F twin=true \
 curl -sF file=@architecture.pdf -F diagrams=true \
      -o architecture.zip http://localhost:8000/extract
 ```
+
+## 12. PPTX intelligent vis-à-vis du modèle
+
+Le writer PPTX de Pandoc n'atteint jamais que les ~7 dispositions
+génériques de son modèle embarqué.
+`md2pptx --smart-layout --template <modele-designer.pptx>` place au
+contraire chaque diapositive Markdown dans le **vocabulaire de
+dispositions du vrai modèle du designer** : un LLM lit le contenu de
+chaque diapositive face à un catalogue des dispositions nommées du
+modèle et choisit la mieux adaptée, un **VLM confirme ou corrige
+visuellement** ce choix face aux vignettes réelles des dispositions
+candidates (et non seulement à leurs légendes), puis un assembleur
+`python-pptx` construit le deck directement sur la disposition retenue,
+diapositive par diapositive. Nécessite l'extra `[pptx]`
+(`pip install 'md2star[pptx]'`) et un moteur LLM+VLM local résolu (la
+même pile `best_engine_ai_helper` que `--lint` / `twin --diagrams`).
+
+```bash
+md2pptx presentation.md --template ./marque/Modele-Entreprise.pptx --smart-layout
+```
+
+Ajoutez `--eyeball-iterations N` (0 par défaut, désactivé) pour exécuter
+une **boucle Ralph Eyeball par appariement de cible** après l'assemblage :
+chaque passe rend le deck, montre au modèle de vision à la fois une
+diapositive candidate et la vignette de la disposition choisie, et
+applique des corrections bornées (réduire un titre qui débordait, limiter
+le nombre de puces, agrandir une image trop petite) — sans jamais toucher
+à l'image, seulement à la spécification que l'assembleur relit.
+
+```bash
+md2pptx presentation.md --template ./marque/Modele-Entreprise.pptx \
+    --smart-layout --eyeball-iterations 2
+```
+
+> [!TIP]
+> `--no-visual-confirm` saute l'étape d'arbitrage VLM (sélection
+> textuelle seule, moins coûteuse) quand le premier choix du LLM doit
+> être considéré comme définitif.
+
+### Notes de l'orateur
+
+Un bloc Pandoc `::: notes` est le script de l'orateur, et il part dans le
+volet des notes sur les deux chemins — le chemin Pandoc ordinaire comme
+`--smart-layout` :
+
+```markdown
+## Chiffre d'affaires T3
+
+- +18 % sur un an
+
+::: notes
+Les 18 % restent provisoires jusqu'à la clôture de l'audit. Ne pas
+prendre de questions sur le segment européen.
+:::
+```
+
+### L'audit de disposition
+
+Chaque exécution `--smart-layout` se termine par un audit déterministe du
+deck qui vient d'être écrit — sans modèle, sans rendu, sans réseau, donc
+il rapporte la même chose sur une machine sans aucun LLM :
+
+```text
+Wrote: presentation.pptx (14/14 slides)
+layout audit: 2 findings on 2 slides (1 overlap, 1 overrun)
+```
+
+Avec `-v`, chaque constat apparaît avec sa mesure :
+
+```text
+slide 7: overlap — 'Title 1' and 'TextBox 4' share 38% of the smaller box
+slide 9: overrun [TextBox 3] — text needs 1.6x its box at 16pt (fits at ~13pt)
+```
+
+Les cinq vérifications sont `off-slide` (hors diapositive), `overlap`
+(texte sur texte — du texte sur une *image* est une composition, pas un
+défaut), `ghost-placeholder` (emplacement fantôme), `illegible-type`
+(sous 12 pt) et `overrun` (débordement). Un `overrun` est une observation
+plutôt qu'une erreur : PowerPoint réduit le texte automatiquement, la
+conséquence est donc silencieuse, et le constat vous dit quelle est la
+vraie taille de la diapositive. Disponible aussi comme appel de
+bibliothèque :
+
+```python
+from pathlib import Path
+from md2star.pptx_audit import audit, summarise
+
+findings = audit(Path("presentation.pptx"))
+print(summarise(findings, slides=14))
+```
+
+`--smart-layout` contourne entièrement Pandoc pour cette exécution —
+`--template` y joue le rôle que tient normalement un reference-doc
+Pandoc. Le chemin ordinaire `md2pptx presentation.md` (sans
+`--smart-layout`) n'est pas affecté et reste le comportement par défaut.
+Voir `docs/design/pptx-template-intelligence.md` pour la conception
+complète (format du catalogue, prompts de sélection de disposition, forme
+de la boucle eyeball).

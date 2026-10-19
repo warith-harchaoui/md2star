@@ -4,6 +4,116 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-10-19
+
+### Fixed
+
+- **`md2pptx --smart-layout` printed your speaker notes on the slide.** A
+  Pandoc `::: notes` block is the presenter's private script; the smart-layout
+  path had no notion of it, so the fence markers were skipped and the text
+  inside them came out as audience-visible bullets — while the notes pane
+  stayed empty. Notes now come off the body during segmentation
+  (`Slide.notes`) and go where they belong, which is also what the default
+  Pandoc path has always done with them. The two paths agree again.
+
+- **A YAML metadata block became a junk first slide.** Its closing `---` is
+  indistinguishable from a horizontal rule, so `title:` / `author:` arrived as
+  the bullets of an "(untitled)" cover — and, by shifting every index, it also
+  broke the "slide 1 is the cover, slide *n* is the closing" rule the
+  assembler keys on. The block is now consumed before segmentation, and a
+  `title:` can name a cover that has no H1 of its own.
+
+- **A picture's accessible description was the file name.** `add_picture`
+  defaults `descr` to whatever the file is called, so a screen reader
+  announced "chart dot png". Markdown alt text is carried into it now, with
+  the slide's title as the fallback — matching what Pandoc writes on the path
+  this assembler bypasses, and reachable from md2star's own alt-text pass.
+
+- **An empty title stayed empty.** `[_clean(s.title)] or ["(untitled)"]` never
+  fired: a one-element list is truthy even when that element is `""`.
+
+- Four tests in `tests/test_pptx_fit.py` reached `_reselect` through the
+  assembler, whose import pulls in `python-pptx`. A checkout without the
+  opt-in `[pptx]` extra saw five errors; they skip now, like every other test
+  that needs it.
+
+### Added
+
+- **Placeholder / overlay reconciliation** (`pptx_assemble`), closing the
+  harder half of the design note's Phase 5. `add_slide()` *clones* a layout's
+  placeholders onto the new slide, and the assembler then drew its own boxes
+  in the same geometry — so every slide shipped a pair of shapes per region.
+  Not cosmetic: a slide's **outline entry and its screen-reader reading order
+  come from placeholders**, so a deck built purely of overlays had no titles
+  at all where it counts, under a "Click to add title" ghost that is what a
+  click actually selects.
+
+  The fix is deliberately asymmetric. The **title goes into the layout's own
+  title placeholder** (titles carry no bullet glyphs, so inheriting the
+  designer's shape is safe, and size/weight/face/colour stay forced per run).
+  **Body text keeps its overlay**, because a designer body placeholder brings
+  its master's bullet characters and would double up with ours. **Every
+  placeholder still empty when a slide is finished is removed** — except the
+  date / footer / slide-number ones, whose emptiness is correct because
+  PowerPoint fills them itself.
+
+- **`md2star/pptx_audit.py` — a model-free audit of the assembled deck**,
+  reported at the end of every `--smart-layout` conversion. `pptx_fit` asks
+  before assembly whether content *should* fit a layout; this asks of the
+  saved file whether anything is actually wrong with it: `off-slide`,
+  `overlap` (text over text; text over a *picture* is a composition, not a
+  bug), `ghost-placeholder`, `illegible-type` (below a 12 pt floor), and
+  `overrun`, which reports the size that *would* fit because PowerPoint's
+  auto-shrink makes that consequence quiet rather than visible.
+
+  These are the dimensions PPTEval scores a deck on by eye (Design: "proper
+  layout … element placement, and absence of overlaps", arXiv 2501.03936) —
+  specifically the half a machine can settle on its own. That matters for a
+  tool whose posture is offline-by-default: the eyeball loop needs a resolved
+  VLM, LibreOffice and poppler, while a geometry bug deserves arithmetic, not
+  an opinion. Overrun reuses `pptx_fit`'s own character model, per paragraph,
+  so a 26 pt heading over 16 pt bullets is measured as what each costs.
+
+- **`docs/design/pptx-template-intelligence.md` §10 — the adjacent work this
+  round read**, what was reused, and (more usefully) what was read and
+  rejected: PPTEval's Coherence dimension, because md2star does not author the
+  deck's argument; AutoPresent's program synthesis, because a human designer
+  already did the designing. It also writes up the **reference-slide seam**
+  (clone a designer's *example slide*, not its layout) as the next real step,
+  and what makes it hard.
+
+### Changed
+
+- **LANDSCAPE / PAYSAGE gain a `Self-check` column and two rows.** The column
+  asks whether a tool inspects its own output or hands you a file and assumes
+  the render was fine — the dimension the audit above is about, and one where
+  LaTeX's "Overfull \hbox" and PowerPoint's Accessibility Checker are the
+  honest benchmarks, not us. The new rows are **md2pptx**, the closest direct
+  competitor (Markdown → PPTX with no Pandoc, and a far larger authoring
+  vocabulary), and **Gamma / Copilot**, the prompt-to-deck category a reader
+  comparing tools now actually has in mind.
+
+- **The positioning maps are rebuilt by a committed script**
+  (`scripts/positioning.py`) rather than by hand. `standpoint` names the four
+  poles with a local model, so a document maintained over years would have its
+  axes renamed on every regeneration; the geometry is deterministic either
+  way, so the poles now live in the script as a constant and the map stays
+  comparable release to release. It needs no model and no network.
+
+  That also fixes a drift nobody had noticed: `LANDSCAPE.md` claimed its
+  horizontal axis read "Scholarly ↔ Creative" while the committed figure was
+  drawn with "Precise ↔ Streamlined", and the two languages named the same
+  geometry differently. Both now read **Scholarly ↔ Designed** / **Visual ↔
+  Comprehensive** (and their French equivalents), the poles the loadings
+  actually support.
+
+- `tests/test_landscape.py` keeps the star tables, the CSVs and the stated
+  criterion count in step. The failure it prevents is a quiet one: the figure
+  would keep rendering, just from ratings the documents no longer claim.
+
+- `EXEMPLES.md` gains the §12 its English twin has had since 3.2.0 — the
+  French cookbook was a release behind on the whole smart-layout path.
+
 ## [3.5.0] - 2026-10-19
 
 ### Added

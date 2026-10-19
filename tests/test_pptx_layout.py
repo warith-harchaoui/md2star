@@ -91,6 +91,72 @@ class TestSegment:
         assert [s.title for s in slides] == ["T", "U"]
 
 
+# ── front matter ─────────────────────────────────────────────────────────────
+# A metadata block's closing `---` is a horizontal rule to every regex in the
+# module, so left in place it becomes a leading slide whose bullets are the
+# author's own metadata. Pandoc consumes it; so must this path.
+class TestFrontMatter:
+    MD = "---\ntitle: Quarterly Review\nauthor: Jane Roe\n---\n\n# Quarterly Review\n\nbody\n"
+
+    def test_metadata_does_not_become_a_slide(self) -> None:
+        slides = pl.segment(self.MD)
+        assert [s.title for s in slides] == ["Quarterly Review"]
+        assert "author: Jane Roe" not in slides[0].body
+
+    def test_scalars_are_parsed(self) -> None:
+        _, meta = pl.split_front_matter(self.MD)
+        assert meta == {"title": "Quarterly Review", "author": "Jane Roe"}
+
+    def test_closing_dots_are_accepted(self) -> None:
+        """Pandoc closes a metadata block with either `---` or `...`."""
+        body, meta = pl.split_front_matter("---\ntitle: T\n...\n\n# H\n")
+        assert meta["title"] == "T"
+        assert body.strip() == "# H"
+
+    def test_a_metadata_title_names_an_untitled_cover(self) -> None:
+        slides = pl.segment("---\ntitle: From Metadata\n---\n\nJust a paragraph.\n")
+        assert slides[0].title == "From Metadata"
+
+    def test_only_a_leading_block_counts(self) -> None:
+        """Mid-document `---` is a slide break, not metadata."""
+        slides = pl.segment("# A\n\nbody\n\n---\n\n# B\n\nbody\n")
+        assert [s.title for s in slides] == ["A", "B"]
+
+    def test_a_document_without_metadata_is_untouched(self) -> None:
+        body, meta = pl.split_front_matter("# H\n\nbody\n")
+        assert meta == {}
+        assert body == "# H\n\nbody\n"
+
+
+# ── speaker notes ────────────────────────────────────────────────────────────
+# Notes are the one part of a slide that must NOT be drawn on it: the body is
+# what the audience reads. Leaving a `::: notes` div in `body` published the
+# presenter's private script to the room.
+class TestNotes:
+    def test_notes_are_lifted_off_the_body(self) -> None:
+        slides = pl.segment("## T\n\n- visible\n\n::: notes\nthe private script\n:::\n")
+        assert slides[0].notes == "the private script"
+        assert "private script" not in slides[0].body
+
+    def test_attribute_form_and_longer_fences(self) -> None:
+        slides = pl.segment("## T\n\nvisible\n\n:::: {.notes}\nsecret\n::::\n")
+        assert slides[0].notes == "secret"
+
+    def test_several_divs_on_one_slide_are_joined(self) -> None:
+        md = "## T\n\nvisible\n\n::: notes\nfirst\n:::\n\nmore\n\n::: notes\nsecond\n:::\n"
+        slides = pl.segment(md)
+        assert slides[0].notes == "first\n\nsecond"
+        assert "more" in slides[0].body
+
+    def test_a_slide_without_notes_has_none(self) -> None:
+        assert pl.segment("## T\n\nbody\n")[0].notes == ""
+
+    def test_a_columns_div_is_not_mistaken_for_notes(self) -> None:
+        slides = pl.segment("## T\n\n::: columns\nleft\n:::\n")
+        assert slides[0].notes == ""
+        assert "left" in slides[0].body
+
+
 # ── catalog build (deterministic-only, no vision) ────────────────────────────
 class TestBuildCatalog:
     def test_no_vision_uses_deterministic_extraction(

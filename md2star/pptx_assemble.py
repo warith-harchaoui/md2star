@@ -16,6 +16,16 @@ from the layout's actual placeholder geometry when the catalog recorded one
 (title / body / picture), and a sensible fractional default otherwise — so it
 degrades gracefully for template layouts the catalog under-described.
 
+With one exception, reconciled rather than overlaid: **the title goes into the
+layout's own title placeholder** when it has one. A slide's outline entry and
+its screen-reader reading order come from placeholders, not from loose text
+boxes, so a deck built purely of overlays had no titles at all where it counts
+— and the empty placeholder left underneath each overlay was a "Click to add
+title" ghost and a guaranteed overlap. Body text keeps its overlay (a designer
+body placeholder brings its master's own bullet glyphs, which would double up
+with the assembler's), and every placeholder still empty once a slide is
+finished is removed. See the "placeholder / overlay reconciliation" section.
+
 Text colour is not hard-coded white: with an arbitrary designer layout now in
 play (not just a curated dark subset), a slide's background can be light, so
 the assembler reads the layout's own background colour and switches to a dark
@@ -27,7 +37,8 @@ verification gap the same way :mod:`md2star.reverse_diagrams` does for
 diagrams: render the assembled slide, show it *and* the chosen layout's own
 catalog thumbnail to a vision model, and apply bounded, spec-level fixes
 (shrink text, trim bullets, grow an undersized image) rather than ever hand-
-editing the picture.
+editing the picture. Its model-free counterpart is :mod:`md2star.pptx_audit`,
+which measures the saved deck for the defects arithmetic can settle on its own.
 
 Author
 ------
@@ -102,6 +113,10 @@ _WEIGHTS = (
 )
 
 EMU_PER_INCH = 914400
+
+#: A Markdown image, with its alt text captured separately from its path:
+#: the path is what gets placed, the alt text is what a screen reader reads.
+_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 
 
 def _clean(text: str) -> str:
@@ -207,14 +222,27 @@ def is_content(features: list[str]) -> bool:
 
 
 def parse_image(body: str, base_dir: Path | None) -> Path | None:
-    m = re.search(r"!\[[^\]]*\]\(([^)]+)\)", body)
+    m = _IMAGE_RE.search(body)
     if not m or base_dir is None:
         return None
     # split()[0] drops a Markdown title suffix (`"foo.png "optional title""`);
     # a non-existent resolved path returns None rather than a dangling Path,
     # so the caller's `if img:` branch check works without a stat() of its own.
-    cand = (base_dir / m.group(1).split()[0]).resolve()
+    cand = (base_dir / m.group(2).split()[0]).resolve()
     return cand if cand.exists() else None
+
+
+def parse_alt_text(body: str) -> str:
+    """The first image's Markdown alt text (``""`` when it has none).
+
+    Authored alt text is the accessible description of the picture, and
+    dropping it makes the deck unreadable to a screen reader. Pandoc's own
+    PPTX writer carries it into the shape's ``descr`` attribute; this is how
+    the assembler keeps parity with the path it bypasses. md2star can even
+    *write* this text for you — see :mod:`md2star.preprocessing.alt_text`.
+    """
+    m = _IMAGE_RE.search(body)
+    return m.group(1).strip() if m else ""
 
 
 def parse_mermaid(body: str) -> str | None:
@@ -313,20 +341,111 @@ def title_box(
     return _fractional_box(prs, _DEFAULT_DIVIDER_BOX if divider else _DEFAULT_TITLE_BOX)
 
 
+# ── placeholder / overlay reconciliation ─────────────────────────────────────
+# ``prs.slides.add_slide(layout)`` *clones* the layout's placeholders onto the
+# new slide. The overlay strategy above then draws its own boxes in the very
+# same geometry, so without this section every assembled slide shipped a pair
+# of shapes per region: our text, plus an empty placeholder under it. That is
+# not cosmetic. An empty placeholder shows PowerPoint's "Click to add title"
+# prompt in edit view, is what a click selects instead of the real text, and
+# an unfilled picture placeholder draws its own icon frame. Worse, the slide's
+# *outline* and its screen-reader reading order come from placeholders — so a
+# deck whose titles are plain text boxes has no titles at all in the outline
+# pane. (Doubled, exactly-coincident shapes also fail the "no overlapping
+# elements" half of PPTEval's Design dimension, arXiv 2501.03936.)
+#
+# Reconciliation, deliberately asymmetric:
+#   * the TITLE goes *into* the layout's title placeholder when it has one —
+#     titles carry no bullet glyphs, so inheriting the designer's own shape is
+#     safe, and it is what restores the outline and the reading order;
+#   * body/picture content keeps its own guaranteed-legible overlay, because a
+#     designer body placeholder brings its master's bullet characters and
+#     indents, which would double up with ours;
+#   * any placeholder still empty when the slide is finished is removed.
+_PH_EL = "{http://schemas.openxmlformats.org/presentationml/2006/main}ph"
+
+#: Placeholders whose emptiness is correct: PowerPoint fills the date, the
+#: footer and the slide number itself, from field codes, at display time.
+#: python-pptx already declines to clone these ("latent" placeholders), so in
+#: practice they never reach a slide this module built — the guard is here so
+#: that deleting "every empty placeholder" can never mean deleting a deck's
+#: page numbers, whatever path the presentation arrived by.
+LATENT_KINDS = frozenset({"dt", "ftr", "sldNum"})
+
+
+def placeholder_kind(shape) -> str:
+    """OOXML placeholder type of *shape* (``""`` when it is not one).
+
+    Read off the XML rather than python-pptx's ``PP_PLACEHOLDER`` enum so the
+    vocabulary is identical to the catalog extractor's
+    (:func:`md2star.pptx_layout._placeholder_kind`) with no enum-name mapping
+    table to keep in sync. A ``<p:ph>`` with no ``type`` is OOXML's generic
+    content placeholder, which pandoc and PowerPoint both call ``obj``.
+    """
+    # `.//` rather than the exact nvSpPr/nvPr path: a placeholder that has been
+    # filled with a picture is a <p:pic>, not a <p:sp>, and nests its <p:ph>
+    # one level deeper under a different parent.
+    ph = shape.element.find(f".//{_PH_EL}")
+    return "" if ph is None else (ph.get("type") or "obj")
+
+
+def slide_placeholder(slide, kinds: set[str]):
+    """The slide's own cloned placeholder of one of *kinds*, or ``None``."""
+    for shape in slide.placeholders:
+        if placeholder_kind(shape) in kinds:
+            return shape
+    return None
+
+
+def drop_empty_placeholders(slide) -> int:
+    """Delete every placeholder this slide inherited but never filled.
+
+    Returns
+    -------
+    int
+        How many were removed — reported by the caller's debug log, and the
+        invariant :func:`md2star.pptx_audit.audit` re-checks on the saved deck.
+    """
+    removed = 0
+    for shape in list(slide.placeholders):
+        if placeholder_kind(shape) in LATENT_KINDS:
+            continue
+        # A picture placeholder that *was* filled is a <p:pic> with no text
+        # frame; one that was not is a <p:sp> with an empty one. So "no text
+        # frame" means filled-with-something, and only an empty text frame is
+        # the ghost we are after.
+        if shape.has_text_frame and not shape.text_frame.text.strip():
+            element = shape.element
+            element.getparent().remove(element)
+            removed += 1
+    return removed
+
+
 # ── shape drawing ────────────────────────────────────────────────────────────
 def add_text(
     slide,
     blocks: list[tuple[str, int, bool, str]],
-    box: tuple[float, float, float, float],
+    box: tuple[float, float, float, float] | None = None,
     *,
     color: RGBColor,
     center: bool = False,
     middle: bool = False,
+    into=None,
 ) -> None:
-    """Overlay a text box. *blocks* = list of (text, pt_size, bold, font)."""
-    left, top, width, height = (Inches(v) for v in box)
-    tb = slide.shapes.add_textbox(left, top, width, height)
-    tf = tb.text_frame
+    """Overlay a text box. *blocks* = list of (text, pt_size, bold, font).
+
+    With *into* set to an existing shape (a cloned placeholder), writes into
+    that shape instead of adding a new one, and ignores *box* — the shape's own
+    geometry is the designer's and is already what *box* was derived from. Size,
+    weight, face and colour are still forced per run either way, so inheriting
+    the designer's shape never means inheriting unreadable type.
+    """
+    if into is not None:
+        tf = into.text_frame
+        tf.clear()  # a cloned placeholder arrives with one empty paragraph
+    else:
+        left, top, width, height = (Inches(v) for v in box or (0.0, 0.0, 1.0, 1.0))
+        tf = slide.shapes.add_textbox(left, top, width, height).text_frame
     tf.word_wrap = True
     # Belt-and-braces against overflow: even after the eyeball loop's
     # font_delta shrink, PowerPoint/LibreOffice auto-shrink the run further
@@ -363,11 +482,22 @@ def _fit(pic, max_w: float, max_h: float, cx: float, area_top: float) -> None:
     pic.top = Inches(area_top) + (Inches(max_h) - pic.height) // 2
 
 
-def add_image(slide, img: Path, *, box: tuple[float, float, float, float]) -> None:
+def add_image(slide, img: Path, *, box: tuple[float, float, float, float], alt: str = "") -> None:
     left, top, width, height = box
     cx = left + width / 2
     pic = slide.shapes.add_picture(str(img), Inches(left), Inches(top))
     _fit(pic, width, height, cx, top)
+    if alt:
+        # OOXML keeps a picture's accessible description in cNvPr/@descr.
+        # python-pptx exposes no setter, so write the attribute: it is the same
+        # one PowerPoint's own "Alt Text" pane edits, and the same one Pandoc
+        # fills from Markdown alt text on the path this assembler bypasses.
+        #
+        # Always overwrite rather than only filling a blank: python-pptx
+        # defaults descr to the image's FILE NAME, so a screen reader would
+        # otherwise announce "chart dot png" — worse than silence, and a
+        # default no caller asked for.
+        pic._element._nvXxPr.cNvPr.set("descr", alt)  # noqa: SLF001
 
 
 def add_code(slide, code: str, box: tuple[float, float, float, float], *, font: str) -> None:
@@ -469,7 +599,13 @@ def assemble(
         # bullet/table markup the source happens to carry.
         content = is_content(s.features) and s.index not in (1, n)
 
-        title_lines = [_clean(s.title)] or ["(untitled)"]
+        # `or` inside the list, not around it: a one-element list is truthy
+        # even when that element is "", so the outer form never fired.
+        title_lines = [_clean(s.title) or "(untitled)"]
+        # The slide's *own* cloned title placeholder, when the layout has one.
+        # See the reconciliation note above: this is what puts the title in the
+        # outline pane and the screen-reader reading order.
+        title_ph = slide_placeholder(slide, _TITLE_KINDS)
 
         try:
             # Parsed INSIDE the try so a malformed override (e.g. a corrupt
@@ -484,32 +620,58 @@ def assemble(
                 # fallback_bullets is the assembler's own, AI-free safety net.
                 bullets = fallback_bullets(body, bcap)
                 blocks = [(title_lines[0], 26 + fd, True, title_font)]
+                if title_ph is not None:
+                    # A layout with its own title zone gets the heading there,
+                    # leaving the body box to the bullets alone — which is both
+                    # the designer's intent and what pptx_fit measured when it
+                    # ranked this layout (title capacity and body capacity are
+                    # two separate boxes in that model).
+                    add_text(slide, blocks, color=fg, into=title_ph)
+                    blocks = []
                 blocks += [(f"•  {b}", 16 + fd, False, body_font) for b in bullets]
-                add_text(slide, blocks, content_box(prs, info), color=fg)
+                if blocks:
+                    add_text(slide, blocks, content_box(prs, info), color=fg)
             elif mer and render_mermaid and (mpng := render_mermaid(mer)) is not None:
                 add_text(
                     slide,
                     [(title_lines[0], 20 + fd, True, title_font)],
                     title_box(prs, info),
                     color=fg,
+                    into=title_ph,
                 )
                 left, top, width, height = image_box(prs, info)
-                add_image(slide, mpng, box=(left - igrow, top, width + 2 * igrow, height + igrow))
+                add_image(
+                    slide,
+                    mpng,
+                    box=(left - igrow, top, width + 2 * igrow, height + igrow),
+                    # A rendered diagram's accessible description is the slide's
+                    # own title: nothing else here knows what the graph says.
+                    alt=title_lines[0],
+                )
             elif img:
                 add_text(
                     slide,
                     [(title_lines[0], 20 + fd, True, title_font)],
                     title_box(prs, info),
                     color=fg,
+                    into=title_ph,
                 )
                 left, top, width, height = image_box(prs, info)
-                add_image(slide, img, box=(left - igrow, top, width + 2 * igrow, height + igrow))
+                add_image(
+                    slide,
+                    img,
+                    box=(left - igrow, top, width + 2 * igrow, height + igrow),
+                    # Authored alt text first; failing that the slide's title,
+                    # which is at least a true description of what is shown.
+                    alt=parse_alt_text(body) or title_lines[0],
+                )
             elif code:
                 add_text(
                     slide,
                     [(title_lines[0], 22 + fd, True, title_font)],
                     title_box(prs, info),
                     color=fg,
+                    into=title_ph,
                 )
                 add_code(slide, code, content_box(prs, info), font=fam.get("family", "Consolas"))
             else:
@@ -520,7 +682,19 @@ def assemble(
                     color=fg,
                     center=True,
                     middle=True,
+                    # A cover or divider is *only* a title: inheriting the
+                    # designer's own title shape is the whole point here.
+                    into=title_ph,
                 )
+            if s.notes:
+                # Notes exist precisely so this text is NOT on the slide; the
+                # notes pane is the one place it belongs. `notes_slide` creates
+                # the notes slide (and a default notes master) on first access.
+                slide.notes_slide.notes_text_frame.text = s.notes
+            # Last, so "empty" means "nothing was placed in it by any branch".
+            ghosts = drop_empty_placeholders(slide)
+            if ghosts:
+                logger.debug("slide %d: dropped %d unfilled placeholder(s)", s.index, ghosts)
             placed += 1
         except Exception as exc:  # noqa: BLE001 — one bad slide must not sink the deck
             logger.warning("slide %d (layout %r) failed to assemble: %s", s.index, name, exc)

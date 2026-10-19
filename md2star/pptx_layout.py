@@ -143,6 +143,12 @@ class Slide:
     index: int
     title: str
     body: str = ""
+    #: Speaker notes authored for this slide — the content of a Pandoc
+    #: ``::: notes`` fenced div, held *off* ``body`` on purpose. Notes are the
+    #: presenter's private script: anything left in ``body`` is drawn on the
+    #: slide, where the audience reads it. The assembler puts this in the
+    #: notes pane instead (:func:`md2star.pptx_assemble.assemble`).
+    notes: str = ""
     features: list[str] = field(default_factory=list)
     chosen_layout: str | None = None
     chosen_confidence: float | None = None
@@ -603,6 +609,28 @@ _HR_RE = re.compile(r"(?m)^[ \t]*(\*\*\*+|---+|___+)[ \t]*$")
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 _HEADING_RE = re.compile(r"(?m)^#{1,2}\s+(.*)$")
 
+#: YAML metadata block, and *only* at the very start of the document — Pandoc's
+#: own rule. It has to be removed before anything else looks at the text: its
+#: closing ``---`` is indistinguishable from a horizontal rule, so left in
+#: place it splits off a leading slide whose bullets are the raw metadata
+#: lines ("title: Q3 review", "author: ..."). Both ``---`` and ``...`` close a
+#: Pandoc metadata block.
+_FRONT_MATTER_RE = re.compile(
+    r"\A\ufeff?---[ \t]*\r?\n(.*?)\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|\Z)", re.DOTALL
+)
+
+#: One scalar ``key: value`` line of that block. Nested/sequence YAML is left
+#: alone — the only keys this module wants are the flat title-ish ones, and
+#: guessing at the rest without a YAML parser would be worse than ignoring it.
+_META_LINE_RE = re.compile(r"(?m)^([A-Za-z][\w-]*)[ \t]*:[ \t]*(.+?)[ \t]*$")
+
+#: A Pandoc ``notes`` fenced div: ``::: notes`` / ``:::: {.notes}`` … ``:::``.
+#: Captured rather than merely skipped, because the text inside it is the one
+#: part of a slide that must NOT be drawn on the slide.
+_NOTES_RE = re.compile(
+    r"(?ms)^:{3,}[ \t]*(?:notes\b|\{[^}]*\.notes[^}]*\})[^\n]*\n(.*?)^:{3,}[ \t]*$\n?"
+)
+
 
 def _features(body: str) -> list[str]:
     """Detect the structural cues that hint at a layout (regex, no AI)."""
@@ -633,13 +661,85 @@ def _features(body: str) -> list[str]:
     return f
 
 
-def _slide_from_chunk(index: int, chunk: str) -> Slide | None:
-    visible = _HTML_COMMENT_RE.sub("", chunk).strip()
+def split_front_matter(markdown: str) -> tuple[str, dict[str, str]]:
+    """Separate a leading YAML metadata block from the deck body.
+
+    Parameters
+    ----------
+    markdown : str
+        The whole authored document.
+
+    Returns
+    -------
+    tuple of (str, dict)
+        The document with any leading metadata block removed, and the flat
+        scalar ``key: value`` pairs it declared (lower-cased keys; empty when
+        there was no block).
+
+    Examples
+    --------
+    >>> body, meta = split_front_matter("---\\ntitle: Q3\\n---\\n\\n# Q3\\n")
+    >>> meta["title"], body.strip()
+    ('Q3', '# Q3')
+    """
+    m = _FRONT_MATTER_RE.match(markdown)
+    if m is None:
+        return markdown, {}
+    meta = {k.lower(): v for k, v in _META_LINE_RE.findall(m.group(1))}
+    return markdown[m.end() :], meta
+
+
+def split_notes(chunk: str) -> tuple[str, str]:
+    """Separate a slide's visible content from its speaker notes.
+
+    Parameters
+    ----------
+    chunk : str
+        One slide's Markdown, notes div included.
+
+    Returns
+    -------
+    tuple of (str, str)
+        The content to draw on the slide, and the notes to put in the notes
+        pane (several ``::: notes`` divs on one slide are joined).
+
+    Examples
+    --------
+    >>> body, notes = split_notes("## T\\n\\n::: notes\\nsay this\\n:::\\n")
+    >>> notes
+    'say this'
+    >>> "say this" in body
+    False
+    """
+    taken: list[str] = []
+
+    def _take(m: re.Match[str]) -> str:
+        taken.append(m.group(1).strip())
+        return "\n"
+
+    visible = _NOTES_RE.sub(_take, chunk)
+    return visible, "\n\n".join(n for n in taken if n)
+
+
+def _slide_from_chunk(index: int, chunk: str, *, default_title: str = "") -> Slide | None:
+    visible, notes = split_notes(_HTML_COMMENT_RE.sub("", chunk))
+    visible = visible.strip()
+    # A chunk that was *only* notes still has notes worth keeping, but there is
+    # no slide to hang them on — and inventing an empty slide for them would
+    # put a blank page in the deck. Drop it, as before.
     if not visible:
         return None
     m = _HEADING_RE.search(visible)
-    title = re.sub(r"\s*\{\.[^}]*\}\s*$", "", m.group(1)).strip() if m else "(untitled)"
-    return Slide(index=index, title=title, body=visible, features=_features(visible))
+    title = re.sub(r"\s*\{\.[^}]*\}\s*$", "", m.group(1)).strip() if m else ""
+    return Slide(
+        index=index,
+        # Front-matter `title:` beats "(untitled)" for a deck whose cover is
+        # declared as metadata rather than as an H1 — the Pandoc idiom.
+        title=title or default_title or "(untitled)",
+        body=visible,
+        notes=notes,
+        features=_features(visible),
+    )
 
 
 def segment(markdown: str) -> list[Slide]:
@@ -649,7 +749,12 @@ def segment(markdown: str) -> list[Slide]:
     on their own line, the common reveal.js/Marp/this-project convention);
     when the document has none, falls back to splitting on every H1/H2
     heading, mirroring Pandoc's own default slide-level behaviour.
+
+    A leading YAML metadata block is removed first (its closing ``---`` is a
+    horizontal rule to every regex here), and each slide's ``::: notes`` div is
+    lifted off its body into :attr:`Slide.notes`.
     """
+    markdown, meta = split_front_matter(markdown)
     chunks = _HR_RE.split(markdown)
     # re.split with a capturing group also yields the separators; drop them.
     chunks = [
@@ -670,7 +775,11 @@ def segment(markdown: str) -> list[Slide]:
             chunks = [markdown]
     slides: list[Slide] = []
     for chunk in chunks:
-        s = _slide_from_chunk(len(slides) + 1, chunk)
+        # Only the cover can inherit the metadata title: slide 2 onward has its
+        # own heading, and a document-level title repeated there would be wrong.
+        s = _slide_from_chunk(
+            len(slides) + 1, chunk, default_title=meta.get("title", "") if not slides else ""
+        )
         if s is not None:
             slides.append(s)
     return slides

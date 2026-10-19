@@ -14,10 +14,13 @@ Ships the Phase 1-4 slice of §7's phased plan: catalog builder, LLM+VLM
 layout selection (the VLM stage described in §4.2 as "optional" is on by
 default — `visual_confirm()`, skippable with `--no-visual-confirm`), a
 curated-archetype Seam-D assembler (§4.3), and the target-matching eyeball
-loop (§4.4, `--eyeball-iterations`). Phase 5 (bench gemma3-JSON vs.
-qwen3-vl-lenient) and full placeholder-vs-overlay reconciliation (the
-harder half of §4.3/§6) remain open follow-ups; the rest of this document
-is the design record that shaped the implementation. Reference template used
+loop (§4.4, `--eyeball-iterations`). **Placeholder-vs-overlay reconciliation
+is closed as of 3.6.0** — see §10.1 for what the answer turned out to be and
+why it is asymmetric. Phase 5 (bench gemma3-JSON vs. qwen3-vl-lenient)
+remains an open follow-up, as does the reference-slide seam in §10.4; §10
+records the adjacent work this round read and what was taken from it. The
+rest of this document is the design record that shaped the implementation.
+Reference template used
 during investigation: `assets/templates/pptx/Jellysmack-Presentation-Template.pptx`
 (git-ignored, see §8) — the shipped code targets *any* designer PPTX, not
 just this one (its own offline tests build a synthetic template instead).
@@ -366,3 +369,119 @@ magick montage /tmp/j/s-*.png -tile 8x8 -geometry 320x180+3+3 .private/jsk/jelly
 # non-generic engine recommendation (paste the §3.2 task text)
 best-engine-ai-helper report --task "<goals description from §3.2>"
 ```
+
+---
+
+## 10. Adjacent work, and what was taken from it
+
+The layout-selection literature moved quickly in 2025–2026. This section is
+the record of what was read, what was reused, and — more usefully — what was
+read and *rejected*, so a later round does not re-litigate it.
+
+### 10.1 Placeholder vs. overlay: the Phase-5 question, answered
+
+The design note left this open as "the real engineering" (§6), and the first
+implementation picked overlays wholesale on the grounds that designer
+placeholders are unpredictable. That was right about typography and wrong
+about structure, because `prs.slides.add_slide(layout)` *clones* the layout's
+placeholders onto the new slide. Overlay-only therefore shipped **two shapes
+per region**: the content, plus an empty placeholder in the same geometry.
+
+The cost was not cosmetic, and only one third of it is visible:
+
+| Consequence | Where it shows |
+|---|---|
+| "Click to add title" prompt, and it is what a click selects | PowerPoint edit view |
+| **No title in the outline pane; no reading order** | Outline view, screen readers |
+| Two exactly-coincident shapes on every slide | PPTEval's Design dimension (§10.2) |
+
+The resolution is asymmetric, because the two halves fail differently:
+
+- **Titles go into the placeholder.** A title carries no bullet glyphs, so
+  inheriting the designer's shape is safe — and it is the only thing that
+  restores the outline and the reading order. Size, weight, face and colour
+  are still forced per run, so "inherit the shape" never means "inherit
+  unreadable type", which was the original objection.
+- **Body text keeps its overlay.** A designer body placeholder brings its
+  master's own bullet characters and indents, which would double up with the
+  assembler's `•  ` prefix. Pouring prose into it is the fragile move the
+  original note warned about, and that warning stands.
+- **Anything still empty is deleted** — except `dt` / `ftr` / `sldNum`, whose
+  emptiness is correct: PowerPoint fills those from field codes itself.
+
+### 10.2 PPTAgent / PPTEval (arXiv 2501.03936, EMNLP 2025)
+
+Scores a deck 1–5 on **Content**, **Design** and **Coherence**, validated
+against human raters (Pearson 0.71, Fleiss' κ 0.59). The Design rubric is the
+interesting part for us: "harmonious colors and proper layout ensure
+readability … checks color contrast, element placement, and absence of
+overlaps".
+
+Taken: **the half of that rubric a machine can settle alone**, as
+`md2star/pptx_audit.py`. Element placement and overlap are geometry; a
+geometry bug deserves arithmetic, not an opinion, and arithmetic runs on a
+laptop with no VLM — which is this project's whole posture. The audit does not
+try to *score* a deck out of five; it reports measured defects, because a
+single number is not actionable and this project already reports the Kawasaki
+ideal as an observation rather than a grade.
+
+Not taken: **Coherence**. It is a presentation-level judgement about
+progressive structure and background scaffolding, and md2star does not author
+content — the deck's argument is the author's. Advising someone that their
+narrative lacks scaffolding is a different product.
+
+### 10.3 AutoPresent / SlidesBench (CVPR 2025)
+
+Generates slides as *programs*, and its `SlidesLib` exists because raw
+programs averaged 170 lines against 13 with the library. Its evaluation splits
+into reference-based (similarity to a target slide) and **reference-free**
+(design quality of the output alone).
+
+Taken: the reference-based/reference-free split is exactly the shape md2star
+already has — the eyeball loop compares against the chosen layout's own
+thumbnail (reference-based), and the audit judges the file alone
+(reference-free). Worth knowing the names.
+
+Not taken: program synthesis of slides. md2star is not designing slides; a
+human designer already did, and the template is the design.
+
+### 10.4 The reference-*slide* seam (open; the next real step)
+
+PPTAgent's central move is one md2star has not made: it edits a **reference
+slide**, not a layout. A designer template's example slides carry what layouts
+do not — accent bars, numbered step chevrons, decorative rules, the little
+bespoke shapes that make a deck look like itself. Instantiating
+`slideLayout17` gets the background and the placeholder boxes; cloning
+*slide 23* and replacing its text and pictures gets the designer's actual
+composition.
+
+That is a fifth seam, past the A–D of §4.3: **Seam E — clone-and-replace**.
+The catalog already records which example pages use each layout
+(`LayoutInfo.example_pages`), so the input exists today. The work is the hard
+part of any clone: python-pptx cannot copy a slide between presentations
+natively, and the replace step needs to decide which shape on the cloned slide
+each Markdown block belongs in — PPTAgent answers that by rendering the slide
+to HTML for the model and letting it emit `replace_span` / `replace_image` /
+`clone_paragraph` / `del_*` actions against a REPL that feeds execution errors
+back (max 2 retries).
+
+Worth doing, and worth doing *after* the current path is boring: it trades a
+predictable deck for a more beautiful one, and the eyeball loop plus the audit
+are what would make that trade safe.
+
+### 10.5 md2pptx (MartinPacker), and PowerPoint Designer
+
+`md2pptx` is the closest direct competitor — pure python-pptx, no Pandoc — and
+its surface is enormous: cards, funnels, task slides, glossaries, a generated
+table of contents, per-element style classes, inline Python hooks. Reading it
+is a useful corrective: most of that is **authoring vocabulary**, i.e. new
+Markdown syntax its users must learn, whereas md2star's bet is that the
+Markdown stays plain and the *template* carries the design. The one thing it
+has long had that md2star's smart-layout path lacked is **speaker notes**,
+which is now fixed (and was a leak, not just a gap — see the 3.6.0 changelog).
+
+**PowerPoint Designer** genuinely does content-aware layout suggestion and
+sets the bar. The difference is whose vocabulary it draws on: Designer
+composes from Microsoft's catalogue, while the job here is mapping onto *your*
+designer's layouts and leaving their design alone. `LANDSCAPE.md` says so out
+loud rather than quietly scoring md2star above it.

@@ -354,6 +354,55 @@ md2pptx talk.md --template ./brand/Company-Template.pptx \
 > `--no-visual-confirm` skips the VLM tie-break stage (cheaper, text-only
 > layout selection) when you want the LLM's first pick taken as final.
 
+### Speaker notes
+
+A Pandoc `::: notes` block is the presenter's script, and it goes to the
+notes pane on both paths — the ordinary Pandoc one and `--smart-layout`:
+
+```markdown
+## Q3 revenue
+
+- up 18% year on year
+
+::: notes
+The 18% is provisional until the audit closes. Do not take questions on
+the European segment.
+:::
+```
+
+### The layout audit
+
+Every `--smart-layout` run ends with a deterministic audit of the deck it
+just wrote — no model, no render, no network, so it reports the same thing
+on a laptop with no LLM at all:
+
+```text
+Wrote: talk.pptx (14/14 slides)
+layout audit: 2 findings on 2 slides (1 overlap, 1 overrun)
+```
+
+Run with `-v` to see each finding with its measurement:
+
+```text
+slide 7: overlap — 'Title 1' and 'TextBox 4' share 38% of the smaller box
+slide 9: overrun [TextBox 3] — text needs 1.6x its box at 16pt (fits at ~13pt)
+```
+
+The five checks are `off-slide`, `overlap` (text over text — text over a
+*picture* is a composition, not a bug), `ghost-placeholder`,
+`illegible-type` (under 12 pt) and `overrun`. An `overrun` is an
+observation rather than an error: PowerPoint auto-shrinks the text, so the
+consequence is quiet, and the finding tells you what size the slide really
+is. Available as a library call too:
+
+```python
+from pathlib import Path
+from md2star.pptx_audit import audit, summarise
+
+findings = audit(Path("talk.pptx"))
+print(summarise(findings, slides=14))
+```
+
 `--smart-layout` bypasses Pandoc entirely for that run — `--template`
 plays the role a Pandoc reference-doc normally plays. The ordinary
 `md2pptx talk.md` (no `--smart-layout`) path is unaffected and stays the

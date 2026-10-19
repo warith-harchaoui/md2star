@@ -14,6 +14,8 @@ import pytest
 
 pptx = pytest.importorskip("pptx")
 
+from pptx.enum.shapes import MSO_SHAPE_TYPE  # noqa: E402
+
 from md2star import pptx_assemble as pa  # noqa: E402
 from md2star import pptx_layout as pl  # noqa: E402
 
@@ -156,6 +158,166 @@ class TestAssemble:
         # asserting it fires on an (unrealistic) empty layout_index result.
         prs = pptx.Presentation()
         assert pa.layout_index(prs)  # sanity: never empty for a real template
+
+
+# ── placeholder / overlay reconciliation ─────────────────────────────────────
+# add_slide() clones the layout's placeholders onto the slide, so an overlay
+# drawn in the same geometry used to ship a second, empty shape on top of every
+# region: a "Click to add title" prompt where the title is, no title at all in
+# the outline pane, and a guaranteed overlap on every slide.
+class TestPlaceholderReconciliation:
+    @pytest.fixture
+    def deck(self, tmp_path: Path, default_template: Path, catalog) -> Path:
+        """A three-slide deck on a layout with title + picture + body."""
+        slides = pl.segment("# Cover\n\n***\n\n## Bullets\n\n- a\n- b\n\n***\n\n## The End\n")
+        for s in slides:
+            s.chosen_layout = "Picture with Caption"
+        out = tmp_path / "out.pptx"
+        pa.assemble(slides, catalog, default_template, out)
+        return out
+
+    def test_no_unfilled_placeholder_survives(self, deck: Path) -> None:
+        prs = pptx.Presentation(str(deck))
+        ghosts = [
+            shape.name
+            for slide in prs.slides
+            for shape in slide.shapes
+            if shape.is_placeholder and shape.has_text_frame and not shape.text_frame.text.strip()
+        ]
+        assert ghosts == []
+
+    def test_the_title_lands_in_the_title_placeholder(self, deck: Path) -> None:
+        """What the outline pane and a screen reader read is the placeholder."""
+        prs = pptx.Presentation(str(deck))
+        titles = [
+            shape.text_frame.text
+            for slide in prs.slides
+            for shape in slide.shapes
+            if pa.placeholder_kind(shape) in {"title", "ctrTitle"}
+        ]
+        assert titles == ["Cover", "Bullets", "The End"]
+
+    def test_the_title_is_not_also_drawn_as_a_loose_box(self, deck: Path) -> None:
+        prs = pptx.Presentation(str(deck))
+        for slide in prs.slides:
+            drawn = [
+                shape.text_frame.text
+                for shape in slide.shapes
+                if not shape.is_placeholder and shape.has_text_frame
+            ]
+            assert not any(text.startswith(("Cover", "Bullets", "The End")) for text in drawn)
+
+    def test_bullets_keep_their_own_box(self, deck: Path) -> None:
+        """Body text is NOT poured into the designer's placeholder: its master
+        would add a second bullet glyph next to the one the assembler draws."""
+        prs = pptx.Presentation(str(deck))
+        boxes = [
+            shape.text_frame.text
+            for shape in prs.slides[1].shapes
+            if not shape.is_placeholder and shape.has_text_frame
+        ]
+        assert boxes == ["•  a\n•  b"]
+
+    def test_a_layout_without_a_title_placeholder_still_gets_a_title(
+        self, tmp_path: Path, default_template: Path, catalog
+    ) -> None:
+        slides = pl.segment("# Only\n\nbody\n")
+        slides[0].chosen_layout = "Blank"  # no placeholders at all
+        out = tmp_path / "blank.pptx"
+        pa.assemble(slides, catalog, default_template, out)
+        prs = pptx.Presentation(str(out))
+        texts = [sh.text_frame.text for sh in prs.slides[0].shapes if sh.has_text_frame]
+        assert texts == ["Only"]
+
+    def test_an_empty_title_is_still_named(
+        self, tmp_path: Path, default_template: Path, catalog
+    ) -> None:
+        """`[x] or [fallback]` never fired — a one-element list is always truthy."""
+        slides = pl.segment("# Only\n\nbody\n")
+        slides[0].title = ""
+        slides[0].chosen_layout = "Blank"
+        out = tmp_path / "untitled.pptx"
+        pa.assemble(slides, catalog, default_template, out)
+        prs = pptx.Presentation(str(out))
+        assert [sh.text_frame.text for sh in prs.slides[0].shapes] == ["(untitled)"]
+
+
+# ── speaker notes ────────────────────────────────────────────────────────────
+class TestSpeakerNotes:
+    def test_notes_go_to_the_notes_pane_not_the_slide(
+        self, tmp_path: Path, default_template: Path, catalog
+    ) -> None:
+        slides = pl.segment(
+            "## Numbers\n\n- revenue up\n\n::: notes\nDo not mention the layoffs.\n:::\n"
+        )
+        slides[0].chosen_layout = "Title and Content"
+        out = tmp_path / "notes.pptx"
+        pa.assemble(slides, catalog, default_template, out)
+
+        prs = pptx.Presentation(str(out))
+        slide = prs.slides[0]
+        on_slide = " ".join(sh.text_frame.text for sh in slide.shapes if sh.has_text_frame)
+        assert "layoffs" not in on_slide
+        assert slide.has_notes_slide
+        assert slide.notes_slide.notes_text_frame.text == "Do not mention the layoffs."
+
+    def test_a_slide_without_notes_gets_no_notes_slide(
+        self, tmp_path: Path, default_template: Path, catalog
+    ) -> None:
+        slides = pl.segment("## Plain\n\n- a\n")
+        slides[0].chosen_layout = "Title and Content"
+        out = tmp_path / "plain.pptx"
+        pa.assemble(slides, catalog, default_template, out)
+        assert not pptx.Presentation(str(out)).slides[0].has_notes_slide
+
+
+# ── image accessibility ──────────────────────────────────────────────────────
+# Pandoc carries Markdown alt text into the picture's `descr` attribute; this
+# path bypasses Pandoc, so it has to do the same or the deck is unreadable to
+# a screen reader.
+class TestAltText:
+    @pytest.fixture
+    def png(self, tmp_path: Path) -> Path:
+        from PIL import Image
+
+        path = tmp_path / "chart.png"
+        Image.new("RGB", (1600, 900), "navy").save(path)
+        return path
+
+    def test_alt_text_reaches_the_picture(
+        self, tmp_path: Path, default_template: Path, catalog, png: Path
+    ) -> None:
+        slides = pl.segment(f"## Results\n\n![Revenue climbing through Q3]({png.name})\n")
+        slides[0].chosen_layout = "Picture with Caption"
+        out = tmp_path / "alt.pptx"
+        pa.assemble(slides, catalog, default_template, out, image_base_dir=tmp_path)
+
+        prs = pptx.Presentation(str(out))
+        picture = next(
+            shape for shape in prs.slides[0].shapes if shape.shape_type == MSO_SHAPE_TYPE.PICTURE
+        )
+        descr = picture._element._nvXxPr.cNvPr.get("descr")  # noqa: SLF001
+        assert descr == "Revenue climbing through Q3"
+
+    def test_without_alt_text_the_title_describes_the_picture(
+        self, tmp_path: Path, default_template: Path, catalog, png: Path
+    ) -> None:
+        """python-pptx would otherwise leave the FILE NAME as the description,
+        and "chart dot png" is not what a screen reader should announce."""
+        slides = pl.segment(f"## Results\n\n![]({png.name})\n")
+        slides[0].chosen_layout = "Picture with Caption"
+        out = tmp_path / "noalt.pptx"
+        pa.assemble(slides, catalog, default_template, out, image_base_dir=tmp_path)
+
+        prs = pptx.Presentation(str(out))
+        picture = next(
+            shape for shape in prs.slides[0].shapes if shape.shape_type == MSO_SHAPE_TYPE.PICTURE
+        )
+        assert picture._element._nvXxPr.cNvPr.get("descr") == "Results"  # noqa: SLF001
+
+    def test_parse_alt_text_reads_the_first_image(self) -> None:
+        assert pa.parse_alt_text("![a bar chart](x.png) ![another](y.png)") == "a bar chart"
+        assert pa.parse_alt_text("no image here") == ""
 
 
 # ── target-matching eyeball loop ─────────────────────────────────────────────

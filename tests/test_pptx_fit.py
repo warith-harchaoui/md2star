@@ -570,53 +570,59 @@ MID = _real_layout(
 )
 
 
-def test_the_loop_moves_a_slide_off_a_layout_that_cannot_carry_it() -> None:
+@pytest.fixture
+def reselect():
+    """The loop's layout swap, which lives in the assembler.
+
+    Importing it pulls in ``python-pptx`` — the opt-in ``[pptx]`` extra — even
+    though the swap itself is pure ranking arithmetic. Reaching it through a
+    fixture means a checkout without that extra *skips* these five tests
+    instead of erroring on the import, exactly like tests/test_pptx_assemble.py.
+    """
+    pytest.importorskip("pptx")
     from md2star.pptx_assemble import _reselect
 
+    return _reselect
+
+
+def test_the_loop_moves_a_slide_off_a_layout_that_cannot_carry_it(reselect) -> None:
     s = _ranked_slide(_md("# T", "", "word " * 25), [TIGHT, ROOMY, MID])
     s.chosen_layout = "TIGHT"  # as if a model insisted on it
-    assert _reselect(s) == "ROOMY"
+    assert reselect(s) == "ROOMY"
 
 
-def test_a_layout_already_rejected_is_not_offered_again() -> None:
+def test_a_layout_already_rejected_is_not_offered_again(reselect) -> None:
     """Otherwise the loop ping-pongs between two layouts until it runs out."""
-    from md2star.pptx_assemble import _reselect
-
     s = _ranked_slide(_md("# T", "", "word " * 25), [TIGHT, ROOMY, MID])
     s.chosen_layout = "ROOMY"
     s.tried_layouts = ["TIGHT"]
-    assert _reselect(s) == "MID"
+    assert reselect(s) == "MID"
 
 
-def test_exhausting_the_options_keeps_the_current_pick() -> None:
+def test_exhausting_the_options_keeps_the_current_pick(reselect) -> None:
     """None means "report it", not "break the deck"."""
-    from md2star.pptx_assemble import _reselect
-
     s = _ranked_slide(_md("# T", "", "word " * 25), [TIGHT, ROOMY, MID])
     s.chosen_layout = "MID"
     s.tried_layouts = ["TIGHT", "ROOMY"]
-    assert _reselect(s) is None
+    assert reselect(s) is None
 
 
-def test_a_slide_with_no_ranking_is_left_alone() -> None:
+def test_a_slide_with_no_ranking_is_left_alone(reselect) -> None:
     """Selection may have run without geometry (an older call path)."""
-    from md2star.pptx_assemble import _reselect
     from md2star.pptx_layout import Slide
 
     s = Slide(index=0, title="T", body="# T")
     s.chosen_layout = "TIGHT"
-    assert _reselect(s) is None
+    assert reselect(s) is None
 
 
-def test_the_loop_never_moves_a_slide_onto_an_overrunning_layout() -> None:
+def test_the_loop_never_moves_a_slide_onto_an_overrunning_layout(reselect) -> None:
     """Swapping one bad host for another is not progress."""
-    from md2star.pptx_assemble import _reselect
-
     s = _ranked_slide(_md("# T", "", "word " * 25), [TIGHT, ROOMY])
     s.chosen_layout = "ROOMY"
     s.tried_layouts = []
     # TIGHT overruns for this content, so it is not a destination.
-    assert _reselect(s) is None
+    assert reselect(s) is None
 
 
 # ---------------------------------------------------------------------------
