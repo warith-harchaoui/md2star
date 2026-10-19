@@ -753,6 +753,8 @@ def select_layouts(
     chat: ChatFn | None = None,
     batch: int = 12,
     min_pt: float = pptx_fit.KAWASAKI_MIN_PT,
+    template: Path | None = None,
+    image_base_dir: Path | None = None,
 ) -> None:
     """Fill ``slide.chosen_layout`` for every slide via batched LLM text calls.
 
@@ -773,6 +775,10 @@ def select_layouts(
     names = {c.name for c in content}
     fallback = by_archetype.get("bulleted-content", content[0].name)
     cat_txt = _catalog_block(content, min_pt=min_pt)
+    # The canvas lets the compositional checks ask where a box falls *on the
+    # slide*; the image directory lets the aspect check read real dimensions.
+    # Both are optional: without them those checks score 0 rather than fail.
+    canvas = slide_size(template) if template is not None else None
     chat = chat or default_chat(kind="llm")
 
     # Batched, not one call per slide: keeps the prompt (and cost) bounded for
@@ -788,7 +794,9 @@ def select_layouts(
         for s in group:
             metrics = pptx_fit.measure(s.title, s.body)
             s.metrics = metrics
-            ordered = pptx_fit.rank(metrics, content, min_pt=min_pt)
+            ordered = pptx_fit.rank(
+                metrics, content, min_pt=min_pt, canvas=canvas, base_dir=image_base_dir
+            )
             s.fit_ranked = ordered
             # Offer the geometrically plausible layouts first, by name, so the
             # model is steered by what can actually hold the content rather

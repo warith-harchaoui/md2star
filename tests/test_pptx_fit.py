@@ -617,3 +617,127 @@ def test_the_loop_never_moves_a_slide_onto_an_overrunning_layout() -> None:
     s.tried_layouts = []
     # TIGHT overruns for this content, so it is not a destination.
     assert _reselect(s) is None
+
+
+# ---------------------------------------------------------------------------
+# aspect matching — the one principle that touches the disk
+# ---------------------------------------------------------------------------
+# A count cannot tell a panorama from a portrait, and those two want opposite
+# layouts. SlideGen states the rule (wide images to image-top, "tall or square
+# images receive half-and-half"); comparing aspects produces that routing on
+# its own, and keeps working for shapes nobody wrote a rule for.
+
+
+@pytest.fixture
+def images(tmp_path):
+    """Four real images, header-readable, of deliberately different shapes."""
+    from PIL import Image
+
+    for name, size in {
+        "pano": (1920, 480),
+        "wide": (1600, 900),
+        "square": (800, 800),
+        "tall": (600, 1400),
+    }.items():
+        Image.new("RGB", size, "gray").save(tmp_path / f"{name}.png")
+    return tmp_path
+
+
+IMAGE_TOP = _layout(("pic", box(0.05, 0.05, 0.9, 0.35)))
+HALF_HALF = _layout(("pic", box(0.05, 0.1, 0.42, 0.8)))
+
+
+def test_a_panorama_prefers_the_image_top_layout(images) -> None:
+    from md2star.pptx_fit import aspect_match
+
+    m = measure("", "![x](pano.png)")
+    top, _ = aspect_match(m, IMAGE_TOP, base_dir=images)
+    half, _ = aspect_match(m, HALF_HALF, base_dir=images)
+    assert top > half
+
+
+@pytest.mark.parametrize("name", ["square", "tall"])
+def test_square_and_tall_images_prefer_half_and_half(images, name: str) -> None:
+    from md2star.pptx_fit import aspect_match
+
+    m = measure("", f"![x]({name}.png)")
+    top, _ = aspect_match(m, IMAGE_TOP, base_dir=images)
+    half, _ = aspect_match(m, HALF_HALF, base_dir=images)
+    assert half > top
+
+
+def test_a_badly_mismatched_image_says_what_will_happen(images) -> None:
+    """ "It will be letterboxed or cropped" is actionable; a number is not."""
+    from md2star.pptx_fit import aspect_match
+
+    score, reason = aspect_match(measure("", "![x](tall.png)"), IMAGE_TOP, base_dir=images)
+    assert score < 0
+    assert "letterboxed or cropped" in reason
+
+
+def test_the_worst_pairing_decides(images) -> None:
+    """One badly letterboxed image spoils the slide, however well others sit."""
+    from md2star.pptx_fit import aspect_match
+
+    two_boxes = _layout(
+        ("pic", box(0.05, 0.05, 0.9, 0.35)),  # wide box, suits the panorama
+        ("pic", box(0.05, 0.5, 0.9, 0.35)),  # wide box, ruinous for the tall one
+    )
+    both = measure("", "![a](pano.png)\n![b](tall.png)")
+    worst, reason = aspect_match(both, two_boxes, base_dir=images)
+    only_good, _ = aspect_match(measure("", "![a](pano.png)"), two_boxes, base_dir=images)
+    assert worst < only_good
+    assert "tall.png" in reason
+
+
+# --- the no-signal cases, which must never be read as a bad signal ---------
+
+
+def test_a_remote_image_is_skipped_not_penalised(images) -> None:
+    """Selection must not do network I/O: a choice that hangs on a dead host
+    is worse than one made without the aspect."""
+    from md2star.pptx_fit import aspect_match
+
+    m = measure("", "![x](https://example.com/photo.png)")
+    assert aspect_match(m, IMAGE_TOP, base_dir=images) == (0.0, "")
+
+
+def test_a_missing_file_is_skipped(images) -> None:
+    from md2star.pptx_fit import aspect_match
+
+    m = measure("", "![x](nope.png)")
+    assert aspect_match(m, IMAGE_TOP, base_dir=images) == (0.0, "")
+
+
+def test_no_base_dir_means_no_signal(images) -> None:
+    """Otherwise every deck keeping images elsewhere would be penalised."""
+    from md2star.pptx_fit import aspect_match
+
+    m = measure("", "![x](pano.png)")
+    assert aspect_match(m, IMAGE_TOP, base_dir=None) == (0.0, "")
+
+
+def test_a_layout_with_no_picture_box_is_not_judged_on_aspect(images) -> None:
+    from md2star.pptx_fit import aspect_match
+
+    text_only = _layout(("body", box(0.05, 0.25, 0.9, 0.6)))
+    m = measure("", "![x](pano.png)")
+    assert aspect_match(m, text_only, base_dir=images) == (0.0, "")
+
+
+def test_an_unreadable_file_is_skipped_not_raised(images) -> None:
+    """A truncated download must not take a conversion down with it."""
+    from md2star.pptx_fit import aspect_match
+
+    (images / "broken.png").write_bytes(b"not an image")
+    m = measure("", "![x](broken.png)")
+    assert aspect_match(m, IMAGE_TOP, base_dir=images) == (0.0, "")
+
+
+# --- path parsing, which the aspect check depends on ----------------------
+
+
+def test_bracketed_paths_with_spaces_survive() -> None:
+    """`<tall one.jpg>` used to truncate at the space, yielding "tall"."""
+    m = measure("T", '# T\n\n![a](pics/w.png)\n![b](<tall one.jpg> "caption")\n![c](p.png "t")')
+    assert m.image_paths == ["pics/w.png", "tall one.jpg", "p.png"]

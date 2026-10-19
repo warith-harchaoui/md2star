@@ -720,7 +720,10 @@ def _convert_smart_layout(fmt: str, in_path: Path, out_path: Path, processed: st
     logger.info("smart-layout: cataloging %s", template)
     catalog = build_catalog(template)
     logger.info("smart-layout: selecting layouts for %d slides", len(slides))
-    select_layouts(slides, catalog)
+    # The template gives the canvas for the compositional checks; the source
+    # directory is where relative image paths resolve, so the aspect check can
+    # read real dimensions rather than guess from a count.
+    select_layouts(slides, catalog, template=template, image_base_dir=in_path.parent)
     if not args.no_visual_confirm:
         logger.info("smart-layout: visual tie-break")
         visual_confirm(slides, catalog, template=template)

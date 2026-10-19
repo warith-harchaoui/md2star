@@ -82,9 +82,11 @@ Warith HARCHAOUI, https://linkedin.com/in/warith-harchaoui
 
 from __future__ import annotations
 
+import functools
 import math
 import re
 from dataclasses import dataclass, field
+from pathlib import Path
 
 # ── constants, each with its reason ──────────────────────────────────────────
 
@@ -136,6 +138,11 @@ _PIC_KINDS = frozenset({"pic", "media", "clipArt"})
 
 _FENCE_RE = re.compile(r"^```.*?^```", re.MULTILINE | re.DOTALL)
 _IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
+#: Pulls the path out of a Markdown image, ignoring an optional "title".
+#: Two alternatives on purpose: the <angle-bracket> form is the one that may
+#: contain spaces, so a bare non-space run truncates it ("<tall one.jpg>"
+#: became "tall").
+_IMAGE_PATH_RE = re.compile(r"!\[[^\]]*\]\(\s*(?:<([^>]*)>|([^)\s]+))")
 _TABLE_ROW_RE = re.compile(r"^\s*\|.*\|\s*$", re.MULTILINE)
 _BULLET_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s+(.*)$", re.MULTILINE)
 _HEADING_RE = re.compile(r"^#{1,6}\s+.*$", re.MULTILINE)
@@ -159,6 +166,10 @@ class ContentMetrics:
     table_rows: int = 0
     table_cols: int = 0
     code_lines: int = 0
+    #: Paths exactly as the Markdown wrote them, in document order. Kept so
+    #: :func:`aspect_match` can read each image's real dimensions; a count
+    #: cannot tell a panorama from a portrait.
+    image_paths: list[str] = field(default_factory=list)
     #: The author marked this slide as a single large statement ({.big}).
     #: Structural, not stylistic: it wants a title-only layout, with no body
     #: box sitting empty underneath it.
@@ -220,7 +231,14 @@ def measure(title: str, body: str) -> ContentMetrics:
     rest = _FENCE_RE.sub("", body)
 
     # Images are placed, not read: count them and drop the syntax.
-    m.image_count = len(_IMAGE_RE.findall(rest))
+    found = _IMAGE_RE.findall(rest)
+    m.image_count = len(found)
+    m.image_paths = []
+    for src in found:
+        hit = _IMAGE_PATH_RE.match(src)
+        if hit:
+            # group(1) is the <bracketed> form, group(2) the bare one.
+            m.image_paths.append((hit.group(1) or hit.group(2) or "").strip())
     rest = _IMAGE_RE.sub("", rest)
 
     # Table geometry drives which layouts can host it at all.
@@ -396,6 +414,7 @@ def evaluate(
     min_pt: float = KAWASAKI_MIN_PT,
     strict: bool = False,
     canvas: tuple[int, int] | None = None,
+    base_dir: Path | None = None,
 ) -> FitReport:
     """Score how well *layout* can host the content described by *metrics*.
 
@@ -541,7 +560,7 @@ def evaluate(
 
     # Composition ranks layouts that can already host the content; it never
     # rescues one that cannot, which is why it is added rather than blended.
-    comp, comp_reasons = composition(metrics, layout, canvas)
+    comp, comp_reasons = composition(metrics, layout, canvas, base_dir=base_dir)
     score += comp
     report.composition = comp
     report.reasons.extend(comp_reasons)
@@ -557,6 +576,7 @@ def rank(
     min_pt: float = KAWASAKI_MIN_PT,
     strict: bool = False,
     canvas: tuple[int, int] | None = None,
+    base_dir: Path | None = None,
 ) -> list[tuple[object, FitReport]]:
     """Order *layouts* best-first for this content.
 
@@ -566,7 +586,10 @@ def rank(
     always a best available choice, even for a deck that overruns everywhere.
     """
     scored = [
-        (lay, evaluate(metrics, lay, min_pt=min_pt, strict=strict, canvas=canvas))
+        (
+            lay,
+            evaluate(metrics, lay, min_pt=min_pt, strict=strict, canvas=canvas, base_dir=base_dir),
+        )
         for lay in layouts
     ]
     scored.sort(key=lambda pair: (pair[1].fits, pair[1].score), reverse=True)
@@ -828,7 +851,11 @@ def thirds(metrics: ContentMetrics, layout: object, canvas: tuple[int, int]) -> 
 
 
 def composition(
-    metrics: ContentMetrics, layout: object, canvas: tuple[int, int] | None
+    metrics: ContentMetrics,
+    layout: object,
+    canvas: tuple[int, int] | None,
+    *,
+    base_dir: Path | None = None,
 ) -> tuple[float, list[str]]:
     """Combine the compositional principles into one score and its reasons.
 
@@ -844,6 +871,10 @@ def composition(
         (reading_order(metrics, layout), 0.15),
         (alignment(metrics, layout, canvas), 0.10),
         (thirds(metrics, layout, canvas), 0.15),
+        # Weighted highest of the four: a letterboxed or cropped image is the
+        # most visible of these defects, and the only one a reader will notice
+        # without being told what to look for.
+        (aspect_match(metrics, layout, base_dir=base_dir), 0.25),
     )
     reasons: list[str] = []
     total = 0.0
@@ -852,3 +883,115 @@ def composition(
         if reason:
             reasons.append(reason)
     return total, reasons
+
+
+# ── aspect matching ──────────────────────────────────────────────────────────
+# The one principle here that touches the disk.
+#
+# Every other check works from numbers already in hand. This one needs the
+# image's real dimensions, because a count cannot tell a panorama from a
+# portrait and those two want opposite layouts. SlideGen's Arranger states the
+# rule directly -- wide images to image-top templates, "tall or square images
+# receive half-and-half layouts" -- but it does not need stating as a rule
+# here: comparing the image's aspect to the box's produces the same routing on
+# its own, and keeps working for shapes nobody wrote a rule for.
+#
+# What a mismatch actually costs: PowerPoint either letterboxes the image
+# (bands of dead space on two sides) or crops it (content silently gone). Both
+# are defects a reader notices and neither raises anything, which is the same
+# class of silent degradation the rest of this module exists to catch.
+
+#: Beyond this many octaves of aspect difference, the image is being seriously
+#: letterboxed or cropped. One octave = the box is twice as wide, relatively,
+#: as the image (or vice versa).
+ASPECT_OCTAVE_TOLERANCE = 1.0
+
+#: Schemes we will not open. Selection must not do network I/O -- a layout
+#: choice that hangs on a dead host is worse than one made without the aspect.
+_REMOTE_PREFIXES = ("http://", "https://", "ftp://", "data:")
+
+
+@functools.lru_cache(maxsize=512)
+def _image_aspect(path: str) -> float | None:
+    """Width / height of the image at *path*, or ``None`` if unreadable.
+
+    Pillow reads only the header for ``.size``, so this is cheap enough to do
+    during selection. Cached because a deck commonly reuses a logo or a
+    background across many slides.
+
+    Every failure mode -- missing file, unsupported format, a directory, a
+    truncated download -- returns ``None``, which every caller treats as "skip
+    the aspect check". A layout decision is worth making without this signal;
+    it is not worth crashing a conversion over.
+    """
+    try:
+        from PIL import Image
+
+        with Image.open(path) as im:
+            w, h = im.size
+        return (w / h) if w > 0 and h > 0 else None
+    except Exception:  # noqa: BLE001 — any read failure means "no signal"
+        return None
+
+
+def _resolve(raw: str, base_dir: Path | None) -> str | None:
+    """Turn a Markdown image reference into a readable local path, or None."""
+    if not raw or raw.lower().startswith(_REMOTE_PREFIXES):
+        return None
+    p = Path(raw).expanduser()
+    if not p.is_absolute() and base_dir is not None:
+        p = base_dir / p
+    return str(p) if p.is_file() else None
+
+
+def aspect_match(
+    metrics: ContentMetrics, layout: object, *, base_dir: Path | None = None
+) -> tuple[float, str]:
+    """Does the image's shape match the shape of the box it would go in?
+
+    Images and picture placeholders are paired in document order, and the worst
+    pairing decides the score -- one badly letterboxed image spoils a slide
+    regardless of how well the others sit.
+
+    Returns ``(0.0, "")`` whenever the dimensions cannot be read: a remote URL,
+    a missing file, a path relative to a directory the caller did not supply.
+    No signal is not the same as a bad signal, and treating it as one would
+    penalise every deck that keeps its images somewhere this function cannot
+    reach.
+    """
+    if not metrics.image_paths:
+        return 0.0, ""
+    boxes = [
+        getattr(ph, "emu", None)
+        for ph in (getattr(layout, "placeholders", None) or [])
+        if (getattr(ph, "kind", "") or "") in _PIC_KINDS and getattr(ph, "emu", None)
+    ]
+    if not boxes:
+        return 0.0, ""
+
+    worst: tuple[float, str] | None = None
+    # strict=False on purpose: the counts legitimately differ (three images,
+    # two picture boxes), and pairing as many as there are is the useful
+    # answer. The element-count mismatch is already scored in `evaluate`.
+    for raw, emu in zip(metrics.image_paths, boxes, strict=False):
+        resolved = _resolve(raw, base_dir)
+        if not resolved:
+            continue
+        img = _image_aspect(resolved)
+        if not img:
+            continue
+        _, _, bw, bh = emu
+        if bw <= 0 or bh <= 0:
+            continue
+        octaves = abs(math.log2(img / (bw / bh)))
+        score = max(-1.0, 1.0 - octaves / ASPECT_OCTAVE_TOLERANCE)
+        reason = ""
+        if octaves > ASPECT_OCTAVE_TOLERANCE:
+            shape = "wider" if img > bw / bh else "taller"
+            reason = (
+                f"{Path(raw).name} is much {shape} than its box "
+                f"({img:.2f} vs {bw / bh:.2f}); it will be letterboxed or cropped"
+            )
+        if worst is None or score < worst[0]:
+            worst = (score, reason)
+    return worst or (0.0, "")

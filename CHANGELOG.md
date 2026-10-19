@@ -4,6 +4,43 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-10-19
+
+### Added
+
+- **Aspect matching: the layout choice now looks at the image itself**
+  (`pptx_fit.aspect_match`). Every other check works from numbers already in
+  hand; this one reads the image header, because a count cannot tell a
+  panorama from a portrait and those two want opposite layouts.
+
+  SlideGen states the rule — wide images to image-top templates, "tall or
+  square images receive half-and-half layouts" — but it does not need stating
+  here. Comparing the image's aspect to the box's produces exactly that
+  routing on its own, and keeps working for shapes nobody wrote a rule for.
+  Verified against real files: a 4:1 panorama prefers the image-top layout, a
+  square and a 3:7 portrait both prefer half-and-half.
+
+  Distance is measured in **octaves** (`|log2(image / box)|`), so "twice as
+  wide as it should be" and "half as wide" cost the same. A bad pairing is
+  reported in the terms a reader would notice — *"it will be letterboxed or
+  cropped"* — rather than as a number, because that is the actual consequence:
+  PowerPoint either pads the image with dead bands or silently cuts content
+  off. Weighted highest of the compositional checks for the same reason.
+
+  **No signal is not a bad signal.** A remote URL, a missing file, a truncated
+  download, or a caller who did not say where relative paths resolve all score
+  0 and are skipped, never penalised. In particular, selection does **no
+  network I/O**: a layout decision that hangs on a dead host is worse than one
+  made without the aspect. Reads are header-only and cached, so a logo reused
+  across twenty slides is opened once.
+
+### Fixed
+
+- **Image paths in angle brackets were truncated at the first space.**
+  `![b](<tall one.jpg>)` yielded `tall`, so the file was never found and the
+  aspect check silently had nothing to work with. The bracketed form is
+  precisely the one that may contain spaces.
+
 ## [3.4.0] - 2026-10-19
 
 ### Added
