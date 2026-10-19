@@ -1,15 +1,15 @@
-Conversion Markdown,Office+PDF,Citations,Diagrammes,Maths,Charte,CLI une-cmd,Hors ligne,LLM local,Retour-MD
-md2star,4,4,4,3,5,5,5,5,5
-Pandoc,3,5,1,5,2,4,5,1,3
-Pandoc + templates,4,5,2,5,4,3,5,1,3
-Quarto,4,5,4,5,3,4,4,1,1
-Typst,2,4,2,5,4,4,5,1,1
-Marp,3,1,3,3,4,4,5,1,1
-Slidev,3,1,4,4,4,3,4,1,1
-reveal.js,2,1,2,4,3,2,4,1,1
-MkDocs,1,2,4,3,3,4,4,1,1
-Docusaurus,1,1,4,4,3,3,3,1,1
-LibreOffice,5,3,1,3,4,2,5,1,1
-Overleaf,2,5,2,5,3,1,2,1,1
-Obsidian export,2,3,4,4,2,2,5,3,1
-Word / Google Docs,5,4,2,3,4,1,3,2,1
+Conversion Markdown,Office+PDF,Citations,Diagrammes,Maths,Charte,CLI une-cmd,Hors ligne,LLM local,Retour-MD,Gabarit-ajusté
+md2star,4,4,4,3,5,5,5,5,5,4
+Pandoc,3,5,1,5,2,4,5,1,3,1
+Pandoc + templates,4,5,2,5,4,3,5,1,3,1
+Quarto,4,5,4,5,3,4,4,1,1,1
+Typst,2,4,2,5,4,4,5,1,1,1
+Marp,3,1,3,3,4,4,5,1,1,2
+Slidev,3,1,4,4,4,3,4,1,1,2
+reveal.js,2,1,2,4,3,2,4,1,1,1
+MkDocs,1,2,4,3,3,4,4,1,1,1
+Docusaurus,1,1,4,4,3,3,3,1,1,1
+LibreOffice,5,3,1,3,4,2,5,1,1,3
+Overleaf,2,5,2,5,3,1,2,1,1,1
+Obsidian export,2,3,4,4,2,2,5,3,1,1
+Word / Google Docs,5,4,2,3,4,1,3,2,1,4

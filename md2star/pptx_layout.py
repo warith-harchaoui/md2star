@@ -56,6 +56,8 @@ from xml.etree import ElementTree as ET
 import os_helper as osh
 from best_engine_ai_helper import llm
 
+from md2star import pptx_fit
+
 from ._engine import engine
 from .cache import cache_dir
 from .logging import get_logger
@@ -150,6 +152,13 @@ class Slide:
     # the chosen layout's thumbnail: font_delta (pt, title/body), bullets (max
     # bullet count), img_grow (fractional image box growth). Empty = no change.
     overrides: dict = field(default_factory=dict)
+    #: Measured content (:func:`md2star.pptx_fit.measure`), filled by
+    #: :func:`select_layouts`. Kept on the slide so the visual stage and the
+    #: assembler can reason about quantities instead of re-deriving them.
+    metrics: object | None = None
+    #: Layouts ranked by geometric fit, best first, as
+    #: ``[(LayoutInfo, FitReport), ...]``. Also filled by `select_layouts`.
+    fit_ranked: list = field(default_factory=list)
 
 
 # ── deterministic catalog extraction (no AI, always available) ──────────────
@@ -679,8 +688,21 @@ _SELECT_PROMPT_HEADER = (
 )
 
 
-def _catalog_block(content: list[LayoutInfo]) -> str:
-    return "\n".join(f"- {c.name} [{c.archetype}] {c.caption}".rstrip() for c in content)
+def _catalog_block(content: list[LayoutInfo], *, min_pt: float | None = None) -> str:
+    """Render the layout catalog for the prompt.
+
+    With *min_pt* set, each line also states how much text that layout's body
+    placeholders actually hold at that size. The model was previously asked to
+    match content to layouts while being told nothing about either side's
+    dimensions; the capacity is the half it could not guess.
+    """
+    lines = []
+    for c in content:
+        line = f"- {c.name} [{c.archetype}] {c.caption}".rstrip()
+        if min_pt is not None:
+            line += f" | holds {pptx_fit.capacity_for_prompt(c, min_pt=min_pt)}"
+        lines.append(line)
+    return "\n".join(lines)
 
 
 def _archetype_fallback(features: list[str]) -> str:
@@ -702,6 +724,7 @@ def select_layouts(
     *,
     chat: ChatFn | None = None,
     batch: int = 12,
+    min_pt: float = pptx_fit.KAWASAKI_MIN_PT,
 ) -> None:
     """Fill ``slide.chosen_layout`` for every slide via batched LLM text calls.
 
@@ -721,7 +744,7 @@ def select_layouts(
         by_archetype.setdefault(c.archetype, c.name)
     names = {c.name for c in content}
     fallback = by_archetype.get("bulleted-content", content[0].name)
-    cat_txt = _catalog_block(content)
+    cat_txt = _catalog_block(content, min_pt=min_pt)
     chat = chat or default_chat(kind="llm")
 
     # Batched, not one call per slide: keeps the prompt (and cost) bounded for
@@ -729,10 +752,36 @@ def select_layouts(
     # context at once to reason about variety across the batch.
     for start in range(0, len(slides), batch):
         group = slides[start : start + batch]
-        listing = "\n".join(
-            f"[{s.index}] title: {s.title!r} | features: {', '.join(s.features) or 'plain text'}"
-            for s in group
-        )
+        # Describe each slide by how much content it holds, not only by what
+        # kind. "features: table, bullets" says nothing about whether the
+        # designer's three-bullet layout can carry nine long ones, and the
+        # amount is exactly what decides that. See :mod:`md2star.pptx_fit`.
+        listing_lines = []
+        for s in group:
+            metrics = pptx_fit.measure(s.title, s.body)
+            s.metrics = metrics
+            ordered = pptx_fit.rank(metrics, content, min_pt=min_pt)
+            s.fit_ranked = ordered
+            # Offer the geometrically plausible layouts first, by name, so the
+            # model is steered by what can actually hold the content rather
+            # than by which name reads well.
+            plausible = [lay.name for lay, rep in ordered if rep.fits][:6]
+            refused = [
+                f"{lay.name} ({rep.reasons[0]})"
+                for lay, rep in ordered
+                if not rep.fits and rep.reasons
+            ][:3]
+            line = (
+                f"[{s.index}] title: {s.title!r} | features: "
+                f"{', '.join(s.features) or 'plain text'} | "
+                f"content: {pptx_fit.summarise_for_prompt(metrics)}"
+            )
+            if plausible:
+                line += f" | fits (best first): {', '.join(plausible)}"
+            if refused:
+                line += f" | cannot hold it: {'; '.join(refused)}"
+            listing_lines.append(line)
+        listing = "\n".join(listing_lines)
         prompt = (
             f"{_SELECT_PROMPT_HEADER}TEMPLATE LAYOUT CATALOG (content layouts only):\n{cat_txt}\n\n"
             f"MARKDOWN SLIDES:\n{listing}\n\n"
@@ -757,11 +806,41 @@ def select_layouts(
             # Reject a hallucinated layout name outright — better a sensible
             # archetype fallback than a KeyError deep in the assembler later.
             name = c.get("layout_name") if c.get("layout_name") in names else None
+            why = c.get("why", "") or ""
             if name is None:
-                name = by_archetype.get(_archetype_fallback(s.features), fallback)
+                # No usable LLM answer. Prefer the geometric ranking -- already
+                # computed above -- over the categorical archetype guess: it
+                # knows whether a layout can physically hold this slide, which
+                # the five-rule guess cannot. This path is the common one
+                # offline, so it is worth it being the better of the two.
+                best = next((lay for lay, rep in s.fit_ranked if rep.fits), None)
+                if best is not None:
+                    name = best.name
+                    why = "best geometric fit (no model)"
+                else:
+                    name = by_archetype.get(_archetype_fallback(s.features), fallback)
+                    why = "archetype fallback"
+            elif name not in {lay.name for lay, rep in s.fit_ranked if rep.fits}:
+                # The model named a layout that cannot hold the content. Keep
+                # its choice only if nothing fits at all; otherwise the
+                # geometry wins, because it is checkable and the preference is
+                # not.
+                best = next((lay for lay, rep in s.fit_ranked if rep.fits), None)
+                if best is not None:
+                    report = next(rep for lay, rep in s.fit_ranked if lay.name == name)
+                    reason = report.reasons[0] if report.reasons else "cannot hold the content"
+                    osh.info(
+                        "pptx: slide %d — %s cannot hold it (%s); using %s",
+                        s.index,
+                        name,
+                        reason,
+                        best.name,
+                    )
+                    name = best.name
+                    why = f"geometry overrode the model ({reason})"
             s.chosen_layout = name
             s.chosen_confidence = c.get("confidence")
-            s.chosen_why = c.get("why", "") or ""
+            s.chosen_why = why
 
 
 # ── stage B: VLM visual tie-break ────────────────────────────────────────────

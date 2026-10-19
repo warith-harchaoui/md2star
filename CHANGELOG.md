@@ -4,6 +4,68 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-10-19
+
+### Added
+
+- **Layout selection is now measured before it is judged** (`md2star/pptx_fit.py`).
+
+  `--smart-layout` asked an LLM to match a slide to one of the designer's
+  layouts, then a VLM to confirm it visually. Both stages were given only the
+  slide's **title** and a list of **categorical** cues ("has a table", "has
+  bullets"). Neither was told *how much* content there is, and neither was told
+  how large the chosen layout's placeholders are — even though the catalog
+  already extracts every placeholder's box in EMU. So the selector could
+  cheerfully put nine long bullets into a layout the designer drew for three
+  short ones: nothing failed, PowerPoint just shrank the text or let it spill,
+  and the deck came out looking unlike the template it was built from.
+
+  The missing piece was a **font floor**. "Does this fit?" has no answer until
+  you fix how small the text may get — shrink far enough and anything fits,
+  which is exactly the failure above. The floor comes from **Guy Kawasaki's
+  10/20/30 rule**: ten slides, twenty minutes, **thirty point** type. Once it
+  exists, a placeholder of known EMU dimensions has a computable capacity, and
+  the question becomes arithmetic.
+
+  What that buys, in order:
+
+  - **Structural impossibilities are excluded up front.** An image with no
+    picture placeholder, or a table with no body placeholder, cannot be hosted
+    at any font size. Those layouts never reach the model.
+  - **The rest are ranked by occupancy**, against a ~55 % target — the
+    geometry-aware density term from SlideGen (arXiv 2512.04529), calibrated
+    there against 40 human raters. A slide lands neither crammed nor marooned.
+  - **The model sees the numbers.** Each slide is described by word, bullet,
+    image and table counts; each layout by how much it actually holds at 30 pt.
+  - **Geometry overrules the model** when it names a layout that cannot hold
+    the content, and logs why. A preference that is checkable beats one that
+    is not.
+  - **Offline selection got better, not just different.** With no model
+    available the fallback was a five-rule archetype guess; it is now the
+    geometric ranking, which knows whether a layout can physically host the
+    slide.
+
+  **The thirty is a target, not a gate.** Plenty of legitimate decks cannot
+  hold to it — a technical appendix, a dense table. Overrunning it is a scored
+  penalty and a reported fact ("needs ~559 chars, holds ~301 at 30pt, ~22pt
+  would fit"), never a disqualification; `strict=True` is there for callers who
+  do want it enforced. Deck-level advice is deliberately quiet: eleven slides
+  against a target of ten draws no remark.
+
+  Two cases the implementation was wrong about until the tests caught them, both
+  from being too strict: a four-word caption used to disqualify the template's
+  best **photo** layout (one image and a line under it is the target deck, and
+  the line can ride in the title), and a thirteen-row table looked weightless on
+  a title-only layout because the structural charge was scaled by a
+  chars-per-line of zero.
+
+- **`Template-fit` / `Gabarit-ajusté` joins LANDSCAPE.md / PAYSAGE.md**, with
+  both positioning maps regenerated through `standpoint`. The axis is kept
+  honest: PowerPoint's Designer scores highly on it and deserves to — it reads
+  a slide's text and images and proposes balanced arrangements. The difference
+  is whose vocabulary it draws on, Microsoft's catalogue rather than your
+  designer's template.
+
 ## [3.2.0] — 2026-09-03
 
 ### Added
