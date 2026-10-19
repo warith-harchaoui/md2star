@@ -354,6 +354,10 @@ class FitReport:
     score: float = 0.0
     capacity_chars: int = 0
     needed_chars: int = 0
+    #: Contribution of the compositional principles (balance, reading order,
+    #: alignment, thirds). Kept separate from ``score`` so a caller can see
+    #: whether a layout won on capacity or on composition.
+    composition: float = 0.0
     reasons: list[str] = field(default_factory=list)
 
     @property
@@ -391,6 +395,7 @@ def evaluate(
     *,
     min_pt: float = KAWASAKI_MIN_PT,
     strict: bool = False,
+    canvas: tuple[int, int] | None = None,
 ) -> FitReport:
     """Score how well *layout* can host the content described by *metrics*.
 
@@ -534,6 +539,13 @@ def evaluate(
         excess = report.needed_chars / report.capacity_chars  # > 1
         score -= min(0.60, 0.30 * (excess - 1.0))
 
+    # Composition ranks layouts that can already host the content; it never
+    # rescues one that cannot, which is why it is added rather than blended.
+    comp, comp_reasons = composition(metrics, layout, canvas)
+    score += comp
+    report.composition = comp
+    report.reasons.extend(comp_reasons)
+
     report.score = 0.0 if not report.fits else max(0.0, score)
     return report
 
@@ -544,6 +556,7 @@ def rank(
     *,
     min_pt: float = KAWASAKI_MIN_PT,
     strict: bool = False,
+    canvas: tuple[int, int] | None = None,
 ) -> list[tuple[object, FitReport]]:
     """Order *layouts* best-first for this content.
 
@@ -552,7 +565,10 @@ def rank(
     only what won. The list is never empty when *layouts* is not: there is
     always a best available choice, even for a deck that overruns everywhere.
     """
-    scored = [(lay, evaluate(metrics, lay, min_pt=min_pt, strict=strict)) for lay in layouts]
+    scored = [
+        (lay, evaluate(metrics, lay, min_pt=min_pt, strict=strict, canvas=canvas))
+        for lay in layouts
+    ]
     scored.sort(key=lambda pair: (pair[1].fits, pair[1].score), reverse=True)
     return scored
 
@@ -642,3 +658,197 @@ def capacity_for_prompt(layout: object, *, min_pt: float = KAWASAKI_MIN_PT) -> s
     if not any(k in _TITLE_KINDS for k in kinds):
         bits.append("no title slot")
     return ", ".join(bits)
+
+
+# ── compositional principles ─────────────────────────────────────────────────
+# Occupancy (above) answers "is there the right *amount* of content here?".
+# These answer "is it in the right *place*?" -- which is the other half of what
+# a designer means by a layout working, and the half a capacity figure cannot
+# see. All four are deterministic and cost nothing, which matters: every
+# judgement they settle is one the vision model does not have to, and the VLM
+# is the slowest and least predictable stage in the pipeline.
+#
+# Each returns a score in [-1, 1] and a short reason, so a selector can explain
+# its ranking in words rather than asserting a number.
+
+#: How close to a rule-of-thirds line a focal element must sit to count as
+#: placed on it, as a fraction of the canvas. A twentieth is tight enough to
+#: mean something and loose enough to tolerate a designer's optical centring.
+THIRDS_TOLERANCE = 0.05
+
+#: How far the centre of mass may drift before the slide reads as lopsided,
+#: as a fraction of the half-diagonal. Set above a rule-of-thirds placement
+#: (~0.33) on purpose: see :func:`balance` for why that matters.
+BALANCE_TOLERANCE = 0.45
+
+#: How close two edges must be to read as deliberately aligned, as a fraction
+#: of the canvas.
+ALIGNMENT_TOLERANCE = 0.01
+
+
+def _centre(emu: tuple[int, int, int, int]) -> tuple[float, float]:
+    left, top, width, height = emu
+    return left + width / 2.0, top + height / 2.0
+
+
+def _filled_boxes(
+    metrics: ContentMetrics, layout: object
+) -> list[tuple[str, tuple[int, int, int, int]]]:
+    """The placeholders this content would actually occupy.
+
+    An empty placeholder is not part of the composition -- judging balance
+    across boxes that will be left blank describes the template, not the
+    slide that comes out of it.
+    """
+    out: list[tuple[str, tuple[int, int, int, int]]] = []
+    images_left = metrics.image_count
+    has_body = metrics.body_chars or metrics.bullet_count or metrics.table_rows
+    for ph in getattr(layout, "placeholders", None) or []:
+        kind = getattr(ph, "kind", "") or ""
+        emu = getattr(ph, "emu", None)
+        if not emu:
+            continue
+        if kind in _TITLE_KINDS and metrics.title_chars:
+            out.append((kind, emu))
+        elif kind in _PIC_KINDS and images_left > 0:
+            out.append((kind, emu))
+            images_left -= 1
+        elif kind in _BODY_KINDS and has_body:
+            out.append((kind, emu))
+    return out
+
+
+def balance(metrics: ContentMetrics, layout: object, canvas: tuple[int, int]) -> tuple[float, str]:
+    """Is the filled content piled into one corner, leaving the rest empty?
+
+    A **defect detector, not a beauty contest**: it returns 0 for anything
+    reasonably placed and goes negative only when the area-weighted centre of
+    mass is genuinely marooned. Rewarding dead-centre instead would be wrong,
+    and provably so -- it put this function in direct conflict with
+    :func:`thirds`, which rewards the off-centre placement a designer chooses
+    deliberately. Scoring both as preferences meant the two cancelled, and the
+    heavier weight silently won: an image sitting exactly on a third ranked
+    *below* the same image centred.
+
+    So centring earns nothing here. Only the corner case is called out, which
+    is the one that actually looks broken.
+    """
+    boxes = _filled_boxes(metrics, layout)
+    if not boxes:
+        return 0.0, ""
+    cx, cy = canvas
+    total = sum(w * h for _, (_, _, w, h) in boxes)
+    if total <= 0 or cx <= 0 or cy <= 0:
+        return 0.0, ""
+    mx = sum(_centre(e)[0] * e[2] * e[3] for _, e in boxes) / total / cx
+    my = sum(_centre(e)[1] * e[2] * e[3] for _, e in boxes) / total / cy
+    # Distance from centre, normalised so the far corner scores 1.
+    drift = ((mx - 0.5) ** 2 + (my - 0.5) ** 2) ** 0.5 / (0.5 * 2**0.5)
+    # A third-placed focal point drifts ~0.33; a corner-piled slide ~0.6+. The
+    # threshold sits above the former so deliberate composition is never
+    # punished as imbalance.
+    if drift <= BALANCE_TOLERANCE:
+        return 0.0, ""
+    side = "right" if mx > 0.5 else "left"
+    vert = "bottom" if my > 0.5 else "top"
+    return (
+        -min(1.0, (drift - BALANCE_TOLERANCE) / (1.0 - BALANCE_TOLERANCE)),
+        f"content would sit {vert}-{side}, leaving the rest empty",
+    )
+
+
+def reading_order(metrics: ContentMetrics, layout: object) -> tuple[float, str]:
+    """Does the title come before the body, the way the slide will be read?
+
+    Left-to-right, top-to-bottom. A layout whose body box sits above its title
+    is a legitimate design -- a kicker over a headline, say -- but it is the
+    wrong host for content whose heading *is* the entry point.
+    """
+    if not metrics.title_chars:
+        return 0.0, ""
+    titles = [e for k, e in _filled_boxes(metrics, layout) if k in _TITLE_KINDS]
+    bodies = [e for k, e in _filled_boxes(metrics, layout) if k in _BODY_KINDS]
+    if not titles or not bodies:
+        return 0.0, ""
+    t_top = min(e[1] for e in titles)
+    b_top = min(e[1] for e in bodies)
+    if t_top <= b_top:
+        return 0.3, ""
+    return -0.5, "the body sits above the title, against the reading order"
+
+
+def alignment(
+    metrics: ContentMetrics, layout: object, canvas: tuple[int, int]
+) -> tuple[float, str]:
+    """Do the filled boxes share edges, the way a designer would have set them?
+
+    Shared left edges or a shared top is what makes a slide look composed
+    rather than assembled. This rewards a layout whose *used* boxes line up --
+    which is not automatic, since a layout can be internally tidy and still
+    put the two boxes this content needs on unrelated grids.
+    """
+    boxes = [e for _, e in _filled_boxes(metrics, layout)]
+    if len(boxes) < 2:
+        return 0.0, ""
+    cx = canvas[0]
+    if cx <= 0:
+        return 0.0, ""
+    tol = ALIGNMENT_TOLERANCE * cx
+    lefts = [e[0] for e in boxes]
+    rights = [e[0] + e[2] for e in boxes]
+    aligned = sum(
+        1
+        for i in range(len(boxes))
+        for j in range(i + 1, len(boxes))
+        if abs(lefts[i] - lefts[j]) <= tol or abs(rights[i] - rights[j]) <= tol
+    )
+    pairs = len(boxes) * (len(boxes) - 1) / 2
+    return (aligned / pairs if pairs else 0.0), ""
+
+
+def thirds(metrics: ContentMetrics, layout: object, canvas: tuple[int, int]) -> tuple[float, str]:
+    """Does the focal element land near a rule-of-thirds line?
+
+    Only asked about the picture, and only when there is one: the rule is about
+    where the eye goes first, and on an image-forward slide that is the image.
+    Dead-centre is not penalised -- it is a deliberate choice often enough --
+    so this is a bonus for hitting a third, never a penalty for missing it.
+    """
+    if not metrics.image_count:
+        return 0.0, ""
+    pics = [e for k, e in _filled_boxes(metrics, layout) if k in _PIC_KINDS]
+    if not pics or canvas[0] <= 0 or canvas[1] <= 0:
+        return 0.0, ""
+    px, py = _centre(pics[0])
+    fx, fy = px / canvas[0], py / canvas[1]
+    near = min(abs(fx - 1 / 3), abs(fx - 2 / 3)) <= THIRDS_TOLERANCE or (
+        min(abs(fy - 1 / 3), abs(fy - 2 / 3)) <= THIRDS_TOLERANCE
+    )
+    return (0.3, "focal image sits on a third") if near else (0.0, "")
+
+
+def composition(
+    metrics: ContentMetrics, layout: object, canvas: tuple[int, int] | None
+) -> tuple[float, list[str]]:
+    """Combine the compositional principles into one score and its reasons.
+
+    Weights are deliberately modest relative to the fit score: composition
+    ranks layouts that can already host the content, it does not rescue one
+    that cannot. Returns ``(0.0, [])`` when the canvas is unknown, so a
+    template whose size could not be read simply falls back to fit alone.
+    """
+    if not canvas:
+        return 0.0, []
+    checks = (
+        (balance(metrics, layout, canvas), 0.20),
+        (reading_order(metrics, layout), 0.15),
+        (alignment(metrics, layout, canvas), 0.10),
+        (thirds(metrics, layout, canvas), 0.15),
+    )
+    reasons: list[str] = []
+    total = 0.0
+    for (score, reason), weight in checks:
+        total += score * weight
+        if reason:
+            reasons.append(reason)
+    return total, reasons

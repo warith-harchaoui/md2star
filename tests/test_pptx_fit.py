@@ -446,3 +446,174 @@ def test_every_slide_still_gets_a_layout() -> None:
     ]
     select_layouts(slides, _real_catalog(), chat=lambda *a: None)
     assert all(s.chosen_layout for s in slides)
+
+
+# ---------------------------------------------------------------------------
+# compositional principles
+# ---------------------------------------------------------------------------
+# Occupancy asks "is there the right amount of content here?"; these ask "is it
+# in the right place?" -- the other half of what a designer means by a layout
+# working, and the half a capacity figure cannot see.
+
+CANVAS = (DECK_W, DECK_H)
+
+
+def _layout(*boxes: tuple[str, tuple[int, int, int, int]]) -> FakeLayout:
+    return FakeLayout("L", [FakePlaceholder(i, k, e) for i, (k, e) in enumerate(boxes)])
+
+
+def test_content_piled_into_a_corner_is_penalised() -> None:
+    corner = _layout(("pic", box(0.02, 0.02, 0.2, 0.2)))
+    report = evaluate(measure("", "![x](x.png)"), corner, canvas=CANVAS)
+    assert report.composition < 0
+    assert any("leaving the rest empty" in r for r in report.reasons)
+
+
+def test_a_body_above_its_title_is_penalised() -> None:
+    """A legitimate design, but the wrong host for content whose heading leads."""
+    inverted = _layout(("title", box(0.05, 0.75, 0.9, 0.15)), ("body", box(0.05, 0.05, 0.9, 0.6)))
+    normal = _layout(("title", box(0.05, 0.05, 0.9, 0.15)), ("body", box(0.05, 0.25, 0.9, 0.6)))
+    m = measure("Title", _md("# Title", "", "word " * 20))
+    assert evaluate(m, normal, canvas=CANVAS).score > evaluate(m, inverted, canvas=CANVAS).score
+    assert any(
+        "against the reading order" in r for r in evaluate(m, inverted, canvas=CANVAS).reasons
+    )
+
+
+def test_a_focal_image_on_a_third_beats_the_same_image_centred() -> None:
+    """Regression: balance and thirds used to contradict each other.
+
+    Balance rewarded centring, thirds rewarded the off-centre placement a
+    designer chooses deliberately. The two cancelled and the heavier weight
+    won, so an image sitting exactly on a third ranked *below* the same image
+    centred -- the opposite of the principle being applied. Balance is now a
+    defect detector that scores 0 for anything reasonably placed.
+    """
+    third = _layout(("pic", box(1 / 3 - 0.15, 0.25, 0.3, 0.5)))
+    centred = _layout(("pic", box(0.35, 0.25, 0.3, 0.5)))
+    m = measure("", "![x](x.png)")
+    assert evaluate(m, third, canvas=CANVAS).score > evaluate(m, centred, canvas=CANVAS).score
+
+
+def test_centring_is_not_rewarded_only_marooning_is_punished() -> None:
+    """Otherwise the two principles fight, as above."""
+    from md2star.pptx_fit import balance
+
+    centred = _layout(("body", box(0.3, 0.3, 0.4, 0.4)))
+    score, reason = balance(measure("", "word " * 10), centred, CANVAS)
+    assert score == 0.0
+    assert reason == ""
+
+
+def test_empty_placeholders_are_not_part_of_the_composition() -> None:
+    """Judging balance across boxes that stay blank describes the template.
+
+    A text-only slide on a layout with a big picture box must be judged on
+    where its *text* lands, not on the centre of mass of a box nothing fills.
+    """
+    from md2star.pptx_fit import _filled_boxes
+
+    lay = _layout(("body", box(0.05, 0.05, 0.4, 0.4)), ("pic", box(0.55, 0.55, 0.4, 0.4)))
+    filled = _filled_boxes(measure("", "word " * 10), lay)
+    assert [k for k, _ in filled] == ["body"]
+
+
+def test_composition_is_skipped_when_the_canvas_is_unknown() -> None:
+    """A template whose size could not be read falls back to fit alone."""
+    lay = _layout(("title", box(0.05, 0.05, 0.9, 0.15)), ("body", box(0.05, 0.25, 0.9, 0.6)))
+    report = evaluate(measure("T", _md("# T", "", "word " * 20)), lay, canvas=None)
+    assert report.composition == 0.0
+
+
+def test_composition_never_rescues_a_layout_that_cannot_host_the_content() -> None:
+    """It ranks the possible; it does not make the impossible possible."""
+    no_pic = _layout(("title", box(0.05, 0.05, 0.9, 0.15)), ("body", box(0.05, 0.25, 0.9, 0.6)))
+    report = evaluate(measure("T", _md("# T", "", "![x](x.png)")), no_pic, canvas=CANVAS)
+    assert report.fits is False
+    assert report.score == 0.0
+
+
+# ---------------------------------------------------------------------------
+# the feedback edge: the loop can move a slide, not only patch it
+# ---------------------------------------------------------------------------
+# font_delta / bullets / img_grow all assume the layout was right and the
+# content merely needs trimming. When the verdict is `too_empty`, or overflow
+# that -4pt will not close, that assumption is itself the error: the slide is
+# somewhere it should never have been put. pptx_assemble's own comment said so
+# -- those verdicts "need a layout swap, not a font/bullet tweak".
+
+
+def _ranked_slide(body: str, layouts: list):
+    from md2star.pptx_layout import Slide
+
+    s = Slide(index=0, title="T", body=body)
+    s.fit_ranked = rank(measure(s.title, s.body), layouts)
+    return s
+
+
+def _real_layout(name: str, *boxes):
+    from md2star.pptx_layout import LayoutInfo, Placeholder
+
+    return LayoutInfo(
+        name=name, placeholders=[Placeholder(i, k, e) for i, (k, e) in enumerate(boxes)]
+    )
+
+
+TIGHT = _real_layout(
+    "TIGHT", ("title", box(0.05, 0.05, 0.9, 0.1)), ("body", box(0.05, 0.2, 0.3, 0.3))
+)
+ROOMY = _real_layout(
+    "ROOMY", ("title", box(0.05, 0.05, 0.9, 0.15)), ("body", box(0.05, 0.25, 0.9, 0.65))
+)
+MID = _real_layout(
+    "MID", ("title", box(0.05, 0.05, 0.9, 0.15)), ("body", box(0.05, 0.25, 0.5, 0.6))
+)
+
+
+def test_the_loop_moves_a_slide_off_a_layout_that_cannot_carry_it() -> None:
+    from md2star.pptx_assemble import _reselect
+
+    s = _ranked_slide(_md("# T", "", "word " * 25), [TIGHT, ROOMY, MID])
+    s.chosen_layout = "TIGHT"  # as if a model insisted on it
+    assert _reselect(s) == "ROOMY"
+
+
+def test_a_layout_already_rejected_is_not_offered_again() -> None:
+    """Otherwise the loop ping-pongs between two layouts until it runs out."""
+    from md2star.pptx_assemble import _reselect
+
+    s = _ranked_slide(_md("# T", "", "word " * 25), [TIGHT, ROOMY, MID])
+    s.chosen_layout = "ROOMY"
+    s.tried_layouts = ["TIGHT"]
+    assert _reselect(s) == "MID"
+
+
+def test_exhausting_the_options_keeps_the_current_pick() -> None:
+    """None means "report it", not "break the deck"."""
+    from md2star.pptx_assemble import _reselect
+
+    s = _ranked_slide(_md("# T", "", "word " * 25), [TIGHT, ROOMY, MID])
+    s.chosen_layout = "MID"
+    s.tried_layouts = ["TIGHT", "ROOMY"]
+    assert _reselect(s) is None
+
+
+def test_a_slide_with_no_ranking_is_left_alone() -> None:
+    """Selection may have run without geometry (an older call path)."""
+    from md2star.pptx_assemble import _reselect
+    from md2star.pptx_layout import Slide
+
+    s = Slide(index=0, title="T", body="# T")
+    s.chosen_layout = "TIGHT"
+    assert _reselect(s) is None
+
+
+def test_the_loop_never_moves_a_slide_onto_an_overrunning_layout() -> None:
+    """Swapping one bad host for another is not progress."""
+    from md2star.pptx_assemble import _reselect
+
+    s = _ranked_slide(_md("# T", "", "word " * 25), [TIGHT, ROOMY])
+    s.chosen_layout = "ROOMY"
+    s.tried_layouts = []
+    # TIGHT overruns for this content, so it is not a destination.
+    assert _reselect(s) is None

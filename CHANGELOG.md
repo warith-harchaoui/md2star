@@ -4,6 +4,49 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-10-19
+
+### Added
+
+- **Compositional principles join the layout score** (`pptx_fit.balance`,
+  `reading_order`, `alignment`, `thirds`). Occupancy answers "is there the
+  right *amount* of content here?"; these answer "is it in the right
+  *place*?" — the other half of what a designer means by a layout working,
+  and the half a capacity figure cannot see. All four are deterministic and
+  cost nothing, which matters: every judgement they settle is one the vision
+  model does not have to make, and the VLM is the slowest and least
+  predictable stage in the pipeline.
+
+  `slide_size()` now reads the deck canvas from `ppt/presentation.xml`, since
+  "is this balanced?" and "does the focal element sit on a third?" are
+  questions about where a box falls *on the slide*. A template whose size
+  cannot be read falls back to fit alone rather than failing.
+
+  **One of these principles was wrong on its first pass, provably.** Balance
+  originally rewarded centring, which put it in direct conflict with `thirds`,
+  which rewards the off-centre placement a designer chooses deliberately. The
+  two cancelled and the heavier weight won, so an image sitting exactly on a
+  third ranked *below* the same image centred — the opposite of the principle
+  being applied. Balance is now a defect detector: zero for anything
+  reasonably placed, negative only for content genuinely marooned in a corner.
+
+- **The Ralph Eyeball Loop can move a slide, not only patch it.**
+  `font_delta` / `bullets` / `img_grow` all assume the layout was right and
+  the content merely needs trimming to sit on it. When the verdict is
+  `too_empty`, or overflow that −4 pt will not close, that assumption is
+  itself the error: the slide is on a layout it should never have been given,
+  and nudging type size polishes a decision instead of revisiting it.
+
+  This module already said as much, in the comment above `_overrides_for`:
+  those verdicts "need a layout swap, not a font/bullet tweak". This release
+  is that swap. The geometric ranking computed at selection time is still on
+  the slide, so the next-best host is known without another model call. A
+  layout the loop has already moved a slide off is never offered again
+  (otherwise it ping-pongs), overrides are cleared on a move (a −4 pt tuned
+  for a cramped box is wrong on a roomy one), and exhausting the options keeps
+  the current pick and reports it. `allow_reselect=False` restores the old
+  patch-only behaviour.
+
 ## [3.3.0] - 2026-10-19
 
 ### Added

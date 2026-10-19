@@ -573,6 +573,37 @@ def _overrides_for(verdict: dict) -> dict:
     return ov
 
 
+def _reselect(s: Slide) -> str | None:
+    """Move a slide to the next layout its content can actually live on.
+
+    The loop's other levers -- font_delta, bullets, img_grow -- all assume the
+    layout was right and the content merely needs trimming to sit on it. When
+    the verdict is `too_empty`, or when overflow is bad enough that shrinking
+    by 4pt will not close it, that assumption is the thing that is wrong: the
+    slide is on a layout it should never have been given, and nudging type
+    size polishes a decision instead of revisiting it.
+
+    This module already said so, in the comment above `_overrides_for`: those
+    verdicts "need a layout swap, not a font/bullet tweak". This is that swap.
+
+    Returns the name of the next-best fitting layout, or ``None`` when there
+    is no better option -- in which case the caller keeps the current pick and
+    the existing "no automatic fix applies" path reports it.
+    """
+    ranked = getattr(s, "fit_ranked", None)
+    if not ranked:
+        return None
+    current = s.chosen_layout
+    tried = set(getattr(s, "tried_layouts", ()) or ())
+    for layout, report in ranked:
+        if not report.fits or report.overruns:
+            continue
+        if layout.name == current or layout.name in tried:
+            continue
+        return layout.name
+    return None
+
+
 def eyeball_slides(
     slides: list[Slide],
     catalog: list[LayoutInfo],
@@ -587,6 +618,7 @@ def eyeball_slides(
     image_base_dir: Path | None = None,
     render_mermaid: RenderMermaidFn | None = None,
     default_layout: str | None = None,
+    allow_reselect: bool = True,
 ) -> AssembleResult:
     """Target-matching Ralph Eyeball Loop over an assembled deck.
 
@@ -661,17 +693,44 @@ def eyeball_slides(
                     s.overrides = {**(s.overrides or {}), **ov}
                     flagged += 1
                 else:
-                    # A real mismatch (matches=False) with none of the four
-                    # boolean flags set — e.g. a text-alignment discrepancy,
-                    # observed live during validation — has no corrective
-                    # lever today (see _overrides_for and docs/design/pptx-
-                    # template-intelligence.md follow-ups). Logged so this
-                    # gap is visible instead of reading as "nothing to fix".
-                    logger.info(
-                        "eyeball loop: slide %d flagged (%s) but no automatic fix applies",
-                        s.index,
-                        verdict.get("discrepancies", "").strip() or "no discrepancy text",
-                    )
+                    # No pixel-level lever applies. Before giving up, consider
+                    # that the layout itself may be the mistake: `too_empty`
+                    # and an alignment discrepancy are both symptoms of
+                    # content sitting somewhere it does not belong, and the
+                    # comment above `_overrides_for` already says these "need
+                    # a layout swap, not a font/bullet tweak".
+                    #
+                    # The geometric ranking computed at selection time is
+                    # still on the slide, so the next-best host is known
+                    # without another model call.
+                    swap = _reselect(s) if allow_reselect else None
+                    if swap:
+                        s.tried_layouts = [
+                            *(getattr(s, "tried_layouts", None) or []),
+                            s.chosen_layout,
+                        ]
+                        logger.info(
+                            "eyeball loop: slide %d — %s is not carrying it (%s); moving to %s",
+                            s.index,
+                            s.chosen_layout,
+                            verdict.get("discrepancies", "").strip() or "no discrepancy text",
+                            swap,
+                        )
+                        s.chosen_layout = swap
+                        s.chosen_why = "eyeball loop moved it here"
+                        # A different layout invalidates fixes tuned for the
+                        # old one: a -4pt that was right for a cramped box is
+                        # wrong on a roomy one.
+                        s.overrides = {}
+                        flagged += 1
+                    else:
+                        # Genuinely nothing left to try. Logged so this gap is
+                        # visible instead of reading as "nothing to fix".
+                        logger.info(
+                            "eyeball loop: slide %d flagged (%s) but no automatic fix applies",
+                            s.index,
+                            verdict.get("discrepancies", "").strip() or "no discrepancy text",
+                        )
         if iteration < max_iterations:
             if not flagged:
                 break  # nothing actionable left to fix — stop before a no-op re-assemble

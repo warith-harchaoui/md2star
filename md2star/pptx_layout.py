@@ -159,6 +159,9 @@ class Slide:
     #: Layouts ranked by geometric fit, best first, as
     #: ``[(LayoutInfo, FitReport), ...]``. Also filled by `select_layouts`.
     fit_ranked: list = field(default_factory=list)
+    #: Layouts the eyeball loop has already moved this slide off, so a later
+    #: pass does not send it back somewhere the vision model already rejected.
+    tried_layouts: list[str] = field(default_factory=list)
 
 
 # ── deterministic catalog extraction (no AI, always available) ──────────────
@@ -184,6 +187,31 @@ def _layout_example_pages(template: Path) -> dict[str, list[int]]:
             nm = re.search(r'<p:cSld name="([^"]*)"', lay_xml)
             pages.setdefault(nm.group(1) if nm else m.group(1), []).append(n)
     return pages
+
+
+def slide_size(template: Path) -> tuple[int, int] | None:
+    """The deck's canvas in EMU, from ``ppt/presentation.xml``'s ``<p:sldSz>``.
+
+    Needed by the compositional checks in :mod:`md2star.pptx_fit`: "is this
+    layout balanced?" and "does the focal element sit on a third?" are
+    questions about where a box falls *on the slide*, so they cannot be
+    answered from the box alone.
+
+    Returns ``None`` when the part is missing or unparseable, which every
+    caller treats as "skip the compositional checks" rather than as an error.
+    """
+    try:
+        with zipfile.ZipFile(template) as z:
+            root = ET.fromstring(z.read("ppt/presentation.xml"))
+    except (KeyError, zipfile.BadZipFile, ET.ParseError, OSError):
+        return None
+    for el in root.iter():
+        if el.tag.endswith("}sldSz"):
+            try:
+                return int(el.attrib["cx"]), int(el.attrib["cy"])
+            except (KeyError, ValueError):
+                return None
+    return None
 
 
 def _all_layout_files(template: Path) -> list[str]:
