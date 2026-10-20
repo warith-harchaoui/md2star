@@ -365,6 +365,47 @@ md2pptx presentation.md --template ./marque/Modele-Entreprise.pptx \
 > textuelle seule, moins coûteuse) quand le premier choix du LLM doit
 > être considéré comme définitif.
 
+### Les diapositives du designer, pas seulement ses dispositions
+
+Une disposition porte le fond et les boîtes de contenu. Les filets
+d'accent, les chevrons numérotés, les traits décoratifs — les formes sur
+mesure qui font qu'un deck *se ressemble* — vivent un cran plus loin, sur
+les **diapositives d'exemple** du modèle. `--reference-slides` clone la
+page d'exemple de la disposition retenue et en remplace le contenu par le
+vôtre :
+
+```bash
+md2pptx presentation.md --template ./marque/Modele-Entreprise.pptx \
+    --smart-layout --reference-slides
+```
+
+```text
+Wrote: presentation.pptx (14/14 slides, 11 from the template's own pages)
+```
+
+Votre titre va dans leur titre, vos puces dans leurs colonnes — en
+gardant leur glyphe de puce, leur graisse, leur corps et leur couleur — et
+votre image dans leur emplacement photo, ajustée sans jamais être étirée.
+Tout ce qu'ils ont dessiné autour reste exactement où ils l'ont dessiné.
+
+Rien de ce qu'ils ont **écrit** ne suit. Chaque cadre de texte d'une page
+clonée est soit rempli avec votre contenu, soit retiré — et le retrait
+distingue le texte bouche-trou du dessin : l'ornement reste (le « 01 »
+d'une étape numérotée **est** le dessin), une simple zone de texte part,
+et une forme automatique est vidée mais conservée, parce qu'un chevron est
+un objet dessiné. Leur photo d'illustration est retirée du fichier
+lui-même, et pas seulement de la diapositive ; leurs liens hypertextes ne
+survivent pas aux mots auxquels ils étaient attachés.
+
+Une page qui ne peut pas porter honnêtement une diapositive est
+**refusée, pas remplie à moitié** : une composition à trois colonnes exige
+au moins trois puces, une diapositive avec image exige un emplacement
+photo, et une page portant un graphique ou un tableau est refusée d'office
+(aucun remplacement ne peut reformuler les chiffres de quelqu'un d'autre).
+Les diapositives refusées repassent par l'assembleur habituel : l'option
+ne fait donc qu'ajouter — et un modèle distribué sans aucune page
+d'exemple se construit exactement comme sans elle.
+
 ### Notes de l'orateur
 
 Un bloc Pandoc `::: notes` est le script de l'orateur, et il part dans le

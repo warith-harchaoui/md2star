@@ -354,6 +354,44 @@ md2pptx talk.md --template ./brand/Company-Template.pptx \
 > `--no-visual-confirm` skips the VLM tie-break stage (cheaper, text-only
 > layout selection) when you want the LLM's first pick taken as final.
 
+### The designer's own slides, not just their layouts
+
+A layout carries the background and the placeholder boxes. The accent bars,
+the numbered step chevrons, the decorative rules — the bespoke shapes that
+make a deck look like *itself* — live one level further in, on the
+template's **example slides**. `--reference-slides` clones the example page
+for the chosen layout and replaces its content with yours:
+
+```bash
+md2pptx talk.md --template ./brand/Company-Template.pptx \
+    --smart-layout --reference-slides
+```
+
+```text
+Wrote: talk.pptx (14/14 slides, 11 from the template's own pages)
+```
+
+Your title goes in their title, your bullets in their columns — keeping
+their bullet glyph, face, size and colour — and your image in their photo
+slot, contain-fitted so it is never stretched. Everything they drew around
+that content stays exactly where they drew it.
+
+Nothing they *wrote* comes with it. Every text frame on a cloned page is
+either filled with your content or retired, and retiring knows the
+difference between filler and design: ornament stays (the "01" of a
+numbered step **is** the design), a bare text box goes, and an autoshape is
+emptied but kept, because a chevron is a drawn object. Their stand-in photo
+is dropped from the file itself, not merely from the slide, and their
+hyperlinks do not outlive the words they were attached to.
+
+A page that cannot honestly carry a slide is **declined, not half-filled**:
+a three-column design needs at least three bullets, an image slide needs a
+picture slot, and a page with a chart or a table on it is refused outright
+(no replacement can restate someone else's numbers). Declined slides fall
+through to the normal assembler, so the flag only ever adds — and a
+template distributed as layouts alone, with no example pages, builds
+exactly as it would without it.
+
 ### Speaker notes
 
 A Pandoc `::: notes` block is the presenter's script, and it goes to the

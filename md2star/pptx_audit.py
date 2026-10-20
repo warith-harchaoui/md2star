@@ -11,7 +11,10 @@ render, no network:
     A shape extends past the canvas. Content that nobody will ever see.
 ``overlap``
     Two text shapes cover the same region. Text over a *picture* is a normal
-    designer composition and is not flagged; text over text never is.
+    designer composition and is not flagged; text over text never is. A
+    one-glyph ornament (:func:`md2star.pptx_assemble.is_ornament`) does not
+    count as one of the two — a "01" inside a title's generous box is a
+    designer's composition too, and cloned pages are full of them.
 ``ghost-placeholder``
     A placeholder the slide inherited from its layout and never filled. The
     assembler removes these (see
@@ -57,7 +60,7 @@ from .logging import get_logger
 # (it is what writes placeholders), the audit only reads it. Should the eyeball
 # loop ever want to consume this module, it must import it inside the function
 # — as md2star/cli.py does — rather than at module scope.
-from .pptx_assemble import LATENT_KINDS, placeholder_kind
+from .pptx_assemble import LATENT_KINDS, is_ornament, placeholder_kind
 from .pptx_fit import AVG_CHAR_WIDTH_EM, EMU_PER_PT, FIT_SLACK, LINE_SPACING
 
 logger = get_logger(__name__)
@@ -328,7 +331,13 @@ def audit(deck: Path, *, canvas: tuple[int, int] | None = None) -> list[Finding]
             findings += _check_type(index, shape)
             if box is not None:
                 findings += _check_overrun(index, shape, box)
-                texts.append((shape, box))
+                if not is_ornament(shape.text_frame.text.strip()):
+                    # A one-glyph ornament — the "01" of a numbered step, an
+                    # arrow — sitting inside a title's generous box is the
+                    # designer's own composition, not two blocks of text
+                    # colliding. Same exemption, and same reason, as text
+                    # over a picture.
+                    texts.append((shape, box))
         findings += _check_overlaps(index, texts)
 
     # Slide order first (a reader fixes a deck front to back), severity within

@@ -32,6 +32,14 @@ the assembler reads the layout's own background colour and switches to a dark
 foreground when needed. This is the correctness gap the curated-background PoC
 never had to close.
 
+A layout is not the whole template, though, and ``reference_slides=True`` opts
+each slide into **Seam E** (:mod:`md2star.pptx_clone`) first: where the chosen
+layout has an example page in the template that can carry this slide's content,
+that *page* is cloned and its text replaced, so the slide inherits the
+designer's decorative shapes and typography and not just their background. It
+is strictly an addition — every refusal falls through to the Seam-D path above,
+which can place anything.
+
 The **target-matching Ralph Eyeball Loop** (:func:`eyeball_slides`) closes the
 verification gap the same way :mod:`md2star.reverse_diagrams` does for
 diagrams: render the assembled slide, show it *and* the chosen layout's own
@@ -117,6 +125,19 @@ EMU_PER_INCH = 914400
 #: A Markdown image, with its alt text captured separately from its path:
 #: the path is what gets placed, the alt text is what a screen reader reads.
 _IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+
+#: Text this short, with no real word in it, is *ornament*: the "01" / "02" of
+#: a numbered-step design, an arrow, a single letter. Part of the shared shape
+#: vocabulary this module owns, because two very different readers need the
+#: same answer — :mod:`md2star.pptx_clone` keeps ornament on a cloned page
+#: rather than retiring it, and :mod:`md2star.pptx_audit` does not count it as
+#: one of the two text blocks in an overlap.
+_ORNAMENT = re.compile(r"\A(?=.{1,3}\Z)(?!.*[A-Za-z]{2}).*\Z", re.DOTALL)
+
+
+def is_ornament(text: str) -> bool:
+    """Whether *text* is ornament (or nothing) rather than someone's words."""
+    return not text or _ORNAMENT.match(text) is not None
 
 
 def _clean(text: str) -> str:
@@ -286,7 +307,10 @@ _DEFAULT_DIVIDER_BOX = (0.08, 0.28, 0.84, 0.44)
 _DEFAULT_BODY_BOX = (0.06, 0.30, 0.88, 0.62)
 _DEFAULT_IMAGE_BOX = (0.05, 0.20, 0.90, 0.75)
 
-_TITLE_KINDS = {"title", "ctrTitle"}
+#: Placeholder kinds that are a slide heading. Public because Seam E
+#: (:mod:`md2star.pptx_clone`) classifies a designer page with the same
+#: vocabulary the assembler writes with.
+TITLE_KINDS = {"title", "ctrTitle"}
 _BODY_KINDS = {"body", "subTitle"}
 _IMAGE_KINDS = {"pic"}
 
@@ -331,7 +355,7 @@ def image_box(prs: Presentation, info: LayoutInfo | None) -> tuple[float, float,
 def title_box(
     prs: Presentation, info: LayoutInfo | None, *, divider: bool = False
 ) -> tuple[float, float, float, float]:
-    ph = _placeholder_box_in(info, _TITLE_KINDS)
+    ph = _placeholder_box_in(info, TITLE_KINDS)
     if ph is not None:
         return ph
     # No title placeholder recorded (common — Jellysmack's own layouts use
@@ -527,9 +551,28 @@ class AssembleResult:
     pptx_path: Path
     placed: int
     total: int
+    #: How many of the placed slides were carried by Seam E — cloned from one
+    #: of the designer's own example pages rather than built on a bare layout.
+    #: Always ``0`` unless ``reference_slides=True``, and never all of them:
+    #: a page that cannot carry its content is refused, not forced.
+    cloned: int = 0
 
 
 RenderMermaidFn = Callable[[str], "Path | None"]
+
+
+def _finish(slide, s: Slide) -> None:
+    """Close out a slide, whichever seam built it: notes, then ghost sweep."""
+    if s.notes:
+        # Notes exist precisely so this text is NOT on the slide; the notes
+        # pane is the one place it belongs. `notes_slide` creates the notes
+        # slide (and a default notes master) on first access.
+        slide.notes_slide.notes_text_frame.text = s.notes
+    # Last, so "empty" means "nothing was placed in it by any branch" — and on
+    # a Seam-E clone, "nothing the designer wrote survived in it either".
+    ghosts = drop_empty_placeholders(slide)
+    if ghosts:
+        logger.debug("slide %d: dropped %d unfilled placeholder(s)", s.index, ghosts)
 
 
 def assemble(
@@ -541,6 +584,7 @@ def assemble(
     image_base_dir: Path | None = None,
     render_mermaid: RenderMermaidFn | None = None,
     default_layout: str | None = None,
+    reference_slides: bool = False,
 ) -> AssembleResult:
     """Build a real ``.pptx`` directly on each slide's AI-selected layout.
 
@@ -551,11 +595,20 @@ def assemble(
     recorded one. Per-slide ``overrides`` (written by :func:`eyeball_slides`)
     bound font size, bullet count and image growth.
 
+    With *reference_slides* set, each slide is first offered to **Seam E**
+    (:mod:`md2star.pptx_clone`): when the chosen layout has an example page in
+    the template that can carry this slide's content, that page is *cloned* and
+    its text replaced, so the deck inherits the designer's decorative shapes
+    and typography instead of only their background. A refusal (no suitable
+    example, a chart on the page, fewer bullets than columns) falls straight
+    through to the Seam-D path below, which can place anything.
+
     Returns
     -------
     AssembleResult
         The output path plus how many of the slides were placed without error
-        (a per-slide exception is logged and skipped, never aborts the deck).
+        (a per-slide exception is logged and skipped, never aborts the deck),
+        and how many of those a cloned example page carried.
     """
     catalog_by_name = {c.name: c for c in catalog}
     prs = Presentation(str(template))
@@ -563,10 +616,23 @@ def assemble(
     have = set(layouts)
     fam = template_fonts(template)
     title_font, body_font = fam["display"], fam["body"]
-    clear_slides(prs)
+    canvas = (prs.slide_width, prs.slide_height)
+    used_pages: set[int] = set()
+    if reference_slides:
+        # Seam E reads the designer's example pages as it builds, so they
+        # cannot be cleared up front the way Seam D clears them: snapshot them,
+        # append our slides after them, drop them at the end.
+        from . import pptx_clone as clone  # noqa: PLC0415 — one-way import, see pptx_clone
+
+        examples = clone.example_slides(prs)
+        originals = clone.template_slide_ids(prs)
+    else:
+        clone, examples, originals = None, {}, None
+        clear_slides(prs)
 
     n = len(slides)
     placed = 0
+    cloned = 0
     fallback_name = default_layout if default_layout in have else next(iter(have), None)
     if fallback_name is None:
         raise ValueError(f"template {template} exposes no slide layouts")
@@ -578,7 +644,6 @@ def assemble(
         name = s.chosen_layout if s.chosen_layout in have else fallback_name
         layout = layouts[name]
         info = catalog_by_name.get(name)
-        slide = prs.slides.add_slide(layout)
         # A layout with no explicitly resolvable solid fill (``dark is None``)
         # is, empirically, virtually always a plain white/light layout whose
         # background comes from the master's default rather than an explicit
@@ -602,10 +667,6 @@ def assemble(
         # `or` inside the list, not around it: a one-element list is truthy
         # even when that element is "", so the outer form never fired.
         title_lines = [_clean(s.title) or "(untitled)"]
-        # The slide's *own* cloned title placeholder, when the layout has one.
-        # See the reconciliation note above: this is what puts the title in the
-        # outline pane and the screen-reader reading order.
-        title_ph = slide_placeholder(slide, _TITLE_KINDS)
 
         try:
             # Parsed INSIDE the try so a malformed override (e.g. a corrupt
@@ -614,11 +675,50 @@ def assemble(
             fd = int(ov.get("font_delta", 0))
             bcap = max(1, int(ov.get("bullets", 4)))
             igrow = float(ov.get("img_grow", 0.0))
+            # Resolved once, because both seams want the same answers: the
+            # bullets that survived the override cap, and the PNG a Mermaid
+            # fence was rendered to (None when there is no fence, no renderer,
+            # or the render failed — the branches below all key off that).
+            # No AI summary is threaded through the assembler on purpose (that
+            # lives in pptx_layout's selection stage, not here) —
+            # fallback_bullets is the assembler's own, AI-free safety net.
+            bullets = fallback_bullets(body, bcap) if content else []
+            mpng = render_mermaid(mer) if (mer and render_mermaid) else None
+
+            # ── Seam E: clone the designer's own example page, if one fits ──
+            if clone is not None and info is not None and not code:
+                payload = clone.Content(
+                    title=title_lines[0],
+                    bullets=bullets,
+                    image=mpng or img,
+                    # Authored alt text first; failing that the slide's title,
+                    # which is at least a true description of what is shown.
+                    alt=parse_alt_text(body) or title_lines[0],
+                )
+                picked = clone.pick_example(
+                    examples, info.example_pages, payload, used=used_pages, canvas=canvas
+                )
+                if picked is not None:
+                    page, example = picked
+                    cloned_slide = clone.compose(prs, example, payload, font_delta=fd)
+                    if cloned_slide is not None:
+                        used_pages.add(page)
+                        _finish(cloned_slide, s)
+                        placed += 1
+                        cloned += 1
+                        logger.debug(
+                            "slide %d: cloned example page %d of layout %r", s.index, page, name
+                        )
+                        continue
+                    logger.debug("slide %d: example page %d declined it", s.index, picked[0])
+
+            # ── Seam D: build on the bare layout (always able to place) ──
+            slide = prs.slides.add_slide(layout)
+            # The slide's *own* cloned title placeholder, when the layout has
+            # one. See the reconciliation note above: this is what puts the
+            # title in the outline pane and the screen-reader reading order.
+            title_ph = slide_placeholder(slide, TITLE_KINDS)
             if content:
-                # No AI summary is threaded through the assembler on purpose
-                # (that lives in pptx_layout's selection stage, not here) —
-                # fallback_bullets is the assembler's own, AI-free safety net.
-                bullets = fallback_bullets(body, bcap)
                 blocks = [(title_lines[0], 26 + fd, True, title_font)]
                 if title_ph is not None:
                     # A layout with its own title zone gets the heading there,
@@ -631,7 +731,7 @@ def assemble(
                 blocks += [(f"•  {b}", 16 + fd, False, body_font) for b in bullets]
                 if blocks:
                     add_text(slide, blocks, content_box(prs, info), color=fg)
-            elif mer and render_mermaid and (mpng := render_mermaid(mer)) is not None:
+            elif mpng is not None:
                 add_text(
                     slide,
                     [(title_lines[0], 20 + fd, True, title_font)],
@@ -686,23 +786,23 @@ def assemble(
                     # designer's own title shape is the whole point here.
                     into=title_ph,
                 )
-            if s.notes:
-                # Notes exist precisely so this text is NOT on the slide; the
-                # notes pane is the one place it belongs. `notes_slide` creates
-                # the notes slide (and a default notes master) on first access.
-                slide.notes_slide.notes_text_frame.text = s.notes
-            # Last, so "empty" means "nothing was placed in it by any branch".
-            ghosts = drop_empty_placeholders(slide)
-            if ghosts:
-                logger.debug("slide %d: dropped %d unfilled placeholder(s)", s.index, ghosts)
+            _finish(slide, s)
             placed += 1
         except Exception as exc:  # noqa: BLE001 — one bad slide must not sink the deck
             logger.warning("slide %d (layout %r) failed to assemble: %s", s.index, name, exc)
 
+    if originals is not None:
+        # The designer's example pages were kept this long only so Seam E could
+        # read them; what ships is what the build appended.
+        clone.drop_template_slides(prs, originals)
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     prs.save(str(out_path))
-    logger.info("assembled %d/%d slides -> %s", placed, n, out_path)
-    return AssembleResult(pptx_path=out_path, placed=placed, total=n)
+    # The clone count only means something when Seam E was in play; on the
+    # default path it would just be a zero nobody asked about.
+    detail = f" ({cloned} from the template's own pages)" if reference_slides else ""
+    logger.info("assembled %d/%d slides%s -> %s", placed, n, detail, out_path)
+    return AssembleResult(pptx_path=out_path, placed=placed, total=n, cloned=cloned)
 
 
 # ── target-matching Ralph Eyeball Loop ───────────────────────────────────────
@@ -793,6 +893,7 @@ def eyeball_slides(
     render_mermaid: RenderMermaidFn | None = None,
     default_layout: str | None = None,
     allow_reselect: bool = True,
+    reference_slides: bool = False,
 ) -> AssembleResult:
     """Target-matching Ralph Eyeball Loop over an assembled deck.
 
@@ -823,6 +924,7 @@ def eyeball_slides(
         image_base_dir=image_base_dir,
         render_mermaid=render_mermaid,
         default_layout=default_layout,
+        reference_slides=reference_slides,
     )
 
     # One extra pass beyond max_iterations: the loop always re-judges after
@@ -916,6 +1018,7 @@ def eyeball_slides(
                 image_base_dir=image_base_dir,
                 render_mermaid=render_mermaid,
                 default_layout=default_layout,
+                reference_slides=reference_slides,
             )
 
     return result

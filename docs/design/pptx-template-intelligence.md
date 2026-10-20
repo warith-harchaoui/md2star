@@ -16,9 +16,11 @@ default — `visual_confirm()`, skippable with `--no-visual-confirm`), a
 curated-archetype Seam-D assembler (§4.3), and the target-matching eyeball
 loop (§4.4, `--eyeball-iterations`). **Placeholder-vs-overlay reconciliation
 is closed as of 3.6.0** — see §10.1 for what the answer turned out to be and
-why it is asymmetric. Phase 5 (bench gemma3-JSON vs. qwen3-vl-lenient)
-remains an open follow-up, as does the reference-slide seam in §10.4; §10
-records the adjacent work this round read and what was taken from it. The
+why it is asymmetric. The **reference-slide seam of §10.4 shipped in 3.7.0**
+as `--reference-slides` (`md2star/pptx_clone.py`); §10.4 now records what the
+clone actually does and which pages it refuses. Phase 5 (bench gemma3-JSON vs.
+qwen3-vl-lenient) remains the open follow-up; §10 records the adjacent work
+this round read and what was taken from it. The
 rest of this document is the design record that shaped the implementation.
 Reference template used
 during investigation: `assets/templates/pptx/Jellysmack-Presentation-Template.pptx`
@@ -445,7 +447,7 @@ thumbnail (reference-based), and the audit judges the file alone
 Not taken: program synthesis of slides. md2star is not designing slides; a
 human designer already did, and the template is the design.
 
-### 10.4 The reference-*slide* seam (open; the next real step)
+### 10.4 The reference-*slide* seam (shipped in 3.7.0 as `--reference-slides`)
 
 PPTAgent's central move is one md2star has not made: it edits a **reference
 slide**, not a layout. A designer template's example slides carry what layouts
@@ -455,19 +457,42 @@ bespoke shapes that make a deck look like itself. Instantiating
 *slide 23* and replacing its text and pictures gets the designer's actual
 composition.
 
-That is a fifth seam, past the A–D of §4.3: **Seam E — clone-and-replace**.
-The catalog already records which example pages use each layout
-(`LayoutInfo.example_pages`), so the input exists today. The work is the hard
-part of any clone: python-pptx cannot copy a slide between presentations
-natively, and the replace step needs to decide which shape on the cloned slide
-each Markdown block belongs in — PPTAgent answers that by rendering the slide
-to HTML for the model and letting it emit `replace_span` / `replace_image` /
-`clone_paragraph` / `del_*` actions against a REPL that feeds execution errors
-back (max 2 retries).
+That is a fifth seam, past the A–D of §4.3: **Seam E — clone-and-replace**,
+now `md2star/pptx_clone.py` behind `md2pptx --smart-layout --reference-slides`.
+The catalog already recorded which example pages use each layout
+(`LayoutInfo.example_pages`), so the input existed; three things had to be
+decided to turn it into a seam.
 
-Worth doing, and worth doing *after* the current path is boring: it trades a
-predictable deck for a more beautiful one, and the eyeball loop plus the audit
-are what would make that trade safe.
+**The clone.** python-pptx cannot copy a slide between presentations — but it
+never has to here. The deck is opened from the designer's template itself, so
+their example pages are already in the same package: `clone_slide` deepcopies
+the page's shape tree into a new slide, re-points every `r:*` attribute at the
+clone's own relationships, carries a slide-level `<p:bg>` across, and drops the
+placeholders `add_slide` had cloned from the layout (the page already carries
+its own filled copies — §10.1's defect, walked back in from the other side).
+
+**The replace.** PPTAgent answers "which shape does this block belong in?" by
+rendering the slide to HTML for a model and letting it emit `replace_span` /
+`replace_image` / `del_*` actions against a REPL. This seam answers it with
+arithmetic instead: the title placeholder (or, failing one, the biggest
+declared type nearest the top), then body frames in reading order, with the
+ones within 40 % of the largest treated as *peer columns* that split the
+bullets between them — which is what makes a three-chevron "steps" page come
+out as three steps. Each line is a copy of the designer's own first paragraph,
+so bullet glyph, indent level and run typography come along and the seam must
+*not* prefix its own "• " the way Seam D does.
+
+**The refusals, which are the real design.** A template's filler text is the
+designer's copy, so every frame is filled or retired, and retiring
+distinguishes ornament ("01"), a bare `txBox` (removed), and an autoshape
+(emptied, kept — a chevron is a drawn object); their stand-in photo loses its
+relationship as well as its shape, so it does not travel inside the file. And
+a page that cannot honestly carry a slide is declined before anything is
+cloned — fewer bullets than columns, an image with no slot, a chart or table or
+a group with words in it that no replacement can restate — falling through to
+Seam D, which can place anything. This is what makes the trade safe: it buys a
+more beautiful deck *only* where the arithmetic says the composition survives,
+and keeps the predictable one everywhere else.
 
 ### 10.5 md2pptx (MartinPacker), and PowerPoint Designer
 

@@ -4,6 +4,77 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-10-20
+
+### Added
+
+- **`md2pptx --smart-layout --reference-slides`: the designer's own slide,
+  cloned, with your words in it.** Until now the smart-layout path built every
+  slide on a *layout*, which is the ceiling of what a layout can give you — it
+  carries the background and the placeholder boxes and nothing else. The accent
+  bars, the numbered step chevrons, the decorative rules, the bespoke little
+  shapes that make a deck look like *itself* live one level further in, on the
+  designer's **example slides**. This flag clones the example page for the
+  chosen layout and replaces its content: their filler title becomes yours,
+  their filler bullets become yours, their stand-in photo slot takes your
+  image, and everything they drew around that content stays where they drew it.
+  Typography is inherited rather than forced, so a cloned paragraph keeps the
+  designer's face, size, colour and bullet glyph — which is also why this path
+  does *not* prefix a "• " the way the overlay path must.
+
+  This is the "Seam E" the design note
+  (`docs/design/pptx-template-intelligence.md` §10.4) specified and left open,
+  in a new `md2star/pptx_clone.py`. Three rules make it safe to use:
+
+  - **Nothing the designer wrote may ship.** A template's filler text is
+    *their* copy, and publishing it inside your deck is worse than an empty
+    box, so every text frame on a cloned page is either filled with your
+    content or retired — there is no third outcome. Retiring is not one blunt
+    rule either: ornament stays (the "01" of a numbered step is the design, not
+    filler), a bare text box is removed (OOXML marks it `txBox="1"`; it existed
+    only for the words being taken out of it), and an autoshape is emptied but
+    kept, because a chevron is a drawn object. Their stand-in photo goes
+    further than off the slide: its *relationship* is dropped too, so the image
+    does not travel inside the saved file where nobody would look for it. Their
+    hyperlinks go as well — a link lives in the run's own `rPr` and would
+    otherwise outlive the words it was attached to, leaving your bullet
+    pointing at a page of the template that is not even in your deck.
+  - **A bad carrier is refused, not forced.** Feasibility is decided before
+    anything is cloned: a three-column design needs at least three bullets, an
+    image slide needs a picture slot to land in, and a page carrying a chart, a
+    table or a group with words in it is declined outright, since no
+    replacement can restate the designer's own numbers. A refusal costs
+    nothing — that slide falls through to the existing assembler, which can
+    place anything — so the flag is strictly additive, and a template that
+    ships as layouts alone (no example pages) builds exactly as it did before.
+  - **Legibility is still enforced.** Inheriting the designer's typography is
+    the point; inheriting *unreadable* typography is not, so any run declaring
+    a size under the audit's 12 pt floor is lifted to it. A run that declares
+    no size is left alone: it inherits from their master, which is
+    presentation-grade by construction.
+
+  `AssembleResult.cloned` reports how many slides a cloned page carried, and
+  the CLI says so (`Wrote: talk.pptx (14/14 slides, 11 from the template's own
+  pages)`) — plus a warning when the flag was asked for and no example page
+  could carry anything, because asked-for-and-silently-not-delivered is the
+  worst outcome here. `tests/test_pptx_clone.py` (31 tests) synthesises a
+  designer template page by page and pins both halves: what must survive (the
+  accent bar, the logo, the ornament, the master's bullet glyph, the picture's
+  slot *and* its place in the stacking order) and what must not (every line of
+  filler, the stand-in photo, and any page the seam cannot honestly carry).
+
+### Changed
+
+- **The audit no longer counts a one-glyph ornament as one of the two text
+  shapes in an `overlap`.** A "01" sitting inside a title's generous bounding
+  box is a designer's composition, not two blocks of text colliding — the same
+  exemption, for the same reason, as text over a picture. Cloned pages are full
+  of them, and without this the deck's own audit would have flagged the
+  template's design as a defect. The rule itself
+  (`md2star.pptx_assemble.is_ornament`) is now shared vocabulary, because the
+  two modules that need the answer want the *same* answer: the clone keeps
+  ornament on a page, the audit does not count it.
+
 ## [3.6.0] - 2026-10-19
 
 ### Fixed

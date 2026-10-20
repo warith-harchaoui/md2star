@@ -465,6 +465,17 @@ def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
             help="Designer .pptx template for --smart-layout (its own file, not md2star's).",
         )
         parser.add_argument(
+            "--reference-slides",
+            action="store_true",
+            help=(
+                "--smart-layout only: clone the designer's own example slide "
+                "for each layout (their decorative shapes and typography, not "
+                "just their background) and replace its text with yours. Any "
+                "page that cannot carry a slide's content is declined, and "
+                "that slide is built on the bare layout as usual."
+            ),
+        )
+        parser.add_argument(
             "--no-visual-confirm",
             action="store_true",
             help=(
@@ -550,6 +561,14 @@ def _convert(fmt: str, argv: list[str]) -> int:
     #     (fmt == "pptx").
     if getattr(args, "smart_layout", False):
         return _convert_smart_layout(fmt, in_path, out_path, processed, args)
+    if getattr(args, "reference_slides", False):
+        # Said out loud rather than ignored: the Pandoc path has no notion of
+        # the template's example pages, so a run that asked for them and got a
+        # perfectly ordinary deck would look like the flag did nothing.
+        raise InvalidInputError(
+            "md2pptx: --reference-slides only applies to --smart-layout",
+            hint="Add --smart-layout --template <designer.pptx>, or drop --reference-slides.",
+        )
 
     # Build the pandoc metadata / flag list from our high-level options. Each
     # is appended only when supplied, so unset options fall back to the
@@ -729,6 +748,7 @@ def _convert_smart_layout(fmt: str, in_path: Path, out_path: Path, processed: st
         visual_confirm(slides, catalog, template=template)
 
     render_mermaid = _mermaid_renderer(out_path.parent)
+    reference_slides = getattr(args, "reference_slides", False)
     if args.eyeball_iterations > 0:
         result = eyeball_slides(
             slides,
@@ -738,6 +758,7 @@ def _convert_smart_layout(fmt: str, in_path: Path, out_path: Path, processed: st
             max_iterations=args.eyeball_iterations,
             image_base_dir=in_path.parent,
             render_mermaid=render_mermaid,
+            reference_slides=reference_slides,
         )
     else:
         result = assemble(
@@ -747,8 +768,19 @@ def _convert_smart_layout(fmt: str, in_path: Path, out_path: Path, processed: st
             out_path,
             image_base_dir=in_path.parent,
             render_mermaid=render_mermaid,
+            reference_slides=reference_slides,
         )
-    print(f"Wrote: {result.pptx_path} ({result.placed}/{result.total} slides)")
+    note = f", {result.cloned} from the template's own pages" if result.cloned else ""
+    print(f"Wrote: {result.pptx_path} ({result.placed}/{result.total} slides{note})")
+    if reference_slides and not result.cloned:
+        # Asked for and silently not delivered is the worst outcome here: the
+        # flag is only ever as good as the template's example pages, and a
+        # template distributed as layouts alone has none to clone.
+        logger.warning(
+            "--reference-slides: no example page in %s could carry a slide; "
+            "every slide was built on its bare layout",
+            template.name,
+        )
     # Deterministic last word on the deck we just wrote. Runs whatever the AI
     # stages did or could not do — no model, no render — so a conversion on a
     # machine with no VLM still reports whether anything overlaps, bleeds off
