@@ -73,6 +73,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- **The GUI's AI lint can no longer hang the editor.** `lint_with_llm` has
+  always been self-guarding against a backend that is *absent*; it had no
+  answer for one that is merely **slow**. A local daemon holding a different
+  model has to unload it and load this one first, which on a laptop is minutes,
+  and the editor spun for all of them. The endpoint now answers within
+  `gui_server.LINT_DEADLINE_S` (20 s) whatever the model does, handing back the
+  untouched buffer and a `timed_out` flag the UI reports as "the model is
+  probably still loading" — which is the same empty diff as "already clean"
+  and very different news. The CLI keeps no deadline on purpose: a conversion
+  is not interactive, and a model worth waiting two minutes for is still worth
+  waiting for there.
+
+  Found by the pre-push gate, which is the second time that hook has earned
+  itself: the test asserting `/lint` "never crashes" was written against a
+  machine with no Ollama at all, and timed out on one where a model simply had
+  to be swapped.
+
 - **A layout is now described by the page that demonstrates it.** Measured,
   not assumed: on the reference designer template the geometric ranking
   returned **the same score for all 39 layouts**. Flat. No signal at all, which

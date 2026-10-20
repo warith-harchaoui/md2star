@@ -74,6 +74,13 @@ logger = get_logger(__name__)
 #: and the product's own name are deliberately absent: they are the same in
 #: every language. ``tests/test_gui_i18n.py`` checks each one still occurs in
 #: the page, so the list cannot rot while the interface moves on.
+#: How long the GUI waits for the optional AI lint before answering without
+#: it. The CLI has no such limit on purpose: a conversion is not interactive,
+#: and a model that takes two minutes to load is still worth waiting for there.
+#: A browser is not — found when a resident vision model had to be swapped out
+#: and a lint request blocked for over a minute with the editor spinning.
+LINT_DEADLINE_S = 20.0
+
 UI_STRINGS: tuple[str, ...] = (
     "md2star — Markdown → DOCX / PPTX / PDF",
     "Markdown editor",
@@ -890,20 +897,26 @@ class _Handler(BaseHTTPRequestHandler):
         error, or a length-guard trip). The response reports whether anything
         actually changed so the UI can say "already clean" vs "fixed".
         """
-        from .preprocessing.lint import lint_with_llm
-
         payload = self._read_json()
         markdown: str = payload.get("markdown") or ""
         model = payload.get("model") or None
 
         # lint_with_llm is self-guarding: it never raises and degrades to the
         # input on any failure, so a missing Ollama simply yields "no change".
-        fixed = lint_with_llm(markdown, model=model)
+        # What it has no answer for is a backend that is *slow* rather than
+        # absent — a local daemon holding a different model has to unload it
+        # and load this one first, which on a laptop is minutes, and the editor
+        # spins for all of it. The lint is explicitly optional, so waiting past
+        # a deadline is the one thing this endpoint must not do.
+        fixed, timed_out = self._lint_within_deadline(markdown, model)
         body = json.dumps(
             {
                 "ok": True,
                 "markdown": fixed,
                 "changed": fixed != markdown,
+                # The UI can tell "already clean" from "we gave up waiting",
+                # which are the same empty diff and very different news.
+                "timed_out": timed_out,
             }
         ).encode("utf-8")
         self.send_response(200)
@@ -911,6 +924,33 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def _lint_within_deadline(self, markdown: str, model: str | None) -> tuple[str, bool]:
+        """Lint, or give up and hand back the buffer. Never blocks past the deadline.
+
+        A worker thread rather than a transport timeout, because the deadline
+        belongs to *this* surface: the CLI waits as long as a model needs (a
+        conversion is not interactive and a slow load is still worth having),
+        and only the browser cannot. The thread is left running when it is late
+        — it is a daemon, it will finish into a result nobody reads, and
+        killing a model mid-load would be worse than wasting it.
+        """
+        from .preprocessing.lint import lint_with_llm
+
+        outcome: list[str] = []
+        worker = threading.Thread(
+            target=lambda: outcome.append(lint_with_llm(markdown, model=model)),
+            daemon=True,
+        )
+        worker.start()
+        worker.join(LINT_DEADLINE_S)
+        if outcome:
+            return outcome[0], False
+        logger.warning(
+            "gui: the AI lint did not answer within %.0fs; returning the buffer unchanged",
+            LINT_DEADLINE_S,
+        )
+        return markdown, True
 
     # ─────────────────────────────────────────────────────────────────
     # POST /draft  +  GET /draft  — server-side editor auto-save

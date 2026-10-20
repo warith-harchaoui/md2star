@@ -634,6 +634,11 @@ btnAiLint?.addEventListener("click", async () => {
     if (j.changed) {
       replaceDoc(j.markdown || text);
       setStatus("ok", "AI lint applied syntax fixes.");
+    } else if (j.timed_out) {
+      // "Nothing changed" and "we stopped waiting" are the same empty diff
+      // and very different news: the second usually means the local daemon is
+      // loading a model, and trying again shortly will work.
+      setStatus("error", "AI lint timed out — the model is probably still loading.");
     } else {
       setStatus("ok", "AI lint: already clean (or Ollama unavailable).");
     }

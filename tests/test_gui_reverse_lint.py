@@ -23,6 +23,7 @@ import importlib.util
 import json
 import shutil
 import threading
+import time
 import urllib.request
 from collections.abc import Iterator
 from http.server import ThreadingHTTPServer
@@ -156,3 +157,35 @@ def test_extract_docx_roundtrips_to_markdown(server: str, tmp_path) -> None:
     assert result["ok"] is True
     assert "Heading One" in result["markdown"]
     assert "bold" in result["markdown"]
+
+
+def test_lint_answers_within_a_deadline_even_if_the_model_never_does(
+    server: str, monkeypatch
+) -> None:
+    """The lint is optional; the editor hanging on it is not.
+
+    A local daemon holding a different model has to unload it and load this
+    one first, which on a laptop is minutes. The CLI is right to wait — a
+    conversion is not interactive — and the browser is not.
+    """
+    from md2star import gui_server
+    from md2star.preprocessing import lint as lint_module
+
+    monkeypatch.setattr(gui_server, "LINT_DEADLINE_S", 0.5)
+    monkeypatch.setattr(
+        lint_module,
+        "lint_with_llm",
+        lambda content, model=None: time.sleep(30) or content,
+    )
+    started = time.monotonic()
+    payload = json.dumps({"markdown": "# Title\n"}).encode("utf-8")
+    status, body = _post(
+        server + "/lint", data=payload, headers={"Content-Type": "application/json"}
+    )
+    assert status == 200
+    result = json.loads(body)
+    # The buffer comes back untouched, the answer says why, and it arrives
+    # while a person is still watching.
+    assert result["ok"] is True and result["changed"] is False
+    assert result["timed_out"] is True
+    assert time.monotonic() - started < 10
