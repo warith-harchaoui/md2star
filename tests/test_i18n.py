@@ -155,3 +155,48 @@ class TestTheTranslatedSurfaces:
         page = (_ROOT / "md2star/data/gui/index.html").read_text(encoding="utf-8")
         missing = [source for source in gui_server.UI_STRINGS if source not in page]
         assert missing == []
+
+    def test_an_error_carries_its_hint_into_french(self, monkeypatch) -> None:
+        """Both halves of the two-block message, including the class default."""
+        from md2star.errors import InvalidInputError, MissingDependencyError
+
+        monkeypatch.setenv(i18n.ENV_VAR, "fr")
+        i18n.translator.cache_clear()
+        explicit = InvalidInputError(
+            "md2pptx: --reference-slides only applies to --smart-layout",
+            hint="Add --smart-layout --template <designer.pptx>, or drop --reference-slides.",
+        )
+        assert "ne s'applique qu'à" in str(explicit)
+        assert "Ajoutez --smart-layout" in explicit.hint
+        # A class default is a string frozen at import; it has to be looked up
+        # when the error is raised, not when the module loads.
+        assert "md2star doctor" in MissingDependencyError("x").hint
+        assert MissingDependencyError("x").hint.startswith("Lancez")
+
+    def test_an_interpolated_message_still_reads_in_french(self, monkeypatch) -> None:
+        from md2star.errors import InvalidInputError
+        from md2star.i18n import gettext as translate
+
+        monkeypatch.setenv(i18n.ENV_VAR, "fr")
+        i18n.translator.cache_clear()
+        message = translate("md2%(fmt)s: input file not found: %(path)s") % {
+            "fmt": "pptx",
+            "path": "/nope.md",
+        }
+        assert (
+            str(InvalidInputError(message)) == "md2pptx : fichier d'entrée introuvable : /nope.md"
+        )
+
+    def test_doctor_reads_in_french_while_its_json_stays_english(self, monkeypatch) -> None:
+        """The report is data as well as prose, and only the prose moves."""
+        from md2star import doctor
+
+        monkeypatch.setenv(i18n.ENV_VAR, "fr")
+        i18n.translator.cache_clear()
+        report = doctor.run_checks()
+        text = doctor.render(report)
+        assert "Essentiel :" in text and "Résultat :" in text and "Export DOCX" in text
+        # The section names double as dictionary keys and the statuses are
+        # tokens a script greps: both stay English in the data itself.
+        assert {c.section for c in report.checks} <= {"Core", "Optional", "Templates"}
+        assert all(c.status.isupper() for c in report.checks)

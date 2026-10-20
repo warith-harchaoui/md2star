@@ -187,3 +187,179 @@ msgstr "#%(fg)s sur #%(bg)s donne %(ratio).1f:1, sous le plancher de %(floor)g:1
 
 msgid "text needs %(times).1fx its box at %(pt)gpt (fits at ~%(fits).0fpt)"
 msgstr "le texte réclame %(times).1f fois sa boîte à %(pt)g pt (tiendrait à ~%(fits).0f pt)"
+
+# ── errors: class-level hints (md2star/errors.py) ────────────────────────
+msgid ""
+"Run `md2star doctor` for a full environment report and install instructions "
+"per platform."
+msgstr ""
+"Lancez `md2star doctor` pour un rapport complet de l'environnement et les "
+"instructions d'installation par plateforme."
+
+msgid ""
+"Run `md2star templates list` to see which templates are discoverable, or "
+"pass --reference-doc /path/to/template.docx explicitly."
+msgstr ""
+"Lancez `md2star templates list` pour voir quels gabarits sont détectables, "
+"ou indiquez explicitement --reference-doc /chemin/vers/template.docx."
+
+msgid ""
+"md2star fetches remote resources it needs, but --offline is on. Drop "
+"--offline (and use --allow-remote-images for remote images) to allow the "
+"fetch, or keep --offline to make the rejection explicit in scripts."
+msgstr ""
+"md2star récupère les ressources distantes dont il a besoin, mais --offline "
+"est actif. Retirez --offline (et utilisez --allow-remote-images pour les "
+"images distantes) pour autoriser la récupération, ou gardez --offline afin "
+"que le refus soit explicite dans vos scripts."
+
+msgid ""
+"If the failure mentions a missing engine (xelatex, soffice, mmdc), install "
+"it and re-run. Otherwise the file `--verbose` above contains the full pandoc "
+"/ soffice stderr."
+msgstr ""
+"Si l'échec mentionne un moteur manquant (xelatex, soffice, mmdc), "
+"installez-le puis relancez. Sinon, le `--verbose` ci-dessus contient la "
+"sortie d'erreur complète de pandoc / soffice."
+
+msgid ""
+"md2star accepts a single .md / .markdown file. Pass the path as the first "
+"positional argument."
+msgstr ""
+"md2star accepte un seul fichier .md / .markdown. Donnez son chemin en "
+"premier argument positionnel."
+
+msgid ""
+"Paths supplied to the GUI's /fs/* endpoints must stay inside the open folder "
+"root. `..` segments, absolute paths, and symlinks that resolve outside the "
+"root are rejected."
+msgstr ""
+"Les chemins transmis aux points d'entrée /fs/* de la GUI doivent rester sous "
+"la racine du dossier ouvert. Les segments `..`, les chemins absolus et les "
+"liens symboliques qui pointent hors de cette racine sont refusés."
+
+# ── errors: raise sites (md2star/cli.py, md2star/reverse.py) ─────────────
+msgid "md2%(fmt)s: input file not found: %(path)s"
+msgstr "md2%(fmt)s : fichier d'entrée introuvable : %(path)s"
+
+msgid "md2star accepts a single .md / .markdown file as the first argument."
+msgstr "md2star accepte un seul fichier .md / .markdown comme premier argument."
+
+msgid "md2pptx: --reference-slides only applies to --smart-layout"
+msgstr "md2pptx : --reference-slides ne s'applique qu'à --smart-layout"
+
+msgid "Add --smart-layout --template <designer.pptx>, or drop --reference-slides."
+msgstr "Ajoutez --smart-layout --template <gabarit.pptx>, ou retirez --reference-slides."
+
+msgid "md2%(fmt)s: --smart-layout is only valid for pptx"
+msgstr "md2%(fmt)s : --smart-layout n'est valable que pour pptx"
+
+msgid "md2pptx --smart-layout: --template <designer.pptx> is required"
+msgstr "md2pptx --smart-layout : --template <gabarit.pptx> est obligatoire"
+
+msgid "Point --template at the designer's own PPTX, not md2star's bundled template."
+msgstr ""
+"Faites pointer --template vers le PPTX du graphiste, pas vers le gabarit "
+"livré avec md2star."
+
+msgid "md2pptx: template not found: %(path)s"
+msgstr "md2pptx : gabarit introuvable : %(path)s"
+
+msgid "md2pptx --smart-layout needs python-pptx: pip install 'md2star[pptx]'"
+msgstr "md2pptx --smart-layout nécessite python-pptx : pip install 'md2star[pptx]'"
+
+msgid "md2pptx: no slides found in %(path)s"
+msgstr "md2pptx : aucune diapositive trouvée dans %(path)s"
+
+msgid "pandoc not found on PATH"
+msgstr "pandoc est introuvable dans le PATH"
+
+msgid "md2pdf: LibreOffice (`soffice`) not found"
+msgstr "md2pdf : LibreOffice (`soffice`) est introuvable"
+
+msgid "reading %(ext)s back to Markdown needs LibreOffice (`soffice`)"
+msgstr "relire un %(ext)s vers Markdown nécessite LibreOffice (`soffice`)"
+
+# ── md2star doctor (translated at render time; --json stays English) ─────
+msgid "Core"
+msgstr "Essentiel"
+
+msgid "Optional"
+msgstr "Facultatif"
+
+msgid "Templates"
+msgstr "Gabarits"
+
+msgid "Result:"
+msgstr "Résultat :"
+
+msgid "DOCX export"
+msgstr "Export DOCX"
+
+msgid "PPTX export"
+msgstr "Export PPTX"
+
+msgid "PDF export"
+msgstr "Export PDF"
+
+msgid "Mermaid diagrams"
+msgstr "Diagrammes Mermaid"
+
+msgid "Platform"
+msgstr "Plateforme"
+
+msgid "Bundled templates"
+msgstr "Gabarits livrés"
+
+msgid "Cache directory"
+msgstr "Répertoire de cache"
+
+msgid "✗ Core dependencies are broken — fix the items above before running md2star."
+msgstr "✗ Des dépendances essentielles sont cassées — corrigez les points ci-dessus avant d'utiliser md2star."
+
+msgid "Print a diagnostic summary of the environment md2star runs in."
+msgstr "Afficher un diagnostic de l'environnement dans lequel md2star s'exécute."
+
+msgid "Emit the report as JSON instead of human-readable text."
+msgstr "Émettre le rapport en JSON plutôt qu'en texte lisible."
+
+msgid "Install: https://pandoc.org/installing.html"
+msgstr "Installation : https://pandoc.org/installing.html"
+
+msgid ""
+"Needed for md2pdf and the GUI's PDF preview. Install: brew install --cask "
+"libreoffice / apt install libreoffice"
+msgstr ""
+"Nécessaire pour md2pdf et l'aperçu PDF de la GUI. Installation : brew "
+"install --cask libreoffice / apt install libreoffice"
+
+msgid ""
+"Optional — needed only for ``` ```mermaid ``` ``` blocks. Install: "
+"https://nodejs.org/"
+msgstr ""
+"Facultatif — nécessaire seulement pour les blocs ``` ```mermaid ``` ```. "
+"Installation : https://nodejs.org/"
+
+msgid "No global mmdc; ``npx @mermaid-js/mermaid-cli`` will be used on demand."
+msgstr "Pas de mmdc global ; ``npx @mermaid-js/mermaid-cli`` sera utilisé à la demande."
+
+msgid "Optional — no Node.js, so mermaid blocks are skipped (kept as code fences)."
+msgstr ""
+"Facultatif — sans Node.js, les blocs mermaid sont ignorés (conservés comme "
+"blocs de code)."
+
+msgid "Optional — needed only for the --lint LLM auto-fix pass."
+msgstr "Facultatif — nécessaire seulement pour la passe de correction LLM --lint."
+
+msgid "template.docx + template.pptx — md2star/data/"
+msgstr "template.docx + template.pptx — md2star/data/"
+
+msgid ""
+"template.docx and/or template.pptx missing from the installed wheel — "
+"reinstall md2star."
+msgstr ""
+"template.docx et/ou template.pptx manquent dans le paquet installé — "
+"réinstallez md2star."
+
+msgid "%(section)s:"
+msgstr "%(section)s :"

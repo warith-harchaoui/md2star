@@ -521,7 +521,7 @@ def _convert(fmt: str, argv: list[str]) -> int:
     in_path = Path(args.input).expanduser().resolve()
     if not in_path.exists():
         raise InvalidInputError(
-            f"md2{fmt}: input file not found: {in_path}",
+            _("md2%(fmt)s: input file not found: %(path)s") % {"fmt": fmt, "path": in_path},
             hint="md2star accepts a single .md / .markdown file as the first argument.",
         )
 
@@ -700,7 +700,9 @@ def _convert_smart_layout(fmt: str, in_path: Path, out_path: Path, processed: st
     the catalog/selection/assembly/eyeball-loop stages this wires together.
     """
     if fmt != "pptx":
-        raise InvalidInputError(f"md2{fmt}: --smart-layout is only valid for pptx")
+        raise InvalidInputError(
+            _("md2%(fmt)s: --smart-layout is only valid for pptx") % {"fmt": fmt}
+        )
     if not args.template:
         raise InvalidInputError(
             "md2pptx --smart-layout: --template <designer.pptx> is required",
@@ -708,7 +710,7 @@ def _convert_smart_layout(fmt: str, in_path: Path, out_path: Path, processed: st
         )
     template = Path(args.template).expanduser().resolve()
     if not template.exists():
-        raise InvalidInputError(f"md2pptx: template not found: {template}")
+        raise InvalidInputError(_("md2pptx: template not found: %(path)s") % {"path": template})
 
     try:
         import pptx  # noqa: F401, PLC0415 — optional dep, probed here for a clear error
@@ -735,7 +737,7 @@ def _convert_smart_layout(fmt: str, in_path: Path, out_path: Path, processed: st
 
     slides = segment(processed)
     if not slides:
-        raise InvalidInputError(f"md2pptx: no slides found in {in_path}")
+        raise InvalidInputError(_("md2pptx: no slides found in %(path)s") % {"path": in_path})
 
     logger.info("smart-layout: cataloging %s", template)
     catalog = build_catalog(template)

@@ -521,7 +521,17 @@ def run_checks(
 
 
 def render(report: Report) -> str:
-    """Format *report* as a human-readable multi-section string."""
+    """Format *report* as a human-readable multi-section string.
+
+    This is the one place the report is translated, and deliberately so: the
+    section names double as dictionary keys and the statuses are tokens a
+    script greps, so both stay English in the data and in ``--json``. Only
+    what a person reads goes through the catalogue — and a detail already
+    composed with a version and a path matches no entry, so it passes through
+    untouched while the fixed prose ("Needed for md2pdf…") does not.
+    """
+    from .i18n import gettext as _  # noqa: PLC0415 — keeps doctor importable bare
+
     out: list[str] = []
     out.append("md2star doctor")
     out.append("")
@@ -533,27 +543,32 @@ def render(report: Report) -> str:
         sections.setdefault(c.section, []).append(c)
 
     for section, rows in sections.items():
-        out.append(f"{section}:")
+        # The separator travels with the heading: French puts a space before a
+        # colon, and a hardcoded ":" would make every section header wrong in
+        # one character.
+        out.append(_("%(section)s:") % {"section": _(section)})
         # Pad names to the longest in THIS section so status columns line up.
-        width = max((len(r.name) for r in rows), default=10)
+        # Padded on the translated name: a column aligned on the English one
+        # would be ragged in any language that writes longer words.
+        width = max((len(_(r.name)) for r in rows), default=10)
         for r in rows:
-            label = r.name.ljust(width)
+            label = _(r.name).ljust(width)
             # Only append the detail dash when there is a detail to show, so
             # bare rows don't end in a dangling separator.
-            tail = f" — {r.detail}" if r.detail else ""
+            tail = f" — {_(r.detail)}" if r.detail else ""
             out.append(f"  {label}  {r.status:7}{tail}")
         out.append("")
 
     # Bottom rollup: translate the raw checks into per-format readiness, which
     # is what the user actually cares about ("can I make a PDF?").
-    out.append("Result:")
+    out.append(_("Result:"))
     targets = [
-        ("DOCX export", report.feature_status("docx")),
-        ("PPTX export", report.feature_status("pptx")),
-        ("PDF export", report.feature_status("pdf")),
-        ("Mermaid diagrams", report.feature_status("mermaid")),
+        (_("DOCX export"), report.feature_status("docx")),
+        (_("PPTX export"), report.feature_status("pptx")),
+        (_("PDF export"), report.feature_status("pdf")),
+        (_("Mermaid diagrams"), report.feature_status("mermaid")),
     ]
-    width = max(len(name) for name, _ in targets)
+    width = max(len(name) for name, _status in targets)
     for name, status in targets:
         out.append(f"  {name.ljust(width)}  {status}")
 
@@ -561,20 +576,24 @@ def render(report: Report) -> str:
     # gaps already read as WARNING/INFO above and must not trigger it.
     if report.core_failing():
         out.append("")
-        out.append("✗ Core dependencies are broken — fix the items above before running md2star.")
+        out.append(
+            _("✗ Core dependencies are broken — fix the items above before running md2star.")
+        )
     return "\n".join(out)
 
 
 def main(argv: list[str] | None = None) -> int:
     """Console entry point: ``md2star doctor``."""
+    from .i18n import gettext as _  # noqa: PLC0415 — see render()
+
     parser = argparse.ArgumentParser(
         prog="md2star doctor",
-        description="Print a diagnostic summary of the environment md2star runs in.",
+        description=_("Print a diagnostic summary of the environment md2star runs in."),
     )
     parser.add_argument(
         "--json",
         action="store_true",
-        help="Emit the report as JSON instead of human-readable text.",
+        help=_("Emit the report as JSON instead of human-readable text."),
     )
     args = parser.parse_args(argv)
 

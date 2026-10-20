@@ -41,6 +41,7 @@ from pathlib import Path
 import os_helper as osh
 
 from .errors import MissingDependencyError
+from .i18n import gettext as _
 from .logging import get_logger
 
 # Module logger — child of the root "md2star" logger (configured by the CLI).
@@ -270,7 +271,8 @@ def _soffice_to_pdf(src: Path, out_dir: Path) -> Path:
     soffice = _find_soffice()
     if soffice is None:
         raise MissingDependencyError(
-            f"reading {src.suffix} back to Markdown needs LibreOffice (`soffice`)",
+            _("reading %(ext)s back to Markdown needs LibreOffice (`soffice`)")
+            % {"ext": src.suffix},
             hint=(
                 "Install it to convert this format to PDF first:\n"
                 "  macOS:   brew install --cask libreoffice\n"

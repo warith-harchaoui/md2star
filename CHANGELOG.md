@@ -12,8 +12,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   md2star's documentation has shipped in two languages for a long time while
   its CLI and GUI spoke only English. Both now read message catalogues
   (`md2star/i18n.py`, stdlib `gettext`, no new dependency), with French
-  complete for the surfaces a person actually reads: the audit's verdict line,
-  the line every conversion ends on, and the GUI's chrome.
+  complete for every surface a person reads: the audit's findings and verdict,
+  the line every conversion ends on, the GUI's chrome, **every typed error
+  message with its hint**, and **`md2star doctor`**.
+
+  The errors are translated in `Md2starError.__init__` rather than at each
+  `raise`, which is what lets a call site stay plain English and still reach a
+  French reader — the lookup happens when the error is raised, so the language
+  in force then is the one that applies, not whatever it was at import. That
+  also covers each class's `default_hint`, which is a string frozen at import
+  and would otherwise never move. The handful of messages that interpolate a
+  path translate their format string first, since an interpolated message
+  matches no catalogue entry.
+
+  `md2star doctor` is translated **at render time only**, which is the whole
+  design: its section names double as dictionary keys and its statuses are
+  tokens a script greps, so the data — and `--json` with it — stays English
+  while the text a person reads does not. A detail already composed with a
+  version and a path matches no entry and passes through untouched, so fixed
+  prose ("Needed for md2pdf…") moves and `pandoc 3.6.1 — /opt/…` does not,
+  with no change to any check. French punctuation travels with the text: the
+  section heading is one entry including its colon, because French puts a
+  space before one and a hardcoded `:` would be wrong in every heading at
+  once.
 
   Two deliberately different triggers. **The CLI answers to `MD2STAR_LANG` and
   ignores `LANG` entirely** — a converter that changed the language of its own

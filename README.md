@@ -272,7 +272,10 @@ same wheel, not a separate download).
 - **Markdown twin (reverse direction)**: `md2star twin <file>` reads **any PDF, or anything LibreOffice can convert to one,** back into an *editable* `<stem>.md` **plus an `assets/` folder**. Tables return as GFM pipe tables and every embedded image is scraped out and re-linked. Add `--diagrams` (opt-in, needs a local model, see the LLM Linter below) and node-and-edge figures are **re-authored as Mermaid** via a *target-matching eyeball loop*: render a candidate with the same `mmdc` the forward path uses, compare it against the scraped original with a local vision model, and iterate until it matches; other clean vector figures are re-authored as editable SVG the same way. The scraped PNG is always kept as a fallback so nothing is ever lost. Everything degrades gracefully: if the local model can't be resolved, images simply stay as scraped PNGs. Needs `pip install 'md2star[ocr]'`.
 - **Interface in your language**: the CLI and the local GUI read message
   catalogues (stdlib `gettext`, no new dependency), with French complete for
-  the audit's verdict, the line every conversion ends on, and the GUI's chrome.
+  every surface a person reads: the audit's findings and verdict, the line
+  every conversion ends on, the GUI's chrome, every typed error with its hint,
+  and `md2star doctor` — whose `--json` deliberately stays English, since its
+  section names are dictionary keys and its statuses are tokens you grep.
   The triggers differ on purpose: the CLI answers to **`MD2STAR_LANG` only** —
   it must not change the language of output a script greps because `$LANG` says
   so — while the **GUI negotiates `Accept-Language`**, because a browser asking

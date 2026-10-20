@@ -286,8 +286,12 @@ principal : rien de plus à installer.
 - **Jumeau Markdown (sens inverse)** : `md2star twin <fichier>` relit **n'importe quel PDF, ou tout ce que LibreOffice sait convertir en PDF,** en un `<nom>.md` *éditable* **plus un dossier `assets/`**. Les tableaux reviennent en pipe-tables GFM ; chaque image intégrée est extraite puis reliée à nouveau. Ajoutez `--diagrams` (opt-in, nécessite un modèle local, voir le Linter LLM ci-dessous) : les figures en nœuds et flèches sont alors **ré-écrites en Mermaid** via une boucle de comparaison visuelle guidée par la cible. Un candidat est rendu avec le même `mmdc` que le sens direct et comparé à l'original extrait par un modèle de vision local ; le tout itère jusqu'à correspondance ; les autres figures vectorielles nettes sont ré-écrites en SVG éditable de la même façon. Le PNG extrait reste toujours conservé en repli, donc rien n'est jamais perdu. Tout se dégrade proprement : si le modèle local ne peut pas être résolu, les images restent de simples PNG extraits. Nécessite `pip install 'md2star[ocr]'`.
 - **Interface dans votre langue** : la CLI et la GUI locale lisent des
   catalogues de messages (`gettext` de la bibliothèque standard, aucune
-  dépendance nouvelle), le français étant complet pour le verdict de l'audit,
-  la ligne qui termine chaque conversion et l'habillage de la GUI. Les
+  dépendance nouvelle), le français étant complet pour toute surface qu'une
+  personne lit : les constats et le verdict de l'audit, la ligne qui termine
+  chaque conversion, l'habillage de la GUI, chaque erreur typée avec son
+  indice, et `md2star doctor` — dont le `--json` reste volontairement en
+  anglais, ses noms de section étant des clés et ses statuts des jetons que
+  l'on filtre. Les
   déclencheurs diffèrent volontairement : la CLI n'obéit qu'à **`MD2STAR_LANG`**
   — elle ne doit pas changer la langue d'une sortie qu'un script analyse sous
   prétexte que `$LANG` le dit — tandis que la **GUI négocie `Accept-Language`**,

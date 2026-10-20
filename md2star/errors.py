@@ -49,12 +49,22 @@ class Md2starError(Exception):
             the subclass's ``default_hint``; an explicit ``""`` is respected
             and deliberately suppresses the hint.
         """
-        super().__init__(message)
+        # Translated here rather than at the raise site, which is what lets a
+        # call site stay plain English and still reach a French reader: the
+        # lookup happens when the error is *raised*, so the ambient language
+        # (:mod:`md2star.i18n`) is the one in force at that moment rather than
+        # whatever it was at import. A message already interpolated with a path
+        # matches no catalogue entry and passes through untouched — which is
+        # why the few raise sites that interpolate translate their own format
+        # string first.
+        from .i18n import gettext as _  # noqa: PLC0415 — i18n must not import errors
+
+        super().__init__(_(message))
         # ``hint`` is keyword-only (the ``*``) so call sites read self-
         # documenting: ``raise InvalidInputError(msg, hint=...)``. An explicit
         # ``hint=""`` is respected; only ``None`` (the default) falls back to
         # the class default, so a caller can deliberately suppress the hint.
-        self.hint = hint if hint is not None else self.default_hint
+        self.hint = _(hint if hint is not None else self.default_hint)
 
 
 # ── Concrete errors ──────────────────────────────────────────────────────
