@@ -858,17 +858,20 @@ _JUDGE_PROMPT = (
 #: "did replacing the content break anything?". Same schema, so the verdict
 #: feeds the same bounded fixes.
 _CLONE_JUDGE_PROMPT = (
-    "The FIRST image is the TARGET: a page of the designer's own template. The "
-    "SECOND image is the CANDIDATE: that exact page, rebuilt with different "
-    "text and pictures in it. They are meant to be the same composition, so "
-    "ignore the words and the subject matter entirely and judge only what the "
-    "replacement did to the design: is any text overflowing its shape, clipped, "
-    "or running into another; is a region that carried something in the target "
-    "now empty; is an image failing to fill the slot it was given, or distorted; "
-    "is the balance of the page lost. Reply as JSON: matches (true only if the "
-    "candidate is as well-composed as the target), overflow, low_contrast, "
-    "too_empty, image_too_small, and a short discrepancies string (empty if "
-    "matches)."
+    "The FIRST image is the TARGET: a page of the designer's own template, "
+    "carrying their placeholder text and their stock photographs. The SECOND "
+    "image is the CANDIDATE: that same page rebuilt with a real deck's "
+    "content. Their words are meant to be gone and their stock photographs are "
+    "meant to be replaced or absent — never report those as missing, and never "
+    "ask for a picture the candidate was not given. Judge only what the "
+    "rebuild did to the design: text overflowing its shape, clipped at an "
+    "edge, or running into another shape; a picture that is distorted or so "
+    "small in its slot that it reads as lost; text you cannot read against "
+    "what is behind it; or a page so bare that the composition has visibly "
+    "collapsed. Point at the defect or do not report it: when nothing of the "
+    "kind is visible, matches is true. Reply as JSON: matches, overflow, "
+    "low_contrast, too_empty, image_too_small, and a short discrepancies "
+    "string (empty if matches)."
 )
 
 

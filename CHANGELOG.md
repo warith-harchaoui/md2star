@@ -98,6 +98,46 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   out left to right, a stack still top to bottom, and the split design comes
   out in the order it is read.
 
+- **A page the designer drew around a photograph will not take a text
+  slide.** Their stand-in photo has to go — it is their content — but the rest
+  of the page was composed around the shape of it, so taking it out leaves a
+  void where the balance was. Seen on a real template before it was reasoned
+  about: six slides cloned onto split pages, each with half the canvas blank
+  where a photo used to be, and a vision model reporting "too empty" on every
+  one of them. The page is now refused for a slide that has no image, which
+  sends that slide to a page the designer built for words. The mirror refusal
+  (an image with no slot) was already there; this is the same mistake seen
+  from the other end.
+
+- **A page is refused when the deck's text would have to shrink past the
+  legibility floor to fit it.** The designer sized that frame for the
+  designer's line; ours can be three times longer, and a renderer answers
+  overflow by shrinking type — quietly, which is the trap. A title falling
+  from 38 pt to 27 pt is still a title; three bullets squeezed into a kicker
+  meant for four words come out at 9 pt and nobody in the room can read them
+  (seen, measured at ~9 pt by the audit, on a real cloned page). So the
+  question asked before cloning is not "does it overflow" but "how small would
+  it have to get", using the same character model and the same square-root
+  implied-size arithmetic the audit uses after the fact. It is the Kawasaki
+  floor that already governs layout selection, applied one level deeper.
+
+- **A slide with an image takes the page whose picture slot is biggest.**
+  Contain-fitting means the designer's slot is exactly what the reader ends up
+  seeing, so a chart dropped into a thumbnail-sized slot is the most visible
+  way this seam can fail. Among the pages that can carry the slide, the
+  roomiest slot wins; a slide without an image still gets the designer's own
+  order, with the deck-variety preference on top.
+
+- **A visual tie-break may no longer flatten a deck.** Asked slide by slide
+  against the real Jellysmack template, the vision model answered with the
+  same layout six times out of six — and six identical compositions is not
+  what a template that ships twenty-two layouts was drawn for. The visual
+  stage is an arbitration between near-equals, so once a layout already
+  carries half the deck a further override *onto* it is declined and the
+  measured text pick stands (it weighed that slide's own quantities against
+  the layout's capacity). Overrides that move a slide *away* from a crowded
+  layout are untouched. See `md2star.pptx_layout.VISUAL_VARIETY_SHARE`.
+
 ### Changed
 
 - **The audit no longer counts a one-glyph ornament as one of the two text

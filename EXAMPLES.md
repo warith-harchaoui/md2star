@@ -385,12 +385,20 @@ is dropped from the file itself, not merely from the slide, and their
 hyperlinks do not outlive the words they were attached to.
 
 A page that cannot honestly carry a slide is **declined, not half-filled**:
-a three-column design needs at least three bullets, an image slide needs a
-picture slot, and a page with a chart or a table on it is refused outright
-(no replacement can restate someone else's numbers). Declined slides fall
-through to the normal assembler, so the flag only ever adds — and a
-template distributed as layouts alone, with no example pages, builds
-exactly as it would without it.
+a three-column design needs at least three bullets; an image slide needs a
+picture slot, and a page built around a photograph needs an image (their
+stand-in has to go, and the rest of the page was composed around the shape
+of it); and a page with a chart or a table on it is refused outright, since
+no replacement can restate someone else's numbers. A page is also refused
+when your text would have to **shrink past 12 pt** to fit the frames the
+designer sized for their own line — the question asked is not "does it
+overflow" but "how small would it have to get", because a renderer answers
+overflow by quietly shrinking the type. Among the pages that do
+qualify, a slide with an image takes the one whose slot is **biggest** —
+contain-fitting means that slot is the size the reader actually sees.
+Declined slides fall through to the normal assembler, so the flag only ever
+adds — and a template distributed as layouts alone, with no example pages,
+builds exactly as it would without it.
 
 Add `--eyeball-iterations N` and the Ralph Eyeball Loop gets two things it
 does not have on any other path. Its **target** becomes the designer page

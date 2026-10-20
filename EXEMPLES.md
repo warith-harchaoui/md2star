@@ -399,12 +399,22 @@ survivent pas aux mots auxquels ils étaient attachés.
 
 Une page qui ne peut pas porter honnêtement une diapositive est
 **refusée, pas remplie à moitié** : une composition à trois colonnes exige
-au moins trois puces, une diapositive avec image exige un emplacement
-photo, et une page portant un graphique ou un tableau est refusée d'office
-(aucun remplacement ne peut reformuler les chiffres de quelqu'un d'autre).
-Les diapositives refusées repassent par l'assembleur habituel : l'option
-ne fait donc qu'ajouter — et un modèle distribué sans aucune page
-d'exemple se construit exactement comme sans elle.
+au moins trois puces ; une diapositive avec image exige un emplacement
+photo, et une page composée autour d'une photographie exige une image (leur
+photo d'illustration doit partir, or le reste de la page a été composé
+autour de sa forme) ; enfin une page portant un graphique ou un tableau est
+refusée d'office, aucun remplacement ne pouvant reformuler les chiffres de
+quelqu'un d'autre. Une page est également refusée quand votre texte devrait
+**descendre sous 12 pt** pour tenir dans les cadres que le designer a
+dimensionnés pour sa propre ligne : la question posée n'est pas « est-ce
+que ça déborde ? » mais « jusqu'où faudrait-il rétrécir ? », puisqu'un
+moteur de rendu répond au débordement en rapetissant le corps sans rien
+dire. Parmi les pages qui conviennent, une diapositive avec
+image prend celle dont l'emplacement est le **plus grand** — l'ajustement
+par contenance fait que cet emplacement est exactement la taille que le
+lecteur verra. Les diapositives refusées repassent par l'assembleur
+habituel : l'option ne fait donc qu'ajouter — et un modèle distribué sans
+aucune page d'exemple se construit exactement comme sans elle.
 
 Ajoutez `--eyeball-iterations N` et la boucle Ralph Eyeball gagne deux
 choses qu'elle n'a sur aucun autre chemin. Sa **cible** devient la page du

@@ -1054,6 +1054,16 @@ def _alternates_for(s: Slide, catalog_by_name: dict[str, LayoutInfo], k: int) ->
     return out
 
 
+#: A visual tie-break may not, on its own, make a deck monotonous. It is an
+#: arbitration between near-equals, and a designer who shipped twenty layouts
+#: did not draw them so that one could carry every slide — so once a layout
+#: already carries this share of the deck, a further override onto it is
+#: declined and the measured text pick (which weighed *this* slide's own
+#: quantities against the layout's capacity) stands. Overrides that move a
+#: slide *away* from a crowded layout are never affected.
+VISUAL_VARIETY_SHARE = 0.5
+
+
 def visual_confirm(
     slides: list[Slide],
     catalog: list[LayoutInfo],
@@ -1080,6 +1090,13 @@ def visual_confirm(
         When ``True``, only re-check slides whose text-stage confidence is
         missing or below *confidence_threshold* (cheaper, fewer VLM calls);
         when ``False`` (default) every slide gets a visual check.
+
+    See Also
+    --------
+    VISUAL_VARIETY_SHARE : why some overrides are declined. Observed on a real
+        template: asked slide by slide, a vision model answered with the same
+        layout six times out of six, and a deck of six identical compositions
+        is not what any of those slides' content asked for.
     """
     if template is None:
         return
@@ -1125,6 +1142,16 @@ def visual_confirm(
             continue
         best = data.get("best")
         if best in names and best != s.chosen_layout:
+            crowd = sum(1 for o in slides if o is not s and o.chosen_layout == best)
+            if crowd >= max(2, int(len(slides) * VISUAL_VARIETY_SHARE)):
+                logger.info(
+                    "visual tie-break declined for slide %d: %s already carries %d of %d slides",
+                    s.index,
+                    best,
+                    crowd,
+                    len(slides),
+                )
+                continue
             logger.info(
                 "visual tie-break overrides slide %d: %s -> %s (%s)",
                 s.index,

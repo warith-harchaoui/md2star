@@ -503,9 +503,28 @@ distinguishes ornament ("01"), a bare `txBox` (removed), and an autoshape
 (emptied, kept — a chevron is a drawn object); their stand-in photo loses its
 relationship as well as its shape, so it does not travel inside the file. And
 a page that cannot honestly carry a slide is declined before anything is
-cloned — fewer bullets than columns, an image with no slot, a chart or table or
-a group with words in it that no replacement can restate — falling through to
-Seam D, which can place anything. This is what makes the trade safe: it buys a
+cloned — fewer bullets than columns, an image with no slot, **a slot with no
+image**, a chart or table or a group with words in it that no replacement can
+restate — falling through to Seam D, which can place anything.
+
+That middle refusal is the one the live run taught, and it is worth stating on
+its own: a page the designer drew *around a photograph* keeps the shape of that
+photograph in everything else on it. Removing the photo (which we must) leaves
+the void the rest was balanced against, and the first Jellysmack run produced
+six slides with half the canvas blank, with the eyeball loop reporting
+"too empty" on every one — correctly. A text slide belongs on a page built for
+words. Where a page *does* take an image, the one with the biggest slot wins,
+since contain-fitting makes that slot the size the reader sees.
+
+The same run taught one more refusal, and it is §2's capacity model arriving
+one level deeper. A designer frame is sized for the designer's line; ours can
+be three times longer, and PowerPoint answers overflow by shrinking type —
+*quietly*, which is the trap. So the question asked before cloning is not
+"does it overflow" but "how small would it have to get": same character model
+(0.5 em advance, 1.2 spacing) and the same square-root implied-size arithmetic
+`pptx_audit` uses afterwards, with the 12 pt legibility floor as the line.
+A title falling from 38 pt to 27 pt is still a title; three bullets in a
+kicker sized for four words came out at 9 pt, and the audit said so. This is what makes the trade safe: it buys a
 more beautiful deck *only* where the arithmetic says the composition survives,
 and keeps the predictable one everywhere else.
 

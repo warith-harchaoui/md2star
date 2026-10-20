@@ -57,6 +57,7 @@ Author
 from __future__ import annotations
 
 import copy
+import math
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -76,6 +77,7 @@ from .pptx_assemble import (
     placeholder_kind,
 )
 from .pptx_audit import LEGIBLE_MIN_PT
+from .pptx_fit import AVG_CHAR_WIDTH_EM, EMU_PER_PT, FIT_SLACK, LINE_SPACING
 
 logger = get_logger(__name__)
 
@@ -325,6 +327,35 @@ def classify(slide, canvas: tuple[int, int]) -> Roles:
     return roles
 
 
+def fits(shape, lines: list[str]) -> bool:
+    """Whether *lines* can sit in *shape* without dropping under the floor.
+
+    The designer sized that frame for the designer's own line. Ours may be
+    three times as long, and the renderer answers overflow by shrinking the
+    type — quietly, which is the point: a title that falls from 38 pt to 27 pt
+    is still a title, while three bullets squeezed into a one-line kicker come
+    out at 9 pt and nobody in the room can read them.
+
+    So the question is not "does it overflow" but "how small would it have to
+    get". Same character model as the rest of the suite (0.5 em mean advance,
+    1.2 line spacing) and the same square-root implied-size arithmetic as
+    :func:`md2star.pptx_audit._check_overrun` — capacity scales with the square
+    of the point size, since line height *and* characters per line both do.
+    A frame that declares no size at all is left alone: its typography comes
+    from the designer's master, and no signal is not a bad signal.
+    """
+    declared = _max_pt(shape)
+    available = (shape.height or 0) / EMU_PER_PT
+    width_pt = (shape.width or 0) / EMU_PER_PT
+    if declared <= 0 or available <= 0 or width_pt <= 0:
+        return True
+    chars_per_line = max(1.0, width_pt // (declared * AVG_CHAR_WIDTH_EM))
+    needed = sum(math.ceil(len(line) / chars_per_line) for line in lines) * declared * LINE_SPACING
+    if needed <= available * FIT_SLACK:
+        return True
+    return declared * math.sqrt(available / needed) >= LEGIBLE_MIN_PT
+
+
 def peers(bodies: list) -> list:
     """The body frames that are columns of one design, not captions of it."""
     if not bodies:
@@ -348,17 +379,31 @@ def can_carry(roles: Roles, content: Content) -> bool:
       table would ship with the designer's numbers in it;
     * **an image with no slot to put it in** — the picture would land on top of
       a composition that was not drawn around it;
+    * **a slot with no image to put in it** — the mirror case, and the one a
+      vision model catches first: a page the designer drew around a photograph
+      keeps the shape of that photograph, so taking it out (which we must, it
+      is their content) leaves the void the rest of the page was balanced
+      against. A text slide belongs on a page the designer built for text;
     * **fewer bullets than columns** — a three-column design with one filled
-      column reads as broken, so the page is declined and Seam D, which can
-      place anything, takes the slide instead.
+      column reads as broken;
+    * **text that would have to shrink past the legibility floor** to fit the
+      frames the designer sized for their own line (:func:`fits`) — the page
+      that taught this one put three bullets in a kicker meant for four words,
+      and the renderer dutifully set them at 9 pt.
+
+    Every refusal is the same move: the page is declined and Seam D, which can
+    place anything, takes the slide instead.
     """
     if roles.title is None or roles.foreign:
         return False
-    if content.image is not None and not roles.pictures:
+    if (content.image is not None) != bool(roles.pictures):
         return False
     if content.bullets:
         columns = peers(roles.bodies)
-        return bool(columns) and len(content.bullets) >= len(columns)
+        if not columns or len(content.bullets) < len(columns):
+            return False
+        shares = distribute(content.bullets, len(columns))
+        return all(fits(frame, share) for frame, share in zip(columns, shares, strict=True))
     return True
 
 
@@ -619,7 +664,9 @@ def pick_example(
     order, narrowed to those that :func:`can_carry` the content. Among those, a
     page this deck has not cloned yet wins — so a layout demonstrated by three
     pages gives three different-looking slides instead of the same one three
-    times — and otherwise the first feasible page is reused.
+    times — and otherwise the first feasible page is reused. A slide with an
+    image then takes the page offering the **biggest** picture slot, since
+    contain-fitting means that slot is the size the reader actually sees.
 
     *avoid* is the hard exclusion the Ralph Eyeball Loop writes: a page a
     vision model has already judged not to be carrying this slide. *used* is
@@ -627,17 +674,27 @@ def pick_example(
     every feasible page has been refused, the answer is ``None`` and the slide
     falls back to Seam D, which is the safe generic the loop wants anyway.
     """
-    feasible: list[tuple[int, object]] = []
+    feasible: list[tuple[int, object, int]] = []
     for page in pages:
         if page in avoid:
             continue
         slide = examples.get(page)
-        if slide is not None and can_carry(classify(slide, canvas), content):
-            feasible.append((page, slide))
-    for candidate in feasible:
-        if candidate[0] not in used:
-            return candidate
-    return feasible[0] if feasible else None
+        if slide is None:
+            continue
+        roles = classify(slide, canvas)
+        if can_carry(roles, content):
+            # How much room this page gives a picture, which is the one thing
+            # worth ranking the designer's own order by: a chart dropped into a
+            # thumbnail-sized slot is the most visible way this seam can fail,
+            # and contain-fitting means the slot is exactly what the reader
+            # ends up seeing. Zero for a text slide, so their order stands.
+            room = _area(roles.pictures[0]) if (content.image and roles.pictures) else 0
+            feasible.append((page, slide, room))
+    if not feasible:
+        return None
+    fresh = [c for c in feasible if c[0] not in used] or feasible
+    page, slide, _ = max(fresh, key=lambda c: c[2]) if content.image else fresh[0]
+    return page, slide
 
 
 def compose(prs, example, content: Content, *, font_delta: int = 0):

@@ -300,6 +300,38 @@ class TestVisualConfirm:
         assert slides[0].chosen_layout == "Layout B"
         assert slides[0].chosen_why == "fits better"
 
+    def test_declines_an_override_that_would_flatten_the_deck(self, tmp_path: Path) -> None:
+        """A tie-break is an arbitration, not a licence to redesign the deck."""
+        template = tmp_path / "t.pptx"
+        template.write_bytes(b"")
+        slides = pl.segment("# One\n\n- a\n\n***\n\n## Two\n\n- b\n\n***\n\n## Three\n\n- c\n")
+        # Two of the three slides already sit on Layout B, which is the share
+        # past which a further override onto it stops being a tie-break.
+        for slide, layout in zip(slides, ["Layout B", "Layout B", "Layout A"], strict=True):
+            slide.chosen_layout = layout
+        catalog = [
+            pl.LayoutInfo(
+                name="Layout A",
+                archetype="bulleted-content",
+                is_content_layout=True,
+                example_pages=[1],
+            ),
+            pl.LayoutInfo(
+                name="Layout B", archetype="photo-hero", is_content_layout=True, example_pages=[2]
+            ),
+        ]
+        pl.visual_confirm(
+            slides,
+            catalog,
+            chat=lambda *_: {"best": "Layout B", "why": "I like this one"},
+            render=lambda _t, page: f"png-{page}".encode(),
+            template=template,
+        )
+        assert slides[2].chosen_layout == "Layout A"  # declined: already 2 of 3
+        # And the slides it was asked about that are already there stay there,
+        # so declining never moves anything.
+        assert [s.chosen_layout for s in slides[:2]] == ["Layout B", "Layout B"]
+
     def test_keeps_pick_when_render_unavailable(self, tmp_path: Path) -> None:
         template = tmp_path / "t.pptx"
         slides = pl.segment("# T\n\n- a\n")

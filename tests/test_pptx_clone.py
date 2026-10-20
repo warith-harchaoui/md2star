@@ -123,6 +123,10 @@ def designer(workspace: Path) -> Path:
     body.text = "Filler bullet one"
     for line in ("Filler bullet two", "Filler bullet three"):
         body.add_paragraph().text = line
+    # Declared, not inherited — a real designer template states its sizes, and
+    # a stated size is what the capacity check (`fits`) has to work from.
+    for paragraph in body.paragraphs:
+        paragraph.runs[0].font.size = Pt(18)
     chevron = bullets.shapes.add_shape(
         MSO_SHAPE.CHEVRON, Inches(8.0), Inches(1.0), Inches(1.0), Inches(0.6)
     )
@@ -140,6 +144,11 @@ def designer(workspace: Path) -> Path:
     picture.shapes.title.text = "DESIGNER PICTURE FILLER"
     picture.shapes.add_picture(
         str(workspace / "stock.png"), Inches(1.0), Inches(1.8), Inches(5.0), Inches(3.3)
+    )
+    # A second stand-in, smaller: one slide's image fills the big slot, and the
+    # spare has to leave with its relationship.
+    picture.shapes.add_picture(
+        str(workspace / "stock.png"), Inches(6.4), Inches(3.2), Inches(2.4), Inches(1.8)
     )
     caption = picture.shapes.add_textbox(Inches(6.3), Inches(1.8), Inches(3.2), Inches(1.0))
     caption.text_frame.text = "Designer caption lorem ipsum"
@@ -170,9 +179,11 @@ def designer(workspace: Path) -> Path:
     heading.text_frame.paragraphs[0].runs[0].font.size = Pt(28)
     lead = split.shapes.add_textbox(Inches(0.4), Inches(2.0), Inches(2.4), Inches(1.3))
     lead.text_frame.text = "Designer column filler lead"
+    lead.text_frame.paragraphs[0].runs[0].font.size = Pt(14)
     for row, top in enumerate((1.8, 3.2)):
         statement = split.shapes.add_textbox(Inches(3.6), Inches(top), Inches(4.2), Inches(0.7))
         statement.text_frame.text = f"Designer column filler right {row + 1}"
+        statement.text_frame.paragraphs[0].runs[0].font.size = Pt(14)
 
     out = workspace / "designer.pptx"
     prs.save(str(out))
@@ -287,7 +298,11 @@ class TestClassification:
         canvas = (prs.slide_width, prs.slide_height)
         assert pc.classify(cover, canvas).pictures == []  # the logo is furniture
         _, photo_page = _page(designer, 4)
-        assert len(pc.classify(photo_page, canvas).pictures) == 1
+        # Two stand-ins on that page, biggest first — the order pick_example
+        # and compose both rely on.
+        slots = pc.classify(photo_page, canvas).pictures
+        assert len(slots) == 2
+        assert slots[0].width * slots[0].height > slots[1].width * slots[1].height
 
     def test_a_table_is_content_the_seam_cannot_restate(self, designer: Path) -> None:
         prs, page = _page(designer, 6)
@@ -330,15 +345,44 @@ class TestCanCarry:
     def test_a_page_with_a_table_is_declined(self, designer: Path) -> None:
         assert not pc.can_carry(self._roles(designer, 6), pc.Content(title="Anything"))
 
-    def test_an_image_needs_a_slot_to_land_in(self, designer: Path) -> None:
-        content = pc.Content(title="A picture", image=Path("chart.png"))
-        assert not pc.can_carry(self._roles(designer, 2), content)
-        assert pc.can_carry(self._roles(designer, 4), content)
+    def test_an_image_and_a_slot_have_to_arrive_together(self, designer: Path) -> None:
+        picture = pc.Content(title="A picture", image=Path("chart.png"))
+        words = pc.Content(title="Just words", bullets=["one"])
+        # An image with nowhere to land, and a photo page with nothing to put
+        # in it, are the same mistake seen from the two ends.
+        assert not pc.can_carry(self._roles(designer, 2), picture)
+        assert pc.can_carry(self._roles(designer, 4), picture)
+        assert not pc.can_carry(self._roles(designer, 4), words)
 
     def test_three_columns_need_three_bullets(self, designer: Path) -> None:
         roles = self._roles(designer, 3)
         assert not pc.can_carry(roles, pc.Content(title="Steps", bullets=["one", "two"]))
         assert pc.can_carry(roles, pc.Content(title="Steps", bullets=["one", "two", "three"]))
+
+    def test_text_that_would_have_to_shrink_past_the_floor_is_declined(
+        self, designer: Path
+    ) -> None:
+        """The designer sized that frame for the designer's line, not ours."""
+        roles = self._roles(designer, 8)  # the split design's narrow panels
+        short = ["Measure the catalogue", "Re-cut the top decile", "Ship weekly"]
+        assert pc.can_carry(roles, pc.Content(title="Three moves", bullets=short))
+        # The same frames, asked to hold a paragraph each: the renderer would
+        # answer by setting them under 12 pt, which is not an answer. This is
+        # the page that taught the rule, in miniature — three bullets in a
+        # kicker sized for four words.
+        long = [
+            "Measure the catalogue before cutting anything, because the one "
+            "thing nobody can undo later is a re-cut made against numbers "
+            "that were never checked in the first place, and the checking is "
+            "a week of work at most",
+            "Re-cut the top decile first, since that is where the yield is "
+            "concentrated and where an editor's week buys the most, and only "
+            "then work down the tail with whatever capacity is left over",
+            "Ship weekly rather than monthly, which is less about speed than "
+            "about shortening the loop between a cut and the only signal that "
+            "says whether it worked, which is the next week's watch time",
+        ]
+        assert not pc.can_carry(roles, pc.Content(title="Three moves", bullets=long))
 
     def test_a_title_only_page_carries_a_title_only_slide(self, designer: Path) -> None:
         assert pc.can_carry(self._roles(designer, 5), pc.Content(title="Thank you"))
@@ -434,16 +478,26 @@ class TestCompose:
         assert placed.width <= box[2] and placed.height <= box[3]
         assert placed._element._nvXxPr.cNvPr.get("descr") == "A chart"
 
-    def test_an_unfilled_photo_slot_leaves_nothing_behind(
+    def test_a_page_built_around_a_photo_will_not_take_a_text_slide(
+        self, designer: Path, workspace: Path
+    ) -> None:
+        """Their photo has to go, and its absence is a hole in their design."""
+        prs, page = _page(designer, 4)
+        assert pc.compose(prs, page, pc.Content(title="No picture today")) is None
+
+    def test_a_spare_photo_slot_leaves_nothing_behind(
         self, designer: Path, workspace: Path
     ) -> None:
         prs, page = _page(designer, 4)
-        slide = pc.compose(prs, page, pc.Content(title="No picture today"))
-        assert not [s for s in slide.shapes if s.element.tag == qn("p:pic")]
-        # Not just off the slide: off the relationship graph, so the designer's
-        # stand-in photo does not travel inside the saved file either.
+        content = pc.Content(title="Revenue", image=workspace / "chart.png", alt="A chart")
+        slide = pc.compose(prs, page, content)
+        # The page offered two slots and the slide had one picture: the spare
+        # is gone, and not just off the slide — off the relationship graph, so
+        # the designer's stand-in does not travel inside the saved file.
+        pictures = [s for s in slide.shapes if s.element.tag == qn("p:pic")]
+        assert len(pictures) == 1
         images = [r for r in slide.part.rels.values() if r.reltype.endswith("/image")]
-        assert images == []
+        assert len(images) == 1
 
     def test_type_under_the_legibility_floor_is_lifted_to_it(self, designer: Path) -> None:
         prs, page = _page(designer, 3)
@@ -734,7 +788,7 @@ class TestEyeballLoopOnClonedSlides:
             render_template=lambda _t, _p: b"target-png",
             render_deck=lambda _p: dict.fromkeys((1, 2, 3), b"png"),
         )
-        assert prompts and all("rebuilt with different" in p for p in prompts)
+        assert prompts and all("rebuilt with a real deck" in p for p in prompts)
         # And the family-resemblance question is what a non-cloned deck gets.
         plain = pl.segment(_THREE)
         for slide, layout in zip(plain, _PLAN_TWICE, strict=True):
@@ -751,4 +805,4 @@ class TestEyeballLoopOnClonedSlides:
             render_template=lambda _t, _p: b"target-png",
             render_deck=lambda _p: dict.fromkeys((1, 2, 3), b"png"),
         )
-        assert prompts and not any("rebuilt with different" in p for p in prompts)
+        assert prompts and not any("rebuilt with a real deck" in p for p in prompts)
