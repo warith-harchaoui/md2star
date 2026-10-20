@@ -94,6 +94,38 @@ Pandoc » n'a pas de réponse (le chemin inverse et la garantie d'aller-retour),
 et les cas où Pandoc reste vraiment le bon outil, se trouve dans
 **[WHY_MD2STAR_OVER_PANDOC.md](https://github.com/warith-harchaoui/md2star/blob/main/WHY_MD2STAR_OVER_PANDOC.md)**.
 
+## Pourquoi md2star ? (la réponse honnête au « utilise juste un outil IA »)
+
+Gamma, Copilot, [Presenton](https://presenton.ai/) et les systèmes de
+recherche derrière eux ([PPTAgent](https://aclanthology.org/2025.emnlp-main.728/),
+EMNLP 2025) **écrivent la présentation**. md2star n'écrit rien : votre Markdown
+est la source de vérité, le gabarit de votre graphiste est le design, et le
+travail entre les deux consiste à poser l'un sur l'autre. Si vous n'avez encore
+ni les mots ni de gabarit, c'est cette catégorie qu'il vous faut, pas celle-ci.
+
+Là où ce n'est plus une affaire de goût, c'est sur ce qu'on vous rend.
+[SlidesGen-Bench](https://arxiv.org/html/2601.09487) (2026) a mesuré la
+modifiabilité comme un niveau lu dans la structure du fichier lui-même et
+constaté une **barrière structurelle** : sur les systèmes évalués, la force
+esthétique était *inversement* corrélée à la profondeur de modifiabilité, et
+aucun n'était bon aux deux. Une présentation qui a l'air juste et qu'on ne peut
+pas modifier est une photo de présentation. Le pari de md2star est que cette
+barrière vient de ce que l'on *génère* le design au lieu d'en hériter : prenez
+le design du gabarit d'un vrai graphiste et la sortie reste de l'OOXML natif de
+bout en bout — de vrais emplacements, un vrai plan, les notes dans le volet des
+notes, du texte alternatif sur les images.
+
+Et là où ces systèmes vérifient leur propre travail avec un modèle, md2star le
+mesure. [ACE](https://arxiv.org/abs/2608.24103) (2026) pilote sa boucle
+d'auto-correction par un juge en langue naturelle et a besoin d'un « retour au
+pic » pour défaire les régressions que cette boucle produit ; la Ralph Eyeball
+Loop de md2star a la même forme avec **deux yeux**, et c'est l'arithmétique qui
+l'emporte — une mesure ne peut pas préférer une diapositive pire, et elle
+fonctionne encore sans aucun modèle installé.
+
+La comparaison ligne à ligne, notée honnêtement y compris là où md2star perd,
+est dans **[PAYSAGE.md](https://github.com/warith-harchaoui/md2star/blob/main/PAYSAGE.md)**.
+
 ## Démarrage rapide
 
 ```bash

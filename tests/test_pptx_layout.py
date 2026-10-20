@@ -392,3 +392,54 @@ class TestVisualConfirm:
         slides[0].chosen_layout = "Layout A"
         pl.visual_confirm(slides, [], template=None)
         assert slides[0].chosen_layout == "Layout A"
+
+
+class TestWhatALayoutActuallyIs:
+    """A layout is described by the page that demonstrates it, when there is one."""
+
+    def _template(self, tmp_path: Path) -> Path:
+        """A template in the shape a Google Slides export has: no title, ever."""
+        pptx = pytest.importorskip("pptx")
+        from pptx.util import Inches, Pt
+
+        prs = pptx.Presentation()
+        layout = prs.slide_masters[0].slide_layouts[6]  # Blank
+        page = prs.slides.add_slide(layout)
+        heading = page.shapes.add_textbox(Inches(0.5), Inches(0.4), Inches(8.0), Inches(1.2))
+        heading.text_frame.text = "The heading of the slide"
+        heading.text_frame.paragraphs[0].runs[0].font.size = Pt(40)
+        body = page.shapes.add_textbox(Inches(0.5), Inches(2.0), Inches(8.0), Inches(3.0))
+        body.text_frame.text = "Supporting copy the designer wrote"
+        body.text_frame.paragraphs[0].runs[0].font.size = Pt(14)
+        out = tmp_path / "designer.pptx"
+        prs.save(str(out))
+        return out
+
+    def test_the_demonstration_describes_the_layout_the_xml_does_not(self, tmp_path: Path) -> None:
+        template = self._template(tmp_path)
+        blank = next(c for c in pl.extract_layouts(template) if c.name == "Blank")
+        kinds = [p.kind for p in blank.placeholders]
+        # The Blank layout declares nothing at all; its example page shows a
+        # heading over a body, and that is what a capacity model needs.
+        assert "title" in kinds and "body" in kinds
+        title = next(p for p in blank.placeholders if p.kind == "title")
+        assert title.emu is not None and title.emu[1] < 1_000_000  # near the top
+
+    def test_a_layout_nothing_demonstrates_keeps_its_own_declaration(self, tmp_path: Path) -> None:
+        template = self._template(tmp_path)
+        # Every other layout of the stock template has no example page, so it
+        # is still described by its own XML — the fallback, unchanged.
+        content = next(c for c in pl.extract_layouts(template) if c.name == "Title and Content")
+        assert content.example_pages == []
+        assert {p.kind for p in content.placeholders} >= {"ctrTitle"} or any(
+            p.kind in ("title", "body") for p in content.placeholders
+        )
+
+
+class TestACoverIsMeasuredAsOne:
+    def test_segment_marks_the_cover_and_the_closing(self) -> None:
+        slides = pl.segment("# Cover\n\n***\n\n## Middle\n\n- a\n\n***\n\n## Thanks\n")
+        assert [s.title_only for s in slides] == [True, False, True]
+
+    def test_a_single_slide_deck_is_both(self) -> None:
+        assert pl.segment("# Only\n\n- a\n")[0].title_only is True

@@ -552,6 +552,48 @@ kicker sized for four words came out at 9 pt, and the audit said so. This is wha
 more beautiful deck *only* where the arithmetic says the composition survives,
 and keeps the predictable one everywhere else.
 
+### 10.6 The 2026 round, and the measurement that came out of it
+
+Read after shipping Seam E, because the live runs kept raising questions the
+round-4 reading did not answer.
+
+**SlidesGen-Bench** (arXiv 2601.09487) scores decks on computable metrics and
+on a *Presentation Editability Index* (L0–L5) parsed from the file's own
+structure. Taken: the editability axis, now the twelfth column of
+`LANDSCAPE.md`, and its headline finding — across the systems it measured,
+aesthetic strength was **inversely correlated** with editability depth and
+nothing scored well on both, which it calls a structural barrier. That is this
+project's thesis stated by someone else's numbers: the barrier is an artefact
+of *generating* design, and inheriting it from a designer's template is how you
+get out of it (PPTAgent reaches the same top mark by the same route). Still to
+take: its usability score — figure-ground contrast with sRGB linearisation —
+which is exactly the `low_contrast` dimension `eyeball_slides` reports and has
+"no safe automatic fix" for, and exactly the arithmetic `pptx_audit` is missing.
+
+**ACE** (arXiv 2608.24103) is the closest thing to the eyeball loop in the
+literature: a self-correcting editor whose verify signal is a reference-free
+natural-language judge over a structural edit diff, renders attached only when
+needed. Two things are worth recording. Its own deployment needs a *strict-peak
+rollback* to undo the regressions its loop introduces — a loop steered by
+opinion can prefer a worse slide, and the measured verdict added in 3.8.0
+cannot. And its diagnosis of OOXML is right: flat, absolutely positioned,
+a "coordinate-pushing regime" where inserting content forces an agent to
+recompute everyone else's coordinates. ACE answers it with a scene-graph.
+Seam E answers the same complaint by never computing a coordinate at all — it
+clones a page whose coordinates a designer already set, and replaces only the
+content inside them.
+
+**Presenton** is the open-source, self-hostable, bring-your-own-model deck
+generator, and the closest competitor on md2star's own offline ground. The
+difference is upstream of any feature table: it writes the deck, md2star maps
+an authored source onto a template.
+
+Not taken, and worth saying why: SlidesGen-Bench's aesthetic scores (colour
+harmony, colourfulness, visual rhythm). md2star does not design and should not
+be scoring someone's brand palette for colourfulness. The one aesthetic
+measurement that *is* in scope is contrast, because it is legibility rather
+than taste.
+
 ### 10.5 md2pptx (MartinPacker), and PowerPoint Designer
 
 `md2pptx` is the closest direct competitor — pure python-pptx, no Pandoc — and

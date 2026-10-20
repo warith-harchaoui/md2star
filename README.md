@@ -86,6 +86,36 @@ your desk, the one place "just use Pandoc" has no answer (the reverse path plus
 round-trip guarantee), and where Pandoc really is the right tool, is in
 **[WHY_MD2STAR_OVER_PANDOC.md](https://github.com/warith-harchaoui/md2star/blob/main/WHY_MD2STAR_OVER_PANDOC.md)**.
 
+## Why md2star? (the honest "just use an AI deck tool" answer)
+
+Gamma, Copilot, [Presenton](https://presenton.ai/) and the research systems
+behind them ([PPTAgent](https://aclanthology.org/2025.emnlp-main.728/),
+EMNLP 2025) **write the deck**. md2star writes nothing: your Markdown is the
+source of truth, your designer's template is the design, and the job in
+between is mapping one onto the other. If you have neither the words nor a
+template yet, that category is the right tool and this one is not.
+
+Where it stops being a matter of taste is what you get back.
+[SlidesGen-Bench](https://arxiv.org/html/2601.09487) (2026) measured
+editability as a level from the file's own structure and found a **structural
+barrier**: across the systems it scored, aesthetic strength was *inversely*
+correlated with editability depth, and nothing was good at both. A deck that
+looks right and cannot be edited is a picture of a deck. md2star's bet is that
+the barrier is an artefact of *generating* design rather than inheriting it —
+take the design from a human designer's own template and the output stays
+native OOXML the whole way down: real placeholders, a real outline, speaker
+notes where notes go, alt text on the pictures.
+
+And where those systems verify their own work with a model, md2star measures
+it. [ACE](https://arxiv.org/abs/2608.24103) (2026) drives its self-correction
+loop with a natural-language judge and needs a "strict-peak rollback" to undo
+the regressions that loop introduces; md2star's Ralph Eyeball Loop runs the
+same shape with **two eyes**, and the arithmetic one wins — a measurement
+cannot prefer a worse slide, and it still works with no model installed at all.
+
+The row-by-row comparison, scored honestly including where md2star loses, is
+in **[LANDSCAPE.md](https://github.com/warith-harchaoui/md2star/blob/main/LANDSCAPE.md)**.
+
 ## Quick start
 
 ```bash

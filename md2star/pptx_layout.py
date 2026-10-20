@@ -104,6 +104,11 @@ ARCHETYPES: tuple[str, ...] = (
 # ``is_content_layout`` properly.
 _REFERENCE_NAME_HINTS = ("colour", "color", "palette", "logo", "icon", "brand guide")
 
+#: Placeholder kinds PowerPoint fills itself, so they describe no content
+#: region (mirrors :data:`md2star.pptx_assemble.LATENT_KINDS`, which owns the
+#: vocabulary; spelled here because this module must not import the assembler).
+_LATENT_KINDS = frozenset({"dt", "ftr", "sldNum"})
+
 
 # ── data model ────────────────────────────────────────────────────────────────
 @dataclass
@@ -157,6 +162,13 @@ class Slide:
     # (:mod:`md2star.pptx_assemble`) writes back after judging a render against
     # the chosen layout's thumbnail: font_delta (pt, title/body), bullets (max
     # bullet count), img_grow (fractional image box growth). Empty = no change.
+    #: A cover (slide 1) or a closing (slide n) carries its title and nothing
+    #: else, whatever markup the source happens to have under it. Set by
+    #: :func:`segment` so every stage agrees on it: the assembler enforces it,
+    #: the fit model measures it as the big statement it is, and the visual
+    #: tie-break is told what the slide actually contains. A hand-built
+    #: ``Slide`` is taken at its word.
+    title_only: bool = False
     overrides: dict = field(default_factory=dict)
     #: Measured content (:func:`md2star.pptx_fit.measure`), filled by
     #: :func:`select_layouts`. Kept on the slide so the visual stage and the
@@ -275,6 +287,98 @@ def _placeholder_emu(sp: ET.Element) -> tuple[int, int, int, int] | None:
         return None
 
 
+#: A picture covering at least this share of the canvas on an example page is
+#: a content region rather than a logo — same threshold, same reasoning, as
+#: :data:`md2star.pptx_clone.CONTENT_PICTURE_AREA`.
+_PAGE_PICTURE_AREA = 0.04
+
+
+def _declared_pt(sp: ET.Element) -> float:
+    """Largest run size a shape declares, in points (``0`` when inherited)."""
+    sizes = [int(pr.get("sz")) for pr in sp.iter(f"{{{_NS['a']}}}rPr") if pr.get("sz")]
+    return max(sizes, default=0) / 100.0
+
+
+def _shape_text(sp: ET.Element) -> str:
+    return "".join(t.text or "" for t in sp.iter(f"{{{_NS['a']}}}t")).strip()
+
+
+def _page_regions(template: Path, page: int, canvas: tuple[int, int] | None) -> list[Placeholder]:
+    """Describe a layout from the page that demonstrates it, not from its XML.
+
+    Why this exists, measured rather than assumed: on the reference designer
+    template all 39 layouts type **every** placeholder ``body`` and declare no
+    title anywhere — a Google Slides export never marks one — and several
+    describe nothing but an eyebrow label while the slide's real display text
+    lives on the example page as a free text box. ``title2``'s layout declares
+    two boxes 0.33 inch high; its example page sets a 56 pt heading in a box
+    the layout has never heard of.
+
+    A capacity model reading those layouts sees the same thing everywhere.
+    Observed consequence: every layout scored identically, so the geometric
+    ranking could not discriminate at all, a one-line cover was as good a fit
+    as a two-column content design, and the choice fell through to whatever
+    the vision model happened to like.
+
+    So where the template demonstrates a layout, the demonstration is what gets
+    measured: the biggest declared type is the title, the remaining text frames
+    are body regions, and a picture big enough to be content is a ``pic``
+    region. The same reading :func:`md2star.pptx_clone.classify` performs for
+    Seam E, done here with ElementTree so this module stays free of the
+    optional ``python-pptx`` dependency.
+
+    Returns
+    -------
+    list of Placeholder
+        Empty when the page yields nothing usable, which is the caller's
+        signal to keep the layout's own declaration.
+    """
+    with zipfile.ZipFile(template) as z:
+        name = f"ppt/slides/slide{page}.xml"
+        if name not in z.namelist():
+            return []
+        root = ET.fromstring(z.read(name))  # noqa: S314 — trusted local template
+    tree = root.find("./p:cSld/p:spTree", _NS)
+    if tree is None:
+        return []
+
+    canvas_area = max(1, (canvas[0] * canvas[1]) if canvas else 0)
+    texts: list[tuple[ET.Element, tuple[int, int, int, int], float]] = []
+    pictures: list[tuple[int, int, int, int]] = []
+    for sp in tree:
+        tag = sp.tag.split("}")[-1]
+        if tag not in ("sp", "pic"):
+            continue  # a group, a chart, a connector: not a content region
+        box = _placeholder_emu(sp)
+        if box is None:
+            continue  # no explicit geometry on a slide is rare, and unusable
+        if tag == "pic":
+            if canvas and box[2] * box[3] >= _PAGE_PICTURE_AREA * canvas_area:
+                pictures.append(box)
+            continue
+        if _placeholder_kind(sp) in _LATENT_KINDS or not _shape_text(sp):
+            continue  # a date/footer/slide-number, or a shape drawn for its fill
+        texts.append((sp, box, _declared_pt(sp)))
+
+    if not texts:
+        return []
+    # The heading is the biggest type on the page; ties go to whichever sits
+    # higher, because on a page where nothing declares a size the top one is
+    # still the better guess than the first in XML order.
+    title = max(texts, key=lambda row: (row[2], -row[1][1]))
+    regions = [Placeholder(idx=0, kind="title", emu=title[1])]
+    regions += [
+        Placeholder(idx=i, kind="body", emu=box)
+        for i, (sp, box, _pt) in enumerate(texts, start=1)
+        if sp is not title[0]
+    ]
+    regions += [
+        Placeholder(idx=len(texts) + i, kind="pic", emu=box)
+        for i, box in enumerate(pictures, start=1)
+    ]
+    return regions
+
+
 def _layout_placeholders(template: Path, layout_file: str) -> list[Placeholder]:
     """Parse one ``slideLayoutN.xml``'s ``<p:sp>`` placeholders (type/idx/box)."""
     with zipfile.ZipFile(template) as z:
@@ -303,6 +407,14 @@ def extract_layouts(template: Path) -> list[LayoutInfo]:
     No AI, no rendering: pure ``zipfile`` + ``ElementTree`` over the template's
     OOXML parts. Always available, and the first stage of :func:`build_catalog`.
 
+    Each layout is described from the **example page that demonstrates it**
+    when the template has one (:func:`_page_regions`), falling back to the
+    layout part's own placeholders otherwise. That is not a refinement but a
+    correctness fix: a designer template exported from Google Slides types
+    every placeholder ``body`` and sometimes declares nothing but an eyebrow
+    label, which makes every layout measure the same and leaves layout
+    selection with no signal at all.
+
     Enumerates every ``ppt/slideLayouts/slideLayoutN.xml`` part directly (not
     only the layouts some slide happens to use) so a template distributed with
     no example slides at all — just its layouts, e.g. python-pptx's own bundled
@@ -311,6 +423,7 @@ def extract_layouts(template: Path) -> list[LayoutInfo]:
     for it, but its geometry is still extracted and it can still be selected).
     """
     pages = _layout_example_pages(template)
+    canvas = slide_size(template)
     infos: list[LayoutInfo] = []
     seen: set[str] = set()
     for layout_part in _all_layout_files(template):
@@ -319,6 +432,15 @@ def extract_layouts(template: Path) -> list[LayoutInfo]:
             continue  # two parts sharing a designer-authored name — keep the first
         seen.add(name)
         placeholders = _layout_placeholders(template, layout_part.rsplit("/", 1)[-1])
+        # Where the template demonstrates this layout, the demonstration wins:
+        # a designer's own example page describes the layout far better than a
+        # layout part that types everything `body` and sometimes describes only
+        # an eyebrow. See :func:`_page_regions` for the evidence.
+        for page in pages.get(name, []):
+            demonstrated = _page_regions(template, page, canvas)
+            if demonstrated:
+                placeholders = demonstrated
+                break
         # Cheap heuristic used only until (or unless) a VLM caption overrides
         # it in build_catalog(): a designer's own naming is usually a strong
         # enough signal to keep colour/logo/icon reference pages out of the
@@ -802,6 +924,13 @@ def segment(markdown: str) -> list[Slide]:
         )
         if s is not None:
             slides.append(s)
+    if slides:
+        # The one place this rule is written down. It used to live only in the
+        # assembler, which meant the two stages that choose the layout — the
+        # fit model and the visual tie-break — were deciding for a slide with
+        # bullets while the assembler was about to render a title alone.
+        slides[0].title_only = True
+        slides[-1].title_only = True
     return slides
 
 
@@ -921,7 +1050,15 @@ def select_layouts(
         # amount is exactly what decides that. See :mod:`md2star.pptx_fit`.
         listing_lines = []
         for s in group:
-            metrics = pptx_fit.measure(s.title, s.body)
+            # A cover or a closing is measured as what the assembler will
+            # actually place: the title, alone. Measuring its markup instead
+            # asks the fit model to find room for body text nobody will set.
+            metrics = pptx_fit.measure(s.title, "" if s.title_only else s.body)
+            if s.title_only:
+                # And a slide that is a heading and nothing else *is* a big
+                # statement, which is the one case the fit model already knows
+                # wants the stage to itself (see pptx_fit.evaluate).
+                metrics.big_statement = True
             s.metrics = metrics
             ordered = pptx_fit.rank(
                 metrics, content, min_pt=min_pt, canvas=canvas, base_dir=image_base_dir
@@ -1147,7 +1284,15 @@ def visual_confirm(
         prompt = _VISUAL_PROMPT.format(
             names=", ".join(names),
             title=s.title,
-            features=", ".join(s.features) or "plain text",
+            # What the assembler will place, not what the markup happens to
+            # contain: told "features: plain text" for a cover, a vision model
+            # reasonably picks a layout with room for supporting text, and
+            # there will be none.
+            features=(
+                "none — this is a cover/closing slide: the heading alone, no body text"
+                if s.title_only
+                else ", ".join(s.features) or "plain text"
+            ),
         )
         out = chat(prompt, images, _VISUAL_SCHEMA)
         data = out if isinstance(out, dict) else (json.loads(out) if isinstance(out, str) else None)

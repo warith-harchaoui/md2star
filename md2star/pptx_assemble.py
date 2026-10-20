@@ -672,9 +672,13 @@ def assemble(
         # patterns and steal the slide from its actual diagram branch.
         code = parse_code(body) if not mer else None
         img = parse_image(body, image_base_dir) if not mer else None
-        # Cover (1) and closing (n) slides are always title-only, whatever
-        # bullet/table markup the source happens to carry.
-        content = is_content(s.features) and s.index not in (1, n)
+        # Cover and closing slides are always title-only, whatever bullet or
+        # table markup the source happens to carry. The rule itself lives on
+        # the slide now (`Slide.title_only`, set by segment), so the stages
+        # that chose this layout were deciding about the same slide this one
+        # is about to build; the index check stays as the fallback for a
+        # hand-built Slide that never went through segmentation.
+        content = is_content(s.features) and not (s.title_only or s.index in (1, n))
 
         # `or` inside the list, not around it: a one-element list is truthy
         # even when that element is "", so the outer form never fired.

@@ -4,6 +4,57 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.8.0] - 2026-10-20
+
+### Fixed
+
+- **A layout is now described by the page that demonstrates it.** Measured,
+  not assumed: on the reference designer template the geometric ranking
+  returned **the same score for all 39 layouts**. Flat. No signal at all, which
+  is why a one-line cover was as good a fit as a two-column content design and
+  the choice fell through to whatever the vision model liked. The cause is that
+  a template exported from Google Slides types **every** placeholder `body` and
+  marks no title anywhere — and several layouts describe nothing but an eyebrow
+  label while the example page sets its real 56 pt heading in a box the layout
+  has never heard of. So where the template demonstrates a layout, the
+  demonstration is what gets measured: biggest declared type is the title, the
+  other frames are body regions, a picture big enough to be content is a
+  picture region (`md2star.pptx_layout._page_regions`, ElementTree so the
+  module stays free of the optional `python-pptx`). The layout's own
+  declaration remains the fallback for templates nothing demonstrates. Effect
+  on the same deck: the image slide now has exactly **one** layout that fits it
+  (the one whose page carries a real photograph) instead of thirty-nine
+  equivalent ones, and the text slides finally spread out.
+
+- **A cover is measured as the big statement it is.** `pptx_fit` already knew
+  that "a big statement wants the stage to itself", gated on an explicit
+  `{.big}` marker — and a cover or a closing *is* one by construction, since
+  the assembler renders it as a title and nothing else. That rule lived only in
+  the assembler, so the two stages that choose the layout were deciding for a
+  slide with bullets while the assembler was about to place a bare title. It is
+  `Slide.title_only` now, set once by `segment`, read by all three: the fit
+  model measures the title alone, the visual tie-break is told "a cover: the
+  heading alone, no body text", and the assembler keeps an index fallback for
+  hand-built slides. The cover now ranks title-only layouts above content ones
+  by measurement, so a content composition is not even among the candidates a
+  vision model is shown.
+
+### Changed
+
+- **`LANDSCAPE.md` / `PAYSAGE.md`: a twelfth criterion and two new rows**,
+  from a round of reading on the 2026 literature. **Editable** scores what you
+  can still do with the file afterwards, borrowed from
+  [SlidesGen-Bench](https://arxiv.org/html/2601.09487)'s editability index,
+  whose finding deserves repeating: aesthetic strength was *inversely*
+  correlated with editability depth across the systems it measured, and nothing
+  was good at both. **Presenton** joins as the open-source self-hosted deck
+  generator (md2star's own offline ground, opposite answer: it writes the
+  deck), and **PPTAgent** as the research system `--reference-slides` owes its
+  central idea to. README / LISEZMOI gain the sibling of the "just use Pandoc"
+  section — the honest "just use an AI deck tool" answer — and
+  `docs/design/…` §10.6 records what was taken from the round and what was
+  refused.
+
 ## [3.7.0] - 2026-10-20
 
 ### Added

@@ -44,10 +44,12 @@ import sys
 #: The poles are two readings of the same geometry, one per language, because
 #: both maps are drawn from the same ratings. Horizontally, the negative side
 #: loads on maths and citations and the positive side on template fit, the
-#: self-check, branding and Office output: scholarship against design.
-#: Vertically, every loading is positive, highest for the reverse path, working
-#: offline, the one-command CLI and citations, and near zero for template fit
-#: and branding: a complete toolchain against a purely visual one.
+#: self-check, branding, Office output and — since the twelfth criterion was
+#: added — editability, which travels with them: scholarship against design,
+#: with the native editors (Word, LibreOffice) pulled right by it, as they
+#: should be. Vertically, every loading is positive, highest for the reverse
+#: path, working offline, the one-command CLI and citations, and near zero for
+#: template fit and branding: a complete toolchain against a purely visual one.
 FIGURES: dict[str, dict[str, object]] = {
     "landscape": {
         "csv": "assets/landscape.csv",
