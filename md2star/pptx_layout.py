@@ -1032,11 +1032,24 @@ _VISUAL_PROMPT = (
 def _alternates_for(s: Slide, catalog_by_name: dict[str, LayoutInfo], k: int) -> list[LayoutInfo]:
     """Pick up to *k* candidate layouts for the visual tie-break: the current
     pick plus archetype-diverse alternates (so the VLM sees a real choice, not
-    near-duplicates)."""
+    near-duplicates).
+
+    The alternates come from **this slide's own geometric ranking** when it has
+    one (``fit_ranked``, computed by :func:`select_layouts` from the content's
+    measured quantities against each layout's capacity). A tie-break is an
+    arbitration between layouts that can actually hold the slide; offering a
+    vision model whichever layouts the catalog happens to list first is how it
+    ends up recommending a two-column content design for a cover. Without a
+    ranking — a caller that skipped the fit stage — catalog order is the
+    fallback it always was.
+    """
     chosen = catalog_by_name.get(s.chosen_layout) if s.chosen_layout else None
+    fitting = [lay for lay, rep in (getattr(s, "fit_ranked", None) or []) if rep.fits]
     # Only layouts with a rendered example are eligible: without one there is
     # no thumbnail to show the vision model, so it could never be picked.
-    pool = [c for c in catalog_by_name.values() if c.is_content_layout and c.example_pages]
+    pool = [
+        c for c in (fitting or catalog_by_name.values()) if c.is_content_layout and c.example_pages
+    ]
     out: list[LayoutInfo] = [chosen] if chosen else []
     seen_archetypes = {chosen.archetype} if chosen else set()
     for c in pool:

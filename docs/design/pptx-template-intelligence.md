@@ -482,6 +482,18 @@ out as three steps. Each line is a copy of the designer's own first paragraph,
 so bullet glyph, indent level and run typography come along and the seam must
 *not* prefix its own "• " the way Seam D does.
 
+**The loop's other eye.** §4.4 built the Look step as a vision model's reading
+of a render. A render is exactly where the defect that matters most is
+*invisible*: PowerPoint answers overflow by quietly shrinking the type, so the
+picture looks fine and the slide is set at 11 pt. `pptx_audit` has measured
+that all along, on the saved file, with the number in it — it simply was not
+wired to the loop. It is now: every pass audits the deck and turns each finding
+into a verdict in the vocabulary the loop already speaks, and where the two
+eyes disagree the measurement wins. The consequence is the one the project
+cares about most: `--eyeball-iterations N` does real work with **no model, no
+LibreOffice and no network**, which is what the rest of md2star has always
+promised.
+
 **The loop, which is what makes the trade safe.** §4.4 built the eyeball loop
 against the chosen layout's representative thumbnail, because that was the only
 target a layout could offer. A cloned page offers a far better one: the

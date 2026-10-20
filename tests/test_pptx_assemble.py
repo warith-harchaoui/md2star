@@ -17,6 +17,7 @@ pptx = pytest.importorskip("pptx")
 from pptx.enum.shapes import MSO_SHAPE_TYPE  # noqa: E402
 
 from md2star import pptx_assemble as pa  # noqa: E402
+from md2star import pptx_audit as au  # noqa: E402
 from md2star import pptx_layout as pl  # noqa: E402
 
 
@@ -385,3 +386,66 @@ class TestEyeballLoop:
         )
         assert result.placed == 1
         assert slides[0].overrides == {}
+
+
+class TestTheLoopsOtherEye:
+    """The Look step's deterministic half: the audit, fed back as a verdict."""
+
+    def test_a_finding_becomes_a_verdict_the_loop_already_understands(self) -> None:
+        findings = [
+            au.Finding(
+                2, "overrun", "text needs 5.7x its box at 26pt (fits at ~11pt)", "TextBox 2"
+            ),
+            au.Finding(3, "overlap", "two shapes share 40% of the smaller box", "Title 1"),
+        ]
+        verdict = pa._measured_verdict(findings, 2)
+        assert verdict["matches"] is False and verdict["overflow"] is True
+        assert "5.7x" in verdict["discrepancies"]
+        # An overlap is usually a designer's composition and has no bounded
+        # fix here, so it is not turned into a verdict at all.
+        assert pa._measured_verdict(findings, 3) is None
+        assert pa._measured_verdict(findings, 1) is None
+
+    def test_a_measurement_never_loses_to_an_opinion(self) -> None:
+        measured = {"matches": False, "overflow": True, "discrepancies": "needs 5.7x its box"}
+        judged = {"matches": True, "overflow": False, "discrepancies": ""}
+        merged = pa._merged_verdict(measured, judged)
+        # The renderer hides an overrun by shrinking the type, so a model
+        # looking at the picture cannot see what the arithmetic measured.
+        assert merged["matches"] is False and merged["overflow"] is True
+        assert "5.7x" in merged["discrepancies"]
+        assert pa._merged_verdict(None, judged) == judged
+        assert pa._merged_verdict(measured, None) == measured
+
+    def test_a_measured_defect_drives_a_fix_with_no_model_at_all(
+        self, tmp_path: Path, default_template: Path, catalog, monkeypatch
+    ) -> None:
+        slides = pl.segment("# Cover\n\n***\n\n## Where we stand\n\n- a\n- b\n\n***\n\n## Thanks\n")
+        for slide, layout in zip(slides, ["Title Slide", "Title and Content", "Section Header"]):
+            slide.chosen_layout = layout
+        monkeypatch.setattr(
+            au,
+            "audit",
+            lambda _deck, **_kw: [au.Finding(2, "overrun", "needs 3.2x its box at 16pt", "Body")],
+        )
+
+        def unreachable_chat(*_a):
+            raise AssertionError("the arithmetic half must need no model")
+
+        result = pa.eyeball_slides(
+            slides,
+            catalog,
+            default_template,
+            tmp_path / "measured.pptx",
+            max_iterations=1,
+            chat=unreachable_chat,
+            # No renders at all: no LibreOffice, no thumbnails, no vision
+            # model — exactly the machine md2star is meant to still work on.
+            render_deck=lambda _p: {},
+            render_template=lambda *_a: None,
+        )
+        assert result.placed == 3
+        assert slides[1].overrides.get("font_delta") == -4
+        assert slides[1].overrides.get("bullets") == 2
+        # The slides nobody measured a defect on were left alone.
+        assert slides[0].overrides == {} and slides[2].overrides == {}

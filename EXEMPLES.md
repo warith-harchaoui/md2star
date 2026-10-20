@@ -416,8 +416,18 @@ lecteur verra. Les diapositives refusées repassent par l'assembleur
 habituel : l'option ne fait donc qu'ajouter — et un modèle distribué sans
 aucune page d'exemple se construit exactement comme sans elle.
 
-Ajoutez `--eyeball-iterations N` et la boucle Ralph Eyeball gagne deux
-choses qu'elle n'a sur aucun autre chemin. Sa **cible** devient la page du
+La boucle Ralph Eyeball a **deux yeux**, et un seul a besoin d'un modèle.
+Chaque passe exécute l'audit déterministe de md2star sur le fichier qui
+vient d'être écrit — du texte qui réclame plus de place que sa boîte, une
+forme hors du cadre, un corps sous 12 pt — et renvoie chaque constat sous
+forme de verdict. En cas de désaccord, **la mesure l'emporte** : un modèle
+de vision qui regarde un rendu ne peut pas voir un débordement, puisque
+PowerPoint l'a déjà masqué en rapetissant le corps. `--eyeball-iterations
+N` fait donc un vrai travail sur une machine sans modèle de vision, sans
+LibreOffice et sans réseau.
+
+Ajoutez `--eyeball-iterations N` et la boucle gagne deux choses de plus
+qu'elle n'a sur aucun autre chemin. Sa **cible** devient la page du
 designer dont chaque diapositive a été clonée — la candidate est
 littéralement cette page avec vos mots dedans, donc tout écart vu par le
 modèle de vision parle de *cette* diapositive, pas de la famille de mises

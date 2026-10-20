@@ -63,6 +63,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   slot *and* its place in the stacking order) and what must not (every line of
   filler, the stand-in photo, and any page the seam cannot honestly carry).
 
+- **The Ralph Eyeball Loop grew a second eye, and this one needs no model.**
+  Its Look step was a vision model's opinion of a render — and a render is
+  exactly where the defect that matters most is *invisible*, because
+  PowerPoint answers overflow by quietly shrinking the type. md2star already
+  measures that, on the saved file, with the number in it
+  (`md2star.pptx_audit`: text needing 5.7× its box at 26 pt, a shape past the
+  canvas, type under the legibility floor). The loop now runs that audit on
+  every pass and turns each finding into a verdict in the vocabulary it
+  already speaks, so the fixes it already has apply to it. Where the two eyes
+  disagree, **the measurement wins**: a model looking at a picture cannot see
+  what the renderer has already hidden.
+
+  The consequence worth stating plainly: `--eyeball-iterations N` now does
+  real work on a machine with **no vision model, no LibreOffice and no
+  network at all**. The loop used to skip any slide it could not render and
+  judge; it now still measures every one of them. That is md2star's whole
+  offline-by-default posture arriving in the one place it had not reached.
+
 - **The Ralph Eyeball Loop now works on the seam, not just near it.** Two
   changes, and the second is a fix the loop simply did not have before:
 
@@ -127,6 +145,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   way this seam can fail. Among the pages that can carry the slide, the
   roomiest slot wins; a slide without an image still gets the designer's own
   order, with the deck-variety preference on top.
+
+- **The visual tie-break now chooses among layouts that can hold the slide.**
+  Its alternates came from catalog order — whichever layouts happened to be
+  listed first, one per archetype — rather than from the slide's own
+  geometric ranking, which `select_layouts` had already computed from the
+  content's measured quantities against each layout's capacity. That is how a
+  vision model ends up recommending a two-column content design for a cover:
+  it was shown one and asked to pick. Alternates are drawn from
+  `Slide.fit_ranked` now, so a tie-break arbitrates between layouts the fit
+  model says can actually carry the slide. "Measured before it is judged"
+  governed selection already; this stage had been left out of it.
 
 - **A visual tie-break may no longer flatten a deck.** Asked slide by slide
   against the real Jellysmack template, the vision model answered with the

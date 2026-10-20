@@ -300,6 +300,37 @@ class TestVisualConfirm:
         assert slides[0].chosen_layout == "Layout B"
         assert slides[0].chosen_why == "fits better"
 
+    def test_alternates_come_from_the_slide_s_own_fit_ranking(self) -> None:
+        """A tie-break is a choice between layouts that can hold the slide."""
+
+        class _Report:
+            def __init__(self, fits: bool) -> None:
+                self.fits = fits
+
+        catalog = {
+            name: pl.LayoutInfo(
+                name=name, archetype=archetype, is_content_layout=True, example_pages=[page]
+            )
+            for page, (name, archetype) in enumerate(
+                [("Cover", "title-only"), ("Bullets", "bulleted-content"), ("Photo", "photo-hero")],
+                start=1,
+            )
+        }
+        slide = pl.segment("# T\n\n- a\n")[0]
+        slide.chosen_layout = "Cover"
+        # The fit model says the photo layout cannot hold this slide, so the
+        # vision model must never be offered it.
+        slide.fit_ranked = [
+            (catalog["Cover"], _Report(True)),
+            (catalog["Bullets"], _Report(True)),
+            (catalog["Photo"], _Report(False)),
+        ]
+        names = [c.name for c in pl._alternates_for(slide, catalog, 3)]
+        assert names == ["Cover", "Bullets"]
+        # With no ranking at all, catalog order is the fallback it always was.
+        slide.fit_ranked = []
+        assert len(pl._alternates_for(slide, catalog, 3)) == 3
+
     def test_declines_an_override_that_would_flatten_the_deck(self, tmp_path: Path) -> None:
         """A tie-break is an arbitration, not a licence to redesign the deck."""
         template = tmp_path / "t.pptx"

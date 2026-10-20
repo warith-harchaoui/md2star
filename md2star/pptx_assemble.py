@@ -875,6 +875,57 @@ _CLONE_JUDGE_PROMPT = (
 )
 
 
+#: What a model-free finding means in the verdict vocabulary the loop already
+#: speaks. ``overlap`` and ``ghost-placeholder`` are deliberately absent: the
+#: first is usually a designer's composition and the second is swept at
+#: assembly, so neither is something the loop's bounded fixes can improve.
+_FINDING_FLAGS = {
+    "overrun": "overflow",
+    "off-slide": "overflow",
+    "illegible-type": "overflow",
+}
+
+
+def _measured_verdict(findings: list, index: int) -> dict | None:
+    """The deterministic half of the Look step: what arithmetic already knows.
+
+    :mod:`md2star.pptx_audit` measures the saved deck — text that needs more
+    room than its box gives it, a shape past the canvas, type under the
+    legibility floor — and says so with the number in it. That is strictly
+    better evidence than a vision model's opinion on exactly those questions,
+    and it costs nothing: no render, no model, no network. Turning it into a
+    verdict lets the loop act on it with the fixes it already has, and lets it
+    run at all on a machine with no VLM.
+    """
+    mine = [f for f in findings if f.slide == index and f.kind in _FINDING_FLAGS]
+    if not mine:
+        return None
+    verdict: dict = {"matches": False, "discrepancies": "; ".join(str(f) for f in mine)}
+    for finding in mine:
+        verdict[_FINDING_FLAGS[finding.kind]] = True
+    return verdict
+
+
+def _merged_verdict(measured: dict | None, judged: dict | None) -> dict | None:
+    """Combine the measured verdict with the model's, arithmetic winning.
+
+    A vision model looking at a render cannot see an overrun — the renderer has
+    already hidden it by shrinking the type, which is the whole reason the
+    audit reports it with the size that *would* fit. So a measurement never
+    loses to an opinion: anything the audit flagged stays flagged.
+    """
+    if measured is None:
+        return judged
+    if judged is None:
+        return measured
+    merged = {**judged, **{k: v for k, v in measured.items() if v is True}}
+    merged["matches"] = False
+    merged["discrepancies"] = "; ".join(
+        part for part in (measured.get("discrepancies"), judged.get("discrepancies")) if part
+    )
+    return merged
+
+
 def _overrides_for(verdict: dict) -> dict:
     # Bounded, one-shot corrections — never a search: -4pt/2-bullets and
     # +50% image growth are each a single fixed nudge per flagged issue, not
@@ -991,13 +1042,23 @@ def eyeball_slides(
     # the LAST fix is applied (to know whether it actually helped and to
     # report an accurate result), it just never applies a NEW fix on that
     # final pass — see the ``iteration < max_iterations`` guards below.
+    # Imported here, not at module scope: the audit imports THIS module for its
+    # placeholder vocabulary, and the one-way rule is what keeps that from
+    # becoming a cycle (see md2star/pptx_audit.py's own note about it).
+    from .pptx_audit import audit  # noqa: PLC0415
+
     for iteration in range(max_iterations + 1):
         pages = render_deck(out_path)
+        # The Look step has two eyes. This one measures the file and is always
+        # available — no render, no model, no network — so the loop still does
+        # real work on a machine where the other one cannot open.
+        measured = audit(out_path)
         flagged = 0
         for i in target_indices:
             s = by_index.get(i)
             if s is None:
                 continue
+            verdict = _measured_verdict(measured, i)
             candidate_png = pages.get(i)
             info = catalog_by_name.get(s.chosen_layout) if s.chosen_layout else None
             # A cloned slide is judged against the page it was cloned from:
@@ -1005,29 +1066,30 @@ def eyeball_slides(
             # mismatch is about this slide rather than about the layout family.
             # Everything else keeps the layout's representative thumbnail.
             target_page = result.pages.get(i) or (info.rep_page if info else None)
-            if candidate_png is None or target_page is None:
-                continue  # nothing to render/compare against -> skip, don't guess
-            target_png = render_template(template, target_page)
-            if target_png is None:
-                continue
-            # A cloned slide is compared with its own source page, so it gets
-            # the sharper question (see _CLONE_JUDGE_PROMPT); everything else
-            # is still judged against a family resemblance.
-            prompt = _CLONE_JUDGE_PROMPT if i in result.pages else _JUDGE_PROMPT
-            out = chat(prompt, [target_png, candidate_png], _JUDGE_SCHEMA)
-            verdict = (
-                out
-                if isinstance(out, dict)
-                else (json.loads(out) if isinstance(out, str) else None)
+            target_png = (
+                render_template(template, target_page)
+                if (candidate_png is not None and target_page is not None)
+                else None
             )
-            if not verdict:
-                # A transport failure or unparseable reply is indistinguishable
-                # from "matches" to the caller below — surfaced here so a
-                # verbose run doesn't read as a silent, suspiciously perfect
-                # deck when the judge simply never weighed in.
-                logger.debug("eyeball loop: no verdict for slide %d, skipping", s.index)
-                continue
-            if verdict.get("matches"):
+            if target_png is not None:
+                # A cloned slide is compared with its own source page, so it
+                # gets the sharper question (see _CLONE_JUDGE_PROMPT);
+                # everything else is still judged against a family resemblance.
+                prompt = _CLONE_JUDGE_PROMPT if i in result.pages else _JUDGE_PROMPT
+                out = chat(prompt, [target_png, candidate_png], _JUDGE_SCHEMA)
+                judged = (
+                    out
+                    if isinstance(out, dict)
+                    else (json.loads(out) if isinstance(out, str) else None)
+                )
+                if not judged:
+                    # A transport failure or unparseable reply is
+                    # indistinguishable from "matches" to the caller below —
+                    # surfaced here so a verbose run doesn't read as a silent,
+                    # suspiciously perfect deck when the judge never weighed in.
+                    logger.debug("eyeball loop: no verdict for slide %d", s.index)
+                verdict = _merged_verdict(verdict, judged)
+            if not verdict or verdict.get("matches"):
                 continue
             if iteration < max_iterations:
                 ov = _overrides_for(verdict)

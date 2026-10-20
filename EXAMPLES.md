@@ -400,8 +400,17 @@ Declined slides fall through to the normal assembler, so the flag only ever
 adds — and a template distributed as layouts alone, with no example pages,
 builds exactly as it would without it.
 
-Add `--eyeball-iterations N` and the Ralph Eyeball Loop gets two things it
-does not have on any other path. Its **target** becomes the designer page
+The Ralph Eyeball Loop has **two eyes**, and only one of them needs a
+model. Every pass runs md2star's own deterministic audit over the file it
+just wrote — text needing more room than its box gives it, a shape past the
+canvas, type under 12 pt — and feeds each finding back as a verdict. Where
+the two disagree, **the measurement wins**: a vision model looking at a
+render cannot see an overrun, because PowerPoint has already hidden it by
+shrinking the type. So `--eyeball-iterations N` does real work on a machine
+with no vision model, no LibreOffice and no network at all.
+
+Add `--eyeball-iterations N` and the Ralph Eyeball Loop gets two more
+things it does not have on any other path. Its **target** becomes the designer page
 each slide was cloned from — the candidate is literally that page with your
 words in it, so anything the vision model sees as different is about *this*
 slide, not about the layout family. And it gains a **fix it never had**:
