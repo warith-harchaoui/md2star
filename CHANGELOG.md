@@ -75,6 +75,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   disagree, **the measurement wins**: a model looking at a picture cannot see
   what the renderer has already hidden.
 
+  Being a measurement, it also knows the answer and not just the complaint. An
+  `overrun` carries the size the text declares *and* the size that would fit
+  (`Finding.measured_pt` / `Finding.fits_pt`, in `--json` too), so the loop
+  applies the **exact** correction in one shot instead of nudging -4 pt toward
+  it — clamped by the smallest type on the slide, since one `font_delta` is
+  applied to every size and a delta computed from an overrunning 26 pt title
+  would otherwise take 16 pt bullets to 8 pt (which the audit duly reported as
+  illegible, on the first version of this). And when the size that would fit
+  is itself under the legibility floor, or when the correction would blind the
+  bullets,
+  it stops offering to shrink at all: no type size wins that slide, so the
+  verdict says so and the ladder goes looking for a box that is actually big
+  enough — another of the designer's pages, then another layout. A vision
+  model's "it overflows" still earns the old nudge, because that is all it
+  knows.
+
   The consequence worth stating plainly: `--eyeball-iterations N` now does
   real work on a machine with **no vision model, no LibreOffice and no
   network at all**. The loop used to skip any slide it could not render and

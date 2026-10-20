@@ -249,6 +249,17 @@ class TestCommandLine:
         assert payload[0]["kind"] == "overlap"
         assert set(payload[0]) == {"slide", "kind", "detail", "shape"}
 
+    def test_an_overrun_carries_its_two_numbers_in_the_json(self, dense: Path, capsys) -> None:
+        """The size it declares and the size that would fit, as numbers."""
+        import json
+
+        au.main([str(dense), "--json"])
+        payload = json.loads(capsys.readouterr().out)
+        overrun = next(row for row in payload if row["kind"] == "overrun")
+        assert overrun["fits_pt"] < overrun["measured_pt"]
+        # And the numbers say the same thing the sentence does.
+        assert f"{overrun['fits_pt']:.0f}pt" in overrun["detail"]
+
     def test_a_missing_file_is_a_usage_error(self, tmp_path: Path, capsys) -> None:
         assert au.main([str(tmp_path / "nope.pptx")]) == 2
         assert "no such file" in capsys.readouterr().err

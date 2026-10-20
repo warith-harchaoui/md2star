@@ -417,6 +417,59 @@ class TestTheLoopsOtherEye:
         assert pa._merged_verdict(None, judged) == judged
         assert pa._merged_verdict(measured, None) == measured
 
+    def test_the_exact_correction_survives_the_merge(self) -> None:
+        """A number is not a flag, and it was getting dropped as one."""
+        measured = {"matches": False, "overflow": True, "font_delta": -3}
+        judged = {"matches": True, "discrepancies": ""}
+        merged = pa._merged_verdict(measured, judged)
+        assert merged["font_delta"] == -3
+        assert pa._overrides_for(merged)["font_delta"] == -3
+
+    def test_the_measured_eye_applies_the_exact_correction(self) -> None:
+        """Arithmetic knows the size that fits, so it need not guess a step."""
+        findings = [
+            au.Finding(
+                1,
+                "overrun",
+                "text needs 1.3x its box at 26pt (fits at ~23pt)",
+                "Body",
+                measured_pt=26.0,
+                fits_pt=23.0,
+            )
+        ]
+        verdict = pa._measured_verdict(findings, 1)
+        assert verdict["font_delta"] == -3
+        assert pa._overrides_for(verdict)["font_delta"] == -3
+        # A model that only knows "it overflows" still gets the old nudge.
+        assert pa._overrides_for({"overflow": True})["font_delta"] == -4
+
+    def test_a_correction_that_would_blind_the_bullets_is_not_a_correction(self) -> None:
+        """One delta hits every size, so the smallest one is what binds."""
+        # A 26pt title that only fits at 14pt asks for -12 — which would take
+        # the slide's 16pt bullets to 4pt. Observed on a real deck.
+        verdict = {"matches": False, "overflow": True, "font_delta": -12}
+        assert pa._overrides_for(verdict) == {}
+        # The same shortfall on a slide whose smallest type can absorb it is
+        # applied exactly, as it should be.
+        assert pa._overrides_for({"overflow": True, "font_delta": -4})["font_delta"] == -4
+
+    def test_an_overrun_no_shrinking_can_win_asks_for_a_different_box(self) -> None:
+        findings = [
+            au.Finding(
+                1,
+                "overrun",
+                "text needs 5.7x its box at 26pt (fits at ~11pt)",
+                "Body",
+                measured_pt=26.0,
+                fits_pt=11.0,
+            )
+        ]
+        verdict = pa._measured_verdict(findings, 1)
+        assert verdict["beyond_shrinking"] is True
+        # Empty, on purpose: it is what makes the caller's ladder go looking
+        # for a box that is big enough instead of setting 11pt type.
+        assert pa._overrides_for(verdict) == {}
+
     def test_a_measured_defect_drives_a_fix_with_no_model_at_all(
         self, tmp_path: Path, default_template: Path, catalog, monkeypatch
     ) -> None:

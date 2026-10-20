@@ -409,6 +409,14 @@ render cannot see an overrun, because PowerPoint has already hidden it by
 shrinking the type. So `--eyeball-iterations N` does real work on a machine
 with no vision model, no LibreOffice and no network at all.
 
+Being a measurement, that eye also knows the answer and not just the
+complaint. An overrun is reported with the size that *would* fit, so the
+loop applies the exact correction in one shot rather than nudging toward
+it — and when the size that would fit is itself under 12 pt, it stops
+offering to shrink: no type size wins that slide, so it goes looking for a
+box that is actually big enough instead (another of the designer's pages,
+then another layout).
+
 Add `--eyeball-iterations N` and the Ralph Eyeball Loop gets two more
 things it does not have on any other path. Its **target** becomes the designer page
 each slide was cloned from — the candidate is literally that page with your

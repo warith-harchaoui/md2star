@@ -903,6 +903,28 @@ def _measured_verdict(findings: list, index: int) -> dict | None:
     verdict: dict = {"matches": False, "discrepancies": "; ".join(str(f) for f in mine)}
     for finding in mine:
         verdict[_FINDING_FLAGS[finding.kind]] = True
+    # An overrun is the one finding that comes with its own answer: the audit
+    # has already computed the size that *would* fit. Two things follow, and
+    # both are better than the blind nudge a vision model's "it overflows"
+    # can earn.
+    # Function-level, like every other reference to the audit from here: it
+    # imports this module for its placeholder vocabulary, so the one-way rule
+    # is what keeps the pair from forming a cycle.
+    from .pptx_audit import LEGIBLE_MIN_PT  # noqa: PLC0415
+
+    sized = [f for f in mine if f.fits_pt and f.measured_pt]
+    if sized:
+        worst = min(sized, key=lambda f: f.fits_pt)
+        if worst.fits_pt < LEGIBLE_MIN_PT:
+            # No amount of shrinking wins this one: at the size that would fit,
+            # nobody in the room can read it. Say so, so the ladder skips the
+            # font nudge and goes looking for a box that is actually big enough
+            # — another of the designer's pages, or another layout.
+            verdict["beyond_shrinking"] = True
+        else:
+            # Exactly the correction, in one shot. The loop still never
+            # searches; it simply no longer has to guess the step.
+            verdict["font_delta"] = int(worst.fits_pt - worst.measured_pt)
     return verdict
 
 
@@ -918,12 +940,24 @@ def _merged_verdict(measured: dict | None, judged: dict | None) -> dict | None:
         return judged
     if judged is None:
         return measured
-    merged = {**judged, **{k: v for k, v in measured.items() if v is True}}
+    # Everything the measurement actually says, not only its True flags: the
+    # exact font delta it computed is an int, and dropping it here is how a
+    # slide that had a precise answer ends up with the model's blind -4pt.
+    informative = {k: v for k, v in measured.items() if v not in (None, False, "")}
+    merged = {**judged, **informative}
     merged["matches"] = False
     merged["discrepancies"] = "; ".join(
         part for part in (measured.get("discrepancies"), judged.get("discrepancies")) if part
     )
     return merged
+
+
+#: The smallest type the assembler sets on a content slide — its bullets. A
+#: ``font_delta`` is one number applied to *every* size on the slide, so this
+#: is the one that binds: a delta computed from an overrunning 26 pt title
+#: would take 16 pt bullets to 8 pt, which the audit then reports as illegible
+#: (observed, on a real deck, from the first version of the exact correction).
+SMALLEST_BASE_PT = 16
 
 
 def _overrides_for(verdict: dict) -> dict:
@@ -932,9 +966,25 @@ def _overrides_for(verdict: dict) -> dict:
     # a tuned parameter the loop iterates toward. low_contrast/too_empty are
     # reported to the caller in ``discrepancies`` but have no safe automatic
     # fix here (a layout swap, not a font/bullet tweak, is what they need).
+    from .pptx_audit import LEGIBLE_MIN_PT  # noqa: PLC0415 — one-way, see above
+
     ov: dict = {}
+    if verdict.get("beyond_shrinking"):
+        # Measured, and measured as unwinnable by type size: leaving this
+        # empty is what lets the caller's ladder move the slide instead.
+        return ov
     if verdict.get("overflow"):
-        ov["font_delta"] = -4
+        # The measured eye knows the exact step (see _measured_verdict); the
+        # model's eye only knows that something overflowed, and -4pt is the
+        # nudge it has always earned.
+        delta = int(verdict.get("font_delta", -4))
+        if SMALLEST_BASE_PT + delta < LEGIBLE_MIN_PT:
+            # The exact correction would make the smallest type on the slide
+            # unreadable, which is not a correction. Same answer as
+            # `beyond_shrinking`, reached from the other direction: nothing
+            # here fixes it, so let the ladder go find a bigger box.
+            return ov
+        ov["font_delta"] = delta
         ov["bullets"] = 2
     if verdict.get("image_too_small"):
         ov["img_grow"] = 0.5

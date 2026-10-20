@@ -426,6 +426,14 @@ PowerPoint l'a déjà masqué en rapetissant le corps. `--eyeball-iterations
 N` fait donc un vrai travail sur une machine sans modèle de vision, sans
 LibreOffice et sans réseau.
 
+Étant une mesure, cet œil connaît aussi la réponse et pas seulement le
+grief. Un débordement est signalé avec la taille qui, elle, tiendrait : la
+boucle applique donc la correction exacte d'un coup au lieu de tâtonner
+vers elle — et quand cette taille passe elle-même sous 12 pt, elle cesse de
+proposer de rétrécir : aucun corps ne gagne cette diapositive, elle part
+donc chercher une boîte réellement assez grande (une autre page du
+designer, puis une autre mise en page).
+
 Ajoutez `--eyeball-iterations N` et la boucle gagne deux choses de plus
 qu'elle n'a sur aucun autre chemin. Sa **cible** devient la page du
 designer dont chaque diapositive a été clonée — la candidate est

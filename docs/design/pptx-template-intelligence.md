@@ -494,6 +494,18 @@ cares about most: `--eyeball-iterations N` does real work with **no model, no
 LibreOffice and no network**, which is what the rest of md2star has always
 promised.
 
+A measurement also answers rather than complains, which changes the fix ladder
+§4.4 specified. An `overrun` carries the size that would fit, so the exact
+correction is applied in one shot instead of the -4 pt nudge a model's "it
+overflows" earns — still one shot, still never a search, simply no longer
+guessing the step. And when the size that would fit is itself under the
+legibility floor, the loop stops offering to shrink: no type size wins that
+slide, so the verdict says so and the ladder moves to the next rung (another
+example page, then another layout). That is the difference between a loop that
+converges and one that nudges until its budget runs out, which is exactly what
+the Jellysmack run did before this: 26 pt to 22 pt, overflow 5.7x to 3.3x, out
+of iterations.
+
 **The loop, which is what makes the trade safe.** §4.4 built the eyeball loop
 against the chosen layout's representative thumbnail, because that was the only
 target a layout could offer. A cloned page offers a far better one: the

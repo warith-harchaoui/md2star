@@ -108,12 +108,22 @@ class Finding:
         A sentence a human can act on, with the measurement in it.
     shape : str
         The offending shape's name, when a single shape owns the finding.
+    measured_pt, fits_pt : float or None
+        An ``overrun``'s declared size and the size that would fit. ``None``
+        for every other kind, where the question does not arise.
     """
 
     slide: int
     kind: str
     detail: str
     shape: str = ""
+    #: For an ``overrun``: the size the text declares, and the size that would
+    #: fit. Carried as numbers, not only inside *detail*, because the eyeball
+    #: loop consumes this (see
+    #: :func:`md2star.pptx_assemble._measured_verdict`) and a loop that reads
+    #: them can apply the exact correction instead of nudging toward it.
+    measured_pt: float | None = None
+    fits_pt: float | None = None
 
     def __str__(self) -> str:
         where = f" [{self.shape}]" if self.shape else ""
@@ -276,6 +286,8 @@ def _check_overrun(index: int, shape, box) -> list[Finding]:
             f"text needs {needed / available:.1f}x its box at {largest:g}pt "
             f"(fits at ~{implied:.0f}pt)",
             shape.name,
+            measured_pt=largest,
+            fits_pt=implied,
         )
     ]
 
@@ -451,7 +463,11 @@ def main(argv: list[str] | None = None) -> int:
 
     slides = len(Presentation(str(deck)).slides)
     if args.json:
-        print(json.dumps([vars(f) for f in findings], indent=2, ensure_ascii=False))
+        # Null-free: `measured_pt` / `fits_pt` only exist on an overrun, and a
+        # consumer should see a key when it means something rather than a
+        # column of nulls on every other kind.
+        payload = [{k: v for k, v in vars(f).items() if v is not None} for f in findings]
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
     else:
         for finding in findings:
             print(finding)
