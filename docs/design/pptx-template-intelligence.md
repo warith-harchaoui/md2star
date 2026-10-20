@@ -482,6 +482,21 @@ out as three steps. Each line is a copy of the designer's own first paragraph,
 so bullet glyph, indent level and run typography come along and the seam must
 *not* prefix its own "• " the way Seam D does.
 
+**The loop, which is what makes the trade safe.** §4.4 built the eyeball loop
+against the chosen layout's representative thumbnail, because that was the only
+target a layout could offer. A cloned page offers a far better one: the
+candidate is *that page* with the deck's content in it, so the comparison is
+exact and a discrepancy is about this slide rather than about the layout
+family. The loop also gains the fix §4.4 said it lacked — "`low_contrast` /
+`too_empty` ... need a layout swap, not a font/bullet tweak" — without the
+violence of a swap: **move the slide to another of the designer's
+demonstrations of the same layout**. A template that shows one layout five ways
+has given five compositions to try, and only when every one has been judged and
+refused does the slide fall through to a layout swap and then to Seam D. The
+pages used are reported on `AssembleResult.pages` rather than written back onto
+the `Slide` models, so assembly stays a pure function of them (the property
+`tests/test_pptx_idempotence.py` pins).
+
 **The refusals, which are the real design.** A template's filler text is the
 designer's copy, so every frame is filled or retired, and retiring
 distinguishes ornament ("01"), a bare `txBox` (removed), and an autoshape

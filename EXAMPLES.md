@@ -392,6 +392,32 @@ through to the normal assembler, so the flag only ever adds — and a
 template distributed as layouts alone, with no example pages, builds
 exactly as it would without it.
 
+Add `--eyeball-iterations N` and the Ralph Eyeball Loop gets two things it
+does not have on any other path. Its **target** becomes the designer page
+each slide was cloned from — the candidate is literally that page with your
+words in it, so anything the vision model sees as different is about *this*
+slide, not about the layout family. And it gains a **fix it never had**:
+when a slide is flagged with no bounded correction to apply (`too_empty`
+and a misalignment never had one), it moves that slide onto **another of
+the designer's demonstrations of the same layout** before considering a
+layout swap.
+
+```bash
+md2pptx talk.md --template ./brand/Company-Template.pptx \
+    --smart-layout --reference-slides --eyeball-iterations 2
+```
+
+```text
+eyeball loop: slide 4 — example page 31 is not carrying it (a void on the
+  right half); trying another page of Split1_lime
+```
+
+A designer who demonstrated one layout five ways has given you five
+compositions; reaching for another of theirs is a smaller and truer
+correction than abandoning the layout they chose. Only when every page has
+been judged and refused does the slide fall through — first to a different
+layout, then to the bare-layout assembler, which can always place it.
+
 ### Speaker notes
 
 A Pandoc `::: notes` block is the presenter's script, and it goes to the

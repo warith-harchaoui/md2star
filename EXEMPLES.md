@@ -406,6 +406,34 @@ Les diapositives refusées repassent par l'assembleur habituel : l'option
 ne fait donc qu'ajouter — et un modèle distribué sans aucune page
 d'exemple se construit exactement comme sans elle.
 
+Ajoutez `--eyeball-iterations N` et la boucle Ralph Eyeball gagne deux
+choses qu'elle n'a sur aucun autre chemin. Sa **cible** devient la page du
+designer dont chaque diapositive a été clonée — la candidate est
+littéralement cette page avec vos mots dedans, donc tout écart vu par le
+modèle de vision parle de *cette* diapositive, pas de la famille de mises
+en page. Et elle gagne un **correctif qu'elle n'avait pas** : quand une
+diapositive est signalée sans correction bornée applicable (`too_empty` et
+un défaut d'alignement n'en ont jamais eu), la boucle la déplace sur **une
+autre démonstration de la même mise en page par le designer** avant
+d'envisager un changement de mise en page.
+
+```bash
+md2pptx presentation.md --template ./marque/Modele-Entreprise.pptx \
+    --smart-layout --reference-slides --eyeball-iterations 2
+```
+
+```text
+eyeball loop: slide 4 — example page 31 is not carrying it (a void on the
+  right half); trying another page of Split1_lime
+```
+
+Un designer qui a démontré une mise en page de cinq façons vous a donné
+cinq compositions : aller en chercher une autre de *lui* est une correction
+plus petite et plus fidèle que d'abandonner la mise en page qu'il a
+choisie. Ce n'est qu'une fois toutes les pages jugées puis refusées que la
+diapositive retombe — d'abord sur une autre mise en page, enfin sur
+l'assembleur nu, qui sait toujours la placer.
+
 ### Notes de l'orateur
 
 Un bloc Pandoc `::: notes` est le script de l'orateur, et il part dans le

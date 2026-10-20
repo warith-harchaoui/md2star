@@ -98,6 +98,10 @@ def designer(workspace: Path) -> Path:
     5. ``Section Header`` — a divider, title only.
     6. ``Two Content`` — a page with a table on it, which no replacement can
        restate.
+    7. ``Title and Content`` again — a *second* example of one layout, so the
+       eyeball loop has another composition to move a slide onto.
+    8. ``Blank`` — a split design: a lead-in panel left, two statements
+       stacked right, which is where reading order stops being ``(top, left)``.
     """
     prs = pptx.Presentation()
     layouts = {layout.name: layout for m in prs.slide_masters for layout in m.slide_layouts}
@@ -146,6 +150,29 @@ def designer(workspace: Path) -> Path:
     tabled = prs.slides.add_slide(layouts["Two Content"])
     tabled.shapes.title.text = "DESIGNER TABLE FILLER"
     tabled.shapes.add_table(2, 2, Inches(1.0), Inches(2.0), Inches(6.0), Inches(2.0))
+
+    # 7. A split design, in the proportions a real one has: a lead-in panel on
+    #    the left and two statements stacked on the right. Sorting its frames
+    #    by (top, left) interleaves the halves, which is the defect a live run
+    #    on a designer template surfaced.
+    # 8. A SECOND example of the bullets layout, so one layout offers the
+    #    eyeball loop a choice of compositions — which is the whole point of
+    #    its page-move fix, and what `rep_page` (always the first) cannot see.
+    second = prs.slides.add_slide(layouts["Title and Content"])
+    second.shapes.title.text = "DESIGNER SECOND BULLETS FILLER"
+    second_body = second.placeholders[1].text_frame
+    second_body.text = "Filler alternative one"
+    second_body.add_paragraph().text = "Filler alternative two"
+
+    split = prs.slides.add_slide(layouts["Blank"])
+    heading = split.shapes.add_textbox(Inches(0.3), Inches(0.3), Inches(2.6), Inches(0.6))
+    heading.text_frame.text = "DESIGNER SPLIT FILLER"
+    heading.text_frame.paragraphs[0].runs[0].font.size = Pt(28)
+    lead = split.shapes.add_textbox(Inches(0.4), Inches(2.0), Inches(2.4), Inches(1.3))
+    lead.text_frame.text = "Designer column filler lead"
+    for row, top in enumerate((1.8, 3.2)):
+        statement = split.shapes.add_textbox(Inches(3.6), Inches(top), Inches(4.2), Inches(0.7))
+        statement.text_frame.text = f"Designer column filler right {row + 1}"
 
     out = workspace / "designer.pptx"
     prs.save(str(out))
@@ -234,7 +261,7 @@ def _page(designer: Path, number: int):
 class TestExamplePages:
     def test_pages_are_keyed_the_way_the_catalog_numbers_them(self, designer: Path) -> None:
         prs = pptx.Presentation(str(designer))
-        assert set(pc.example_slides(prs)) == set(range(1, 7))
+        assert set(pc.example_slides(prs)) == set(range(1, 9))
         # The catalog's own numbering has to agree, since that is what the
         # assembler looks pages up by.
         catalogued = {page for info in pl.extract_layouts(designer) for page in info.example_pages}
@@ -272,6 +299,19 @@ class TestClassification:
         assert not pc.classify(page, canvas).foreign
         _add_group_with_words(page)
         assert pc.classify(page, canvas).foreign
+
+    def test_a_split_design_reads_down_each_panel_not_across_them(self, designer: Path) -> None:
+        prs, split = _page(designer, 8)
+        roles = pc.classify(split, (prs.slide_width, prs.slide_height))
+        assert roles.title.text_frame.text == "DESIGNER SPLIT FILLER"
+        # Left panel first, then the right panel top to bottom — not the
+        # interleaving that sorting by (top, left) would give, where the
+        # right-hand statement at y=1.8 would come before the lead at y=2.0.
+        assert [shape.text_frame.text for shape in roles.bodies] == [
+            "Designer column filler lead",
+            "Designer column filler right 1",
+            "Designer column filler right 2",
+        ]
 
     def test_columns_of_one_design_are_peers_and_a_caption_is_not(self, designer: Path) -> None:
         prs, steps = _page(designer, 3)
@@ -346,7 +386,7 @@ class TestCompose:
         prs, steps = _page(designer, 3)
         assert pc.compose(prs, steps, pc.Content(title="Steps", bullets=["only one"])) is None
         # And refusing left nothing behind for the caller to clean up.
-        assert len(prs.slides._sldIdLst) == 6
+        assert len(prs.slides._sldIdLst) == 8
 
     def test_bullets_land_one_per_column(self, designer: Path) -> None:
         prs, steps = _page(designer, 3)
@@ -531,3 +571,184 @@ class TestInheritedLinks:
         run.hyperlink.address = "https://designer.example/their-deck"
         slide = pc.compose(prs, page, pc.Content(title="Where we stand", bullets=["Revenue up"]))
         assert not list(slide.element.iter(qn("a:hlinkClick")))
+
+
+# ── the Ralph Eyeball Loop, on this seam ─────────────────────────────────────
+#: Two slides, both wanting the layout the fixture demonstrates twice.
+_TWO_BULLET_SLIDES = """\
+# Where we stand
+
+- Revenue up 18% year on year
+- Churn flat at 2.1%
+
+***
+
+## What we do next
+
+- Re-cut the top decile
+- Ship weekly
+"""
+
+
+#: A cover, a bullets slide on the twice-demonstrated layout, and a closing —
+#: so the slide under judgement is a real content slide rather than a cover,
+#: whose bullets the assembler drops by design.
+_THREE = """\
+# Creator Economics
+
+***
+
+## Where we stand
+
+- Revenue up 18% year on year
+- Churn flat at 2.1%
+
+***
+
+## Thank you
+"""
+_PLAN_TWICE = ["Title Slide", "Title and Content", "Section Header"]
+
+
+def _planned(designer: Path, workspace: Path, name: str, plan: list[str], *, assemble: bool = True):
+    """Segment `_THREE`, pin *plan* on it, and optionally assemble it."""
+    slides = pl.segment(_THREE)
+    for slide, layout in zip(slides, plan, strict=True):
+        slide.chosen_layout = layout
+    if not assemble:
+        return slides, None
+    return slides, pa.assemble(
+        slides,
+        pl.extract_layouts(designer),
+        designer,
+        workspace / name,
+        image_base_dir=workspace,
+        reference_slides=True,
+    )
+
+
+class TestEyeballLoopOnClonedSlides:
+    def test_a_slide_is_judged_against_the_page_it_was_cloned_from(
+        self, designer: Path, workspace: Path
+    ) -> None:
+        """Not the layout's first example — the one this slide actually used."""
+        slides = pl.segment(_TWO_BULLET_SLIDES)
+        for slide in slides:
+            slide.chosen_layout = "Title and Content"
+        asked: list[int] = []
+
+        def render_template(_template, page):
+            asked.append(page)
+            return b"target-png"
+
+        pa.eyeball_slides(
+            slides,
+            pl.extract_layouts(designer),
+            designer,
+            workspace / "judged.pptx",
+            max_iterations=0,
+            image_base_dir=workspace,
+            reference_slides=True,
+            chat=lambda *_a: {"matches": True},
+            render_template=render_template,
+            render_deck=lambda _p: {1: b"png", 2: b"png"},
+        )
+        # The two slides cloned the layout's two different example pages, so
+        # both were offered as targets. `rep_page` alone is always the first,
+        # and would have shown the judge the wrong page for the second slide.
+        assert set(asked) == {2, 7}
+
+    def test_a_page_that_is_not_carrying_a_slide_is_swapped_for_another(
+        self, designer: Path, workspace: Path
+    ) -> None:
+        """The designer demonstrated this layout twice; try their other one."""
+        _, first = _planned(designer, workspace, "first.pptx", _PLAN_TWICE)
+        slides, _ = _planned(designer, workspace, "moved.pptx", _PLAN_TWICE, assemble=False)
+        result = pa.eyeball_slides(
+            slides,
+            pl.extract_layouts(designer),
+            designer,
+            workspace / "moved.pptx",
+            indices=[2],  # judge only the bullets slide
+            max_iterations=1,
+            image_base_dir=workspace,
+            reference_slides=True,
+            # `too_empty` has no bounded pixel-level fix, which is exactly the
+            # verdict the page move exists to answer.
+            chat=lambda *_a: {"matches": False, "too_empty": True, "discrepancies": "a void"},
+            render_template=lambda _t, _p: b"target-png",
+            render_deck=lambda _p: dict.fromkeys((1, 2, 3), b"png"),
+        )
+        assert first.pages[2] == 2  # the designer's first demonstration
+        assert result.pages[2] == 7  # moved to their other one, same layout
+        assert slides[1].chosen_layout == "Title and Content"  # not a layout swap
+
+    def test_when_every_page_is_refused_the_slide_falls_back_to_seam_d(
+        self, designer: Path, workspace: Path
+    ) -> None:
+        slides, _ = _planned(designer, workspace, "exhausted.pptx", _PLAN_TWICE, assemble=False)
+        result = pa.eyeball_slides(
+            slides,
+            pl.extract_layouts(designer),
+            designer,
+            workspace / "exhausted.pptx",
+            indices=[2],
+            max_iterations=3,
+            image_base_dir=workspace,
+            reference_slides=True,
+            chat=lambda *_a: {"matches": False, "too_empty": True, "discrepancies": "a void"},
+            render_template=lambda _t, _p: b"target-png",
+            render_deck=lambda _p: dict.fromkeys((1, 2, 3), b"png"),
+            allow_reselect=False,
+        )
+        # Both demonstrations judged and refused: the slide is still in the
+        # deck, built on the bare layout, which is the safe generic this loop
+        # has always fallen back to. The slides nobody complained about keep
+        # their cloned pages.
+        assert result.placed == 3
+        assert 2 not in result.pages
+        text = "\n".join(_all_text(result.pptx_path))
+        assert "Revenue up 18% year on year" in text
+        assert not [marker for marker in FILLER if marker in text]
+
+    def test_a_cloned_slide_gets_the_sharper_question(
+        self, designer: Path, workspace: Path
+    ) -> None:
+        """Same page, different content — so ask what the replacement broke."""
+        slides, _ = _planned(designer, workspace, "asked.pptx", _PLAN_TWICE, assemble=False)
+        prompts: list[str] = []
+
+        def record(prompt, _images, _schema):
+            prompts.append(prompt)
+            return {"matches": True}
+
+        pa.eyeball_slides(
+            slides,
+            pl.extract_layouts(designer),
+            designer,
+            workspace / "asked.pptx",
+            max_iterations=0,
+            image_base_dir=workspace,
+            reference_slides=True,
+            chat=record,
+            render_template=lambda _t, _p: b"target-png",
+            render_deck=lambda _p: dict.fromkeys((1, 2, 3), b"png"),
+        )
+        assert prompts and all("rebuilt with different" in p for p in prompts)
+        # And the family-resemblance question is what a non-cloned deck gets.
+        plain = pl.segment(_THREE)
+        for slide, layout in zip(plain, _PLAN_TWICE, strict=True):
+            slide.chosen_layout = layout
+        prompts.clear()
+        pa.eyeball_slides(
+            plain,
+            pl.extract_layouts(designer),
+            designer,
+            workspace / "plain.pptx",
+            max_iterations=0,
+            image_base_dir=workspace,
+            chat=record,
+            render_template=lambda _t, _p: b"target-png",
+            render_deck=lambda _p: dict.fromkeys((1, 2, 3), b"png"),
+        )
+        assert prompts and not any("rebuilt with different" in p for p in prompts)

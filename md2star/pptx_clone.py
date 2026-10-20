@@ -132,7 +132,8 @@ class Roles:
     #: Where the slide's heading goes: the designer's own title placeholder
     #: when the page has one, else its largest, highest type.
     title: object | None = None
-    #: Text frames that can carry bullets, in reading order (top, then left).
+    #: Text frames that can carry bullets, in reading order
+    #: (:func:`reading_order`: columns left to right, rows top to bottom).
     bodies: list = field(default_factory=list)
     #: Pictures big enough to be content slots, biggest first.
     pictures: list = field(default_factory=list)
@@ -236,6 +237,40 @@ def _max_pt(shape) -> float:
     return max(sizes, default=0.0)
 
 
+def _overlaps_horizontally(a, b) -> bool:
+    """Whether two frames occupy the same vertical band of the slide."""
+    left_a, left_b = (a.left or 0), (b.left or 0)
+    right_a, right_b = left_a + (a.width or 0), left_b + (b.width or 0)
+    shared = min(right_a, right_b) - max(left_a, left_b)
+    narrower = min((a.width or 0), (b.width or 0))
+    return narrower > 0 and shared > 0.5 * narrower
+
+
+def reading_order(shapes: list) -> list:
+    """Order frames the way a reader walks them: columns first, then rows.
+
+    Sorting by ``(top, left)`` is right for a row of columns and wrong for a
+    split design, where it interleaves the two halves — the left panel's one
+    line landing between the right panel's two. Found on a real template, not
+    reasoned about: a cloned Jellysmack split page took bullet 2 into its lime
+    panel and bullets 1 and 3 into the black half.
+
+    So frames are grouped into **columns** (overlapping vertical bands), the
+    columns run left to right, and each column runs top to bottom. A single row
+    of boxes degenerates to left-to-right, a single stack to top-to-bottom, and
+    the split design comes out in the order a reader actually reads it.
+    """
+    columns: list[list] = []
+    for shape in sorted(shapes, key=lambda s: s.left or 0):
+        for column in columns:
+            if _overlaps_horizontally(column[0], shape):
+                column.append(shape)
+                break
+        else:
+            columns.append([shape])
+    return [shape for column in columns for shape in sorted(column, key=lambda s: s.top or 0)]
+
+
 def classify(slide, canvas: tuple[int, int]) -> Roles:
     """Sort every shape of *slide* into a :class:`Roles`.
 
@@ -286,10 +321,7 @@ def classify(slide, canvas: tuple[int, int]) -> Roles:
         # top, and on a page where nothing declares a size, the top one is
         # still the better guess than the first in XML order.
         roles.title = max(texts, key=lambda s: (_max_pt(s), -(s.top or 0), _area(s)))
-    roles.bodies = sorted(
-        (shape for shape in texts if shape is not roles.title),
-        key=lambda shape: ((shape.top or 0), (shape.left or 0)),
-    )
+    roles.bodies = reading_order([shape for shape in texts if shape is not roles.title])
     return roles
 
 
@@ -579,6 +611,7 @@ def pick_example(
     *,
     used: set[int],
     canvas: tuple[int, int],
+    avoid: list[int] | tuple[int, ...] = (),
 ) -> tuple[int, object] | None:
     """Choose which example page to clone for *content*, or ``None``.
 
@@ -587,9 +620,17 @@ def pick_example(
     page this deck has not cloned yet wins — so a layout demonstrated by three
     pages gives three different-looking slides instead of the same one three
     times — and otherwise the first feasible page is reused.
+
+    *avoid* is the hard exclusion the Ralph Eyeball Loop writes: a page a
+    vision model has already judged not to be carrying this slide. *used* is
+    only a preference (variety across the deck); *avoid* is a refusal. When
+    every feasible page has been refused, the answer is ``None`` and the slide
+    falls back to Seam D, which is the safe generic the loop wants anyway.
     """
     feasible: list[tuple[int, object]] = []
     for page in pages:
+        if page in avoid:
+            continue
         slide = examples.get(page)
         if slide is not None and can_carry(classify(slide, canvas), content):
             feasible.append((page, slide))

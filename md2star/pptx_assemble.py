@@ -60,7 +60,7 @@ import re
 import zipfile
 from collections import Counter
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from pptx import Presentation
@@ -556,6 +556,12 @@ class AssembleResult:
     #: Always ``0`` unless ``reference_slides=True``, and never all of them:
     #: a page that cannot carry its content is refused, not forced.
     cloned: int = 0
+    #: Slide index -> the example page that carried it, for the slides Seam E
+    #: took. Reported rather than written back onto the ``Slide`` models, so
+    #: assembly stays a pure function of them; it is what lets the eyeball loop
+    #: judge a cloned slide against *the page it was cloned from* and move it
+    #: to another one. See :func:`eyeball_slides`.
+    pages: dict[int, int] = field(default_factory=dict)
 
 
 RenderMermaidFn = Callable[[str], "Path | None"]
@@ -585,6 +591,7 @@ def assemble(
     render_mermaid: RenderMermaidFn | None = None,
     default_layout: str | None = None,
     reference_slides: bool = False,
+    avoid_pages: dict[int, list[int]] | None = None,
 ) -> AssembleResult:
     """Build a real ``.pptx`` directly on each slide's AI-selected layout.
 
@@ -602,6 +609,9 @@ def assemble(
     and typography instead of only their background. A refusal (no suitable
     example, a chart on the page, fewer bullets than columns) falls straight
     through to the Seam-D path below, which can place anything.
+    *avoid_pages* maps a slide index to example pages it may **not** use —
+    what :func:`eyeball_slides` writes after a vision model has judged one of
+    them not to be carrying that slide.
 
     Returns
     -------
@@ -633,6 +643,8 @@ def assemble(
     n = len(slides)
     placed = 0
     cloned = 0
+    refused = avoid_pages or {}
+    carried_by: dict[int, int] = {}
     fallback_name = default_layout if default_layout in have else next(iter(have), None)
     if fallback_name is None:
         raise ValueError(f"template {template} exposes no slide layouts")
@@ -696,13 +708,19 @@ def assemble(
                     alt=parse_alt_text(body) or title_lines[0],
                 )
                 picked = clone.pick_example(
-                    examples, info.example_pages, payload, used=used_pages, canvas=canvas
+                    examples,
+                    info.example_pages,
+                    payload,
+                    used=used_pages,
+                    canvas=canvas,
+                    avoid=refused.get(s.index, ()),
                 )
                 if picked is not None:
                     page, example = picked
                     cloned_slide = clone.compose(prs, example, payload, font_delta=fd)
                     if cloned_slide is not None:
                         used_pages.add(page)
+                        carried_by[s.index] = page
                         _finish(cloned_slide, s)
                         placed += 1
                         cloned += 1
@@ -802,7 +820,9 @@ def assemble(
     # default path it would just be a zero nobody asked about.
     detail = f" ({cloned} from the template's own pages)" if reference_slides else ""
     logger.info("assembled %d/%d slides%s -> %s", placed, n, detail, out_path)
-    return AssembleResult(pptx_path=out_path, placed=placed, total=n, cloned=cloned)
+    return AssembleResult(
+        pptx_path=out_path, placed=placed, total=n, cloned=cloned, pages=carried_by
+    )
 
 
 # ── target-matching Ralph Eyeball Loop ───────────────────────────────────────
@@ -829,6 +849,26 @@ _JUDGE_PROMPT = (
     "or leaving an awkward empty void? Reply as JSON: matches (true only if it "
     "is clean and well-composed), overflow, low_contrast, too_empty, "
     "image_too_small, and a short discrepancies string (empty if matches)."
+)
+
+
+#: The judge for a **cloned** slide (Seam E). Its target is not a cousin of the
+#: candidate but the very page the candidate was built from, so the question
+#: stops being "do these two compositions rhyme?" and becomes the much sharper
+#: "did replacing the content break anything?". Same schema, so the verdict
+#: feeds the same bounded fixes.
+_CLONE_JUDGE_PROMPT = (
+    "The FIRST image is the TARGET: a page of the designer's own template. The "
+    "SECOND image is the CANDIDATE: that exact page, rebuilt with different "
+    "text and pictures in it. They are meant to be the same composition, so "
+    "ignore the words and the subject matter entirely and judge only what the "
+    "replacement did to the design: is any text overflowing its shape, clipped, "
+    "or running into another; is a region that carried something in the target "
+    "now empty; is an image failing to fill the slot it was given, or distorted; "
+    "is the balance of the page lost. Reply as JSON: matches (true only if the "
+    "candidate is as well-composed as the target), overflow, low_contrast, "
+    "too_empty, image_too_small, and a short discrepancies string (empty if "
+    "matches)."
 )
 
 
@@ -905,6 +945,19 @@ def eyeball_slides(
     picture itself) and re-assembles, up to *max_iterations* passes. Any
     transport/render failure leaves the current best assembly untouched.
 
+    With *reference_slides* on, the loop gets sharper on both ends. Its
+    **target** for a cloned slide is the designer page that slide was cloned
+    from rather than the layout's representative thumbnail — the tightest
+    comparison available, since the candidate is literally that page with the
+    deck's own content in it. And it gains a **fix it did not have**: when a
+    cloned slide is flagged and no bounded override applies, it moves the slide
+    to a *different example page of the same layout* before considering a
+    layout swap. A designer who demonstrated one layout five ways has given
+    five compositions to try, and reaching for another of theirs is a smaller,
+    truer correction than abandoning the layout they chose. If none of the
+    remaining pages can carry the slide, assembly falls back to Seam D on its
+    own, which is the safe generic this loop has always wanted.
+
     *render_deck* renders the assembled output deck itself (default:
     :func:`md2star.pptx_layout.render_deck_pages`, LibreOffice + poppler);
     injectable so the loop is testable offline without either installed.
@@ -915,6 +968,9 @@ def eyeball_slides(
     catalog_by_name = {c.name: c for c in catalog}
     target_indices = indices if indices is not None else [s.index for s in slides]
     by_index = {s.index: s for s in slides}
+    # Example pages a verdict has already rejected, per slide. Grows only, so
+    # the loop can never return to a page it has judged and moved off.
+    refused_pages: dict[int, list[int]] = {}
 
     result = assemble(
         slides,
@@ -925,6 +981,7 @@ def eyeball_slides(
         render_mermaid=render_mermaid,
         default_layout=default_layout,
         reference_slides=reference_slides,
+        avoid_pages=refused_pages,
     )
 
     # One extra pass beyond max_iterations: the loop always re-judges after
@@ -940,13 +997,21 @@ def eyeball_slides(
                 continue
             candidate_png = pages.get(i)
             info = catalog_by_name.get(s.chosen_layout) if s.chosen_layout else None
-            target_page = info.rep_page if info else None
+            # A cloned slide is judged against the page it was cloned from:
+            # same composition, same decoration, only the words differ, so a
+            # mismatch is about this slide rather than about the layout family.
+            # Everything else keeps the layout's representative thumbnail.
+            target_page = result.pages.get(i) or (info.rep_page if info else None)
             if candidate_png is None or target_page is None:
                 continue  # nothing to render/compare against -> skip, don't guess
             target_png = render_template(template, target_page)
             if target_png is None:
                 continue
-            out = chat(_JUDGE_PROMPT, [target_png, candidate_png], _JUDGE_SCHEMA)
+            # A cloned slide is compared with its own source page, so it gets
+            # the sharper question (see _CLONE_JUDGE_PROMPT); everything else
+            # is still judged against a family resemblance.
+            prompt = _CLONE_JUDGE_PROMPT if i in result.pages else _JUDGE_PROMPT
+            out = chat(prompt, [target_png, candidate_png], _JUDGE_SCHEMA)
             verdict = (
                 out
                 if isinstance(out, dict)
@@ -969,12 +1034,33 @@ def eyeball_slides(
                     s.overrides = {**(s.overrides or {}), **ov}
                     flagged += 1
                 else:
-                    # No pixel-level lever applies. Before giving up, consider
-                    # that the layout itself may be the mistake: `too_empty`
-                    # and an alignment discrepancy are both symptoms of
-                    # content sitting somewhere it does not belong, and the
-                    # comment above `_overrides_for` already says these "need
-                    # a layout swap, not a font/bullet tweak".
+                    # No pixel-level lever applies. The first thing to try is
+                    # not a different layout but a different *page* of the one
+                    # the designer already chose: they demonstrated it more
+                    # than once, and each demonstration is a composition this
+                    # slide can be rebuilt on. Smaller correction, truer to the
+                    # template, and when no page is left assembly degrades to
+                    # Seam D by itself.
+                    if i in result.pages:
+                        refused_pages.setdefault(i, []).append(result.pages[i])
+                        logger.info(
+                            "eyeball loop: slide %d — example page %d is not carrying it "
+                            "(%s); trying another page of %s",
+                            s.index,
+                            result.pages[i],
+                            verdict.get("discrepancies", "").strip() or "no discrepancy text",
+                            s.chosen_layout,
+                        )
+                        # A fix tuned for the old page is wrong on a new one,
+                        # exactly as it is after a layout swap.
+                        s.overrides = {}
+                        flagged += 1
+                        continue
+                    # Still nothing. Now consider that the layout itself may be
+                    # the mistake: `too_empty` and an alignment discrepancy are
+                    # both symptoms of content sitting somewhere it does not
+                    # belong, and the comment above `_overrides_for` already
+                    # says these "need a layout swap, not a font/bullet tweak".
                     #
                     # The geometric ranking computed at selection time is
                     # still on the slide, so the next-best host is known
@@ -1019,6 +1105,7 @@ def eyeball_slides(
                 render_mermaid=render_mermaid,
                 default_layout=default_layout,
                 reference_slides=reference_slides,
+                avoid_pages=refused_pages,
             )
 
     return result

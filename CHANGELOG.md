@@ -63,6 +63,41 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   slot *and* its place in the stacking order) and what must not (every line of
   filler, the stand-in photo, and any page the seam cannot honestly carry).
 
+- **The Ralph Eyeball Loop now works on the seam, not just near it.** Two
+  changes, and the second is a fix the loop simply did not have before:
+
+  - **It judges a cloned slide against the page it was cloned from.** The
+    target used to be the layout's representative thumbnail — its *first*
+    example page, whichever slide happened to use it. For a cloned slide the
+    right target is exact: the candidate is literally that designer page with
+    the deck's own content in it, so anything the vision model sees as
+    different is about this slide rather than about the layout family. The
+    question changes with the target: instead of "do these two compositions
+    rhyme?", a cloned slide is asked "this is that page rebuilt with different
+    text and pictures — what did the replacement break?", which is answerable
+    far more precisely and feeds the same bounded fixes.
+  - **It can move a slide to another of the designer's demonstrations.** When
+    a cloned slide is flagged and no bounded override applies (`too_empty` and
+    a misalignment have never had one), the loop no longer jumps straight to
+    swapping the layout. A designer who demonstrated one layout five ways has
+    given five compositions to try, and reaching for another of theirs is a
+    smaller, truer correction than abandoning the layout they chose. Only when
+    every page has been judged and refused does it fall through — to a layout
+    swap, and failing that to the bare-layout assembler, which can place
+    anything. `AssembleResult.pages` reports which page carried each slide,
+    and it is *reported* rather than written back onto the slide models, so
+    assembly stays a pure function of them.
+
+- **A cloned page's frames are now read in the order a reader reads them.**
+  Found on the real designer template, not reasoned about: a split page — a
+  lead-in panel on the left, two statements stacked on the right — took bullet
+  2 into its left panel and bullets 1 and 3 into its right half, because
+  frames were ordered by `(top, left)` and that interleaves the two halves.
+  Frames are grouped into columns (overlapping vertical bands) now, columns run
+  left to right and each column runs top to bottom. A row of boxes still comes
+  out left to right, a stack still top to bottom, and the split design comes
+  out in the order it is read.
+
 ### Changed
 
 - **The audit no longer counts a one-glyph ornament as one of the two text
