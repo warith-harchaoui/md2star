@@ -59,6 +59,7 @@ from .errors import (
     Md2starError,
     MissingDependencyError,
 )
+from .i18n import gettext as _
 from .logging import configure as configure_logging
 from .logging import get_logger
 from .postprocess import (
@@ -667,7 +668,7 @@ def _convert(fmt: str, argv: list[str]) -> int:
         if rc != 0:
             return rc
 
-    print(f"Wrote: {out_path}")
+    print(_("Wrote: %(path)s") % {"path": out_path})
     return 0
 
 
@@ -770,8 +771,22 @@ def _convert_smart_layout(fmt: str, in_path: Path, out_path: Path, processed: st
             render_mermaid=render_mermaid,
             reference_slides=reference_slides,
         )
-    note = f", {result.cloned} from the template's own pages" if result.cloned else ""
-    print(f"Wrote: {result.pptx_path} ({result.placed}/{result.total} slides{note})")
+    # Never `_("")`: the empty msgid is a catalogue's own metadata header, and
+    # translating it would hand the user the Content-Type of the .mo file.
+    note = (
+        _(", %(cloned)d from the template's own pages") % {"cloned": result.cloned}
+        if result.cloned
+        else ""
+    )
+    print(
+        _("Wrote: %(path)s (%(placed)d/%(total)d slides%(note)s)")
+        % {
+            "path": result.pptx_path,
+            "placed": result.placed,
+            "total": result.total,
+            "note": note,
+        }
+    )
     if reference_slides and not result.cloned:
         # Asked for and silently not delivered is the worst outcome here: the
         # flag is only ever as good as the template's example pages, and a

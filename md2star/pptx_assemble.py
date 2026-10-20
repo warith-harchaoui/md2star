@@ -887,6 +887,12 @@ _FINDING_FLAGS = {
     "overrun": "overflow",
     "off-slide": "overflow",
     "illegible-type": "overflow",
+    # Measured, and the one verdict this loop has always been able to report
+    # and never able to fix: no font size or bullet count makes grey legible on
+    # grey. `_overrides_for` deliberately has nothing for it, which is what
+    # sends the slide down the ladder to a box with a different colour behind
+    # it — another of the designer's pages, then another layout.
+    "low-contrast": "low_contrast",
 }
 
 

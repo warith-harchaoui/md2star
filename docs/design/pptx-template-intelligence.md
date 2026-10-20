@@ -565,10 +565,13 @@ aesthetic strength was **inversely correlated** with editability depth and
 nothing scored well on both, which it calls a structural barrier. That is this
 project's thesis stated by someone else's numbers: the barrier is an artefact
 of *generating* design, and inheriting it from a designer's template is how you
-get out of it (PPTAgent reaches the same top mark by the same route). Still to
-take: its usability score — figure-ground contrast with sRGB linearisation —
-which is exactly the `low_contrast` dimension `eyeball_slides` reports and has
-"no safe automatic fix" for, and exactly the arithmetic `pptx_audit` is missing.
+get out of it (PPTAgent reaches the same top mark by the same route). Taken too, in
+3.8.0: its usability score — figure-ground contrast with sRGB linearisation —
+which was exactly the `low_contrast` dimension `eyeball_slides` could report
+and never act on. It is `pptx_audit`'s sixth check now, and the loop's measured
+eye reads it, so a slide whose text cannot be read against what is behind it
+moves to a page with a different colour under it instead of being reported and
+left there.
 
 **ACE** (arXiv 2608.24103) is the closest thing to the eyeball loop in the
 literature: a self-correcting editor whose verify signal is a reference-free

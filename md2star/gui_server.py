@@ -59,13 +59,83 @@ from typing import Any
 
 import os_helper as osh
 
-from . import __version__
+from . import __version__, i18n
 from .logging import get_logger
 
 # Module logger — child of the package "md2star" logger. The GUI mostly speaks
 # to the user via the browser, but server-side notices (e.g. a twin diagram
 # pass degrading to PNGs) belong on stderr where the operator can see them.
 logger = get_logger(__name__)
+
+#: Every string in ``index.html`` this server will translate, listed rather
+#: than discovered. A declared list is reviewable, is what the ``.po`` is
+#: extracted from, and cannot quietly rewrite a class name or a bit of
+#: JavaScript the way a clever scan eventually would. Format names, file names
+#: and the product's own name are deliberately absent: they are the same in
+#: every language. ``tests/test_gui_i18n.py`` checks each one still occurs in
+#: the page, so the list cannot rot while the interface moves on.
+UI_STRINGS: tuple[str, ...] = (
+    "md2star — Markdown → DOCX / PPTX / PDF",
+    "Markdown editor",
+    "PDF preview",
+    "PDF preview will appear here.",
+    "Folder browser",
+    "Open a folder (sidebar will appear)",
+    "Close the folder browser",
+    "Create a new .md file",
+    "Delete selected .md files",
+    "Force-save the markdown now (auto-save runs every 4 s)",
+    "Download format",
+    "Toggle options",
+    "Light / Dark / Auto",
+    "AI syntax-lint the Markdown (repairs only, needs Ollama)",
+    "Activate automatic corrections",
+    "Custom reference templates",
+    "No custom templates — using the bundled defaults.",
+    "Load DOCX template",
+    "Load PPTX template",
+    "Bibliography heading",
+    "(comma separated)",
+    "(optional override)",
+    "e.g. Ada Lovelace, Charles Babbage",
+    "auto (e.g. 21 juin 2026)",
+    "Authors",
+    "Bibliography",
+    "Warnings",
+    "Render",
+    "Import",
+    "Open",
+    "Save",
+    "Clear",
+    "Twin",
+    "Theme",
+    "Date",
+    "Ready",
+    "and/or",
+)
+
+
+def localise(html: str, accept_language: str | None) -> str:
+    """Serve the page in the visitor's language, when there is a catalogue.
+
+    A browser's ``Accept-Language`` is a person stating a preference, so unlike
+    the CLI — which answers to ``MD2STAR_LANG`` and nothing else, see
+    :mod:`md2star.i18n` — the GUI honours it. Strings with no translation keep
+    their English source, so a partial catalogue gives a partly translated
+    interface rather than a broken one, and the ``lang`` attribute is updated
+    with them so a screen reader pronounces what it is actually reading.
+    """
+    language = i18n.negotiate(accept_language)
+    if not language:
+        return html
+    catalogue = i18n.translator(language)
+    out = html.replace('<html lang="en"', f'<html lang="{language}"')
+    for source in UI_STRINGS:
+        translated = catalogue.gettext(source)
+        if translated != source:
+            out = out.replace(source, translated)
+    return out
+
 
 # Per-server-process cache-busting tag. We splice it into every static
 # asset URL in the served index.html so a stale browser is forced to
@@ -372,6 +442,9 @@ class _Handler(BaseHTTPRequestHandler):
             # / fonts / vendor bundles on the next reload.
             html = _read_data("index.html").replace(
                 b"{{CACHE_BUST}}", _SESSION_CACHE_BUST.encode("ascii")
+            )
+            html = localise(html.decode("utf-8"), self.headers.get("Accept-Language")).encode(
+                "utf-8"
             )
             return self._send_bytes(html, "text/html; charset=utf-8")
         if path == "/app.js":

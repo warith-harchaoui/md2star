@@ -512,10 +512,20 @@ slide 7: overlap — 'Title 1' and 'TextBox 4' share 38% of the smaller box
 slide 9: overrun [TextBox 3] — text needs 1.6x its box at 16pt (fits at ~13pt)
 ```
 
-Les cinq vérifications sont `off-slide` (hors diapositive), `overlap`
+Les six vérifications sont `off-slide` (hors diapositive), `overlap`
 (texte sur texte — du texte sur une *image* est une composition, pas un
 défaut), `ghost-placeholder` (emplacement fantôme), `illegible-type`
-(sous 12 pt) et `overrun` (débordement). Un `overrun` est une observation
+(sous 12 pt), `low-contrast` (contraste insuffisant) et `overrun`
+(débordement). `low-contrast` applique le rapport WCAG, avec
+linéarisation sRGB, contre le plancher de 3:1 que mérite un grand corps et
+celui de 4,5:1 qu'un petit n'obtient pas — le fond étant résolu comme le
+résout un moteur de rendu (les formes sous le texte, puis le fond de la
+diapositive, puis les formes et le fond de la mise en page, puis ceux du
+masque), parce que le panneau coloré sur lequel un titre est posé est
+d'ordinaire une forme de la *mise en page* alors que le fond de celle-ci
+est l'autre moitié de la diapositive. Du texte sur une photographie, ou
+une graphie qui hérite sa couleur du thème, est laissé sans jugement
+plutôt que deviné. Un `overrun` est une observation
 plutôt qu'une erreur : PowerPoint réduit le texte automatiquement, la
 conséquence est donc silencieuse, et le constat vous dit quelle est la
 vraie taille de la diapositive. Disponible aussi comme appel de

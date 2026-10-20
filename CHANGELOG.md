@@ -6,6 +6,71 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [3.8.0] - 2026-10-20
 
+### Added
+
+- **The interface speaks French, and the policy about *when* is the design.**
+  md2star's documentation has shipped in two languages for a long time while
+  its CLI and GUI spoke only English. Both now read message catalogues
+  (`md2star/i18n.py`, stdlib `gettext`, no new dependency), with French
+  complete for the surfaces a person actually reads: the audit's verdict line,
+  the line every conversion ends on, and the GUI's chrome.
+
+  Two deliberately different triggers. **The CLI answers to `MD2STAR_LANG` and
+  ignores `LANG` entirely** — a converter that changed the language of its own
+  output because the shell locale says `fr_FR` would break every script
+  grepping it, and these diagnostics are as much a machine interface as a human
+  one. **The GUI negotiates `Accept-Language`**, because a browser asking for
+  French is a person asking rather than an environment variable, and it updates
+  the page's `lang` attribute with the text so a screen reader pronounces what
+  it is reading. English counts as an offered language in that negotiation even
+  though it has no catalogue: without it, a visitor who asked for English first
+  and French second was served French, the language they wanted being the one
+  the matcher could not see.
+
+  Two things stay in English on purpose: the audit's finding **kinds**, which
+  are the closed machine vocabulary a caller greps and a bug report quotes, and
+  any message with no translation yet — gettext's own fallback, which makes an
+  unfinished catalogue a partly translated interface rather than a broken one.
+
+  `scripts/compile_catalogs.py` turns `.po` into `.mo` **without GNU gettext**:
+  requiring `msgfmt` would mean a translated interface could only be built on a
+  machine where somebody had installed the gettext tools. `--check` fails on a
+  stale catalogue, so a translation edited without recompiling cannot ship
+  looking live, and the test suite reads the compiler's output back with
+  Python's own `gettext` rather than against a fixture of expected bytes.
+
+- **`low-contrast`: the audit now measures whether text can be read at all.**
+  The sixth deterministic check, and the one that closes a gap the eyeball
+  loop has carried since it was written — `low_contrast` was a verdict it
+  could report and never act on, because no font size or bullet count makes
+  grey legible on grey. It is the WCAG ratio (sRGB-linearised relative
+  luminance) against the floor the type earns: 3:1 for large type, which by
+  the standard's own definition is most of a slide, and 4.5:1 below it.
+
+  The care is in resolving *what is behind the text*, which is done the way a
+  renderer does it: shapes under it on the slide, then the slide's own
+  background, then the layout's shapes and background, then the master's. That
+  chain is not pedantry — on the reference designer template the colour panel a
+  heading sits on is a shape **on the layout** while the layout's own
+  background is the dark other half of the slide, so a reader of backgrounds
+  alone would report black-on-black for a heading that is perfectly legible on
+  lime. Verified both ways: no finding on that deck, and a finding the moment
+  the panel goes dark under the same black type.
+
+  What it refuses to judge matters as much. A run that inherits its colour from
+  the theme is left alone, like an inherited size is. A text box lying across
+  two backgrounds has no single ratio, so it gets none. And text over a
+  photograph is unknowable, so it is passed over rather than guessed at — the
+  same posture the `overlap` check already takes toward text over a picture.
+
+  Wired into the eyeball loop's measured eye, where it finally has a fix: an
+  empty override is what sends the slide down the ladder to a box with a
+  different colour behind it — another of the designer's pages, then another
+  layout. Taken from
+  [SlidesGen-Bench](https://arxiv.org/html/2601.09487)'s usability score, which
+  is the one aesthetic measurement in scope here, because it is legibility
+  rather than taste.
+
 ### Fixed
 
 - **A layout is now described by the page that demonstrates it.** Measured,

@@ -276,3 +276,95 @@ def _one_pixel_png(path: Path) -> None:
     from PIL import Image
 
     Image.new("RGB", (8, 8), "white").save(path)
+
+
+class TestContrast:
+    """The WCAG ratio, measured, with the backdrop resolved like a renderer."""
+
+    def _deck(self, tmp_path, text_rgb, panel_rgb=None, pt=28, on_layout=False):
+        pptx = pytest.importorskip("pptx")
+        from pptx.dml.color import RGBColor
+        from pptx.enum.shapes import MSO_SHAPE
+        from pptx.util import Inches, Pt
+
+        prs = pptx.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])  # Blank
+        if panel_rgb is not None:
+            panel = slide.shapes.add_shape(
+                MSO_SHAPE.RECTANGLE, Inches(0.0), Inches(0.0), Inches(9.0), Inches(6.0)
+            )
+            panel.fill.solid()
+            panel.fill.fore_color.rgb = RGBColor(*panel_rgb)
+            panel.line.fill.background()
+            if on_layout:
+                # python-pptx can only *build* a shape on a slide, and the
+                # case worth testing is a panel that lives on the layout — so
+                # the element is moved there, which is where a real designer
+                # template keeps it.
+                element = panel.element
+                element.getparent().remove(element)
+                slide.slide_layout.shapes._spTree.append(element)
+        box = slide.shapes.add_textbox(Inches(1.0), Inches(1.0), Inches(5.0), Inches(1.5))
+        run = box.text_frame.paragraphs[0].add_run()
+        run.text = "Readable?"
+        run.font.size = Pt(pt)
+        run.font.color.rgb = RGBColor(*text_rgb)
+        out = tmp_path / "contrast.pptx"
+        prs.save(str(out))
+        return out
+
+    def _kinds(self, deck):
+        return [f.kind for f in au.audit(deck)]
+
+    def test_pale_grey_on_near_white_is_flagged(self, tmp_path: Path) -> None:
+        deck = self._deck(tmp_path, (0xC8, 0xC8, 0xC8), (0xF2, 0xF2, 0xF2))
+        finding = next(f for f in au.audit(deck) if f.kind == "low-contrast")
+        assert "1.5:1" in finding.detail and "3:1" in finding.detail
+
+    def test_black_on_white_is_not(self, tmp_path: Path) -> None:
+        assert "low-contrast" not in self._kinds(self._deck(tmp_path, (0, 0, 0)))
+
+    def test_the_panel_a_heading_sits_on_counts_even_from_the_layout(self, tmp_path: Path) -> None:
+        """The case that makes this check worth writing carefully."""
+        # Black type on a layout's own dark panel: unreadable, and invisible to
+        # anything that only reads the slide's shapes.
+        deck = self._deck(tmp_path, (0, 0, 0), (0x14, 0x14, 0x16), on_layout=True)
+        assert "low-contrast" in self._kinds(deck)
+        # The same panel with white type on it reads perfectly.
+        clean = self._deck(tmp_path, (0xFF, 0xFF, 0xFF), (0x14, 0x14, 0x16), on_layout=True)
+        assert "low-contrast" not in self._kinds(clean)
+
+    def test_small_type_is_held_to_the_stricter_floor(self, tmp_path: Path) -> None:
+        # 3.6:1 passes the large-type floor and fails the body-copy one, so the
+        # same two colours are a finding at 12 pt and not at 28 pt.
+        pale, panel = (0x94, 0x94, 0x94), (0xFF, 0xFF, 0xFF)
+        assert "low-contrast" not in self._kinds(self._deck(tmp_path, pale, panel, pt=28))
+        assert "low-contrast" in self._kinds(self._deck(tmp_path, pale, panel, pt=12))
+
+    def test_a_backdrop_nobody_can_read_is_left_unjudged(self, tmp_path: Path) -> None:
+        """A photograph behind the text: unknowable, so not a finding."""
+        pytest.importorskip("PIL")
+        from PIL import Image
+        from pptx.dml.color import RGBColor
+        from pptx.util import Inches, Pt
+
+        photo = tmp_path / "photo.png"
+        Image.new("RGB", (800, 600), (250, 250, 250)).save(photo)
+        prs = pptx.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        slide.shapes.add_picture(str(photo), Inches(0), Inches(0), Inches(9), Inches(6))
+        box = slide.shapes.add_textbox(Inches(1.0), Inches(1.0), Inches(5.0), Inches(1.5))
+        run = box.text_frame.paragraphs[0].add_run()
+        run.text = "Over a photograph"
+        run.font.size = Pt(28)
+        run.font.color.rgb = RGBColor(0xFA, 0xFA, 0xFA)  # white on a white photo
+        deck = tmp_path / "photo-deck.pptx"
+        prs.save(str(deck))
+        assert "low-contrast" not in self._kinds(deck)
+
+    def test_the_ratio_is_the_wcag_one(self) -> None:
+        from pptx.dml.color import RGBColor
+
+        black, white = RGBColor(0, 0, 0), RGBColor(0xFF, 0xFF, 0xFF)
+        assert au._contrast_ratio(black, white) == pytest.approx(21.0, abs=0.01)
+        assert au._contrast_ratio(white, white) == pytest.approx(1.0, abs=0.001)

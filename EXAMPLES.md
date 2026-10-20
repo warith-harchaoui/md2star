@@ -491,9 +491,17 @@ slide 7: overlap — 'Title 1' and 'TextBox 4' share 38% of the smaller box
 slide 9: overrun [TextBox 3] — text needs 1.6x its box at 16pt (fits at ~13pt)
 ```
 
-The five checks are `off-slide`, `overlap` (text over text — text over a
+The six checks are `off-slide`, `overlap` (text over text — text over a
 *picture* is a composition, not a bug), `ghost-placeholder`,
-`illegible-type` (under 12 pt) and `overrun`. An `overrun` is an
+`illegible-type` (under 12 pt), `low-contrast` and `overrun`.
+`low-contrast` is the WCAG ratio, sRGB-linearised, against the 3:1 floor
+large type earns and the 4.5:1 one small type does not — with the backdrop
+resolved the way a renderer resolves it (shapes under the text, then the
+slide's background, then the layout's shapes and background, then the
+master's), because the colour panel a heading sits on is usually a shape on
+the *layout* while the layout's own background is the other half of the
+slide. Text over a photograph, or a run that inherits its colour from the
+theme, is left unjudged rather than guessed at. An `overrun` is an
 observation rather than an error: PowerPoint auto-shrinks the text, so the
 consequence is quiet, and the finding tells you what size the slide really
 is. Available as a library call too:

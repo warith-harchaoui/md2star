@@ -1,0 +1,189 @@
+# French catalogue for md2star's human-facing surfaces.
+#
+# The CLI reads this only when MD2STAR_LANG is set; the GUI reads it when the
+# browser asks for French. An entry with an empty msgstr falls back to its
+# English source, so an unfinished translation is partial, never broken.
+#
+# After editing: python scripts/compile_catalogs.py
+msgid ""
+msgstr ""
+"Project-Id-Version: md2star\n"
+"Language: fr\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+
+# ── CLI ──────────────────────────────────────────────────────────────────
+msgid "Wrote: %(path)s"
+msgstr "Écrit : %(path)s"
+
+msgid "Wrote: %(path)s (%(placed)d/%(total)d slides%(note)s)"
+msgstr "Écrit : %(path)s (%(placed)d/%(total)d diapositives%(note)s)"
+
+msgid ", %(cloned)d from the template's own pages"
+msgstr ", dont %(cloned)d depuis les pages du gabarit"
+
+msgid "layout audit: clean"
+msgstr "audit de disposition : rien à signaler"
+
+msgid "layout audit: clean (%(slides)d slides)"
+msgstr "audit de disposition : rien à signaler (%(slides)d diapositives)"
+
+msgid "layout audit: %(things)s on %(where)s (%(breakdown)s)"
+msgstr "audit de disposition : %(things)s sur %(where)s (%(breakdown)s)"
+
+msgid "%(n)d finding"
+msgid_plural "%(n)d findings"
+msgstr[0] "%(n)d constat"
+msgstr[1] "%(n)d constats"
+
+msgid "%(n)d slide"
+msgid_plural "%(n)d slides"
+msgstr[0] "%(n)d diapositive"
+msgstr[1] "%(n)d diapositives"
+
+# ── GUI (md2star/data/gui/index.html, via gui_server.UI_STRINGS) ─────────
+msgid "md2star — Markdown → DOCX / PPTX / PDF"
+msgstr "md2star — Markdown → DOCX / PPTX / PDF"
+
+msgid "Markdown editor"
+msgstr "Éditeur Markdown"
+
+msgid "PDF preview"
+msgstr "Aperçu PDF"
+
+msgid "PDF preview will appear here."
+msgstr "L'aperçu PDF apparaîtra ici."
+
+msgid "Folder browser"
+msgstr "Explorateur de dossiers"
+
+msgid "Open a folder (sidebar will appear)"
+msgstr "Ouvrir un dossier (le panneau latéral apparaîtra)"
+
+msgid "Close the folder browser"
+msgstr "Fermer l'explorateur de dossiers"
+
+msgid "Create a new .md file"
+msgstr "Créer un fichier .md"
+
+msgid "Delete selected .md files"
+msgstr "Supprimer les fichiers .md sélectionnés"
+
+msgid "Force-save the markdown now (auto-save runs every 4 s)"
+msgstr "Forcer l'enregistrement (l'enregistrement automatique a lieu toutes les 4 s)"
+
+msgid "Download format"
+msgstr "Format de téléchargement"
+
+msgid "Toggle options"
+msgstr "Afficher ou masquer les options"
+
+msgid "Light / Dark / Auto"
+msgstr "Clair / Sombre / Auto"
+
+msgid "AI syntax-lint the Markdown (repairs only, needs Ollama)"
+msgstr "Corriger la syntaxe Markdown par IA (réparations seules, nécessite Ollama)"
+
+msgid "Activate automatic corrections"
+msgstr "Activer les corrections automatiques"
+
+msgid "Custom reference templates"
+msgstr "Gabarits de référence personnalisés"
+
+msgid "No custom templates — using the bundled defaults."
+msgstr "Aucun gabarit personnalisé — les gabarits livrés sont utilisés."
+
+msgid "Load DOCX template"
+msgstr "Charger un gabarit DOCX"
+
+msgid "Load PPTX template"
+msgstr "Charger un gabarit PPTX"
+
+msgid "Bibliography heading"
+msgstr "Titre de la bibliographie"
+
+msgid "(comma separated)"
+msgstr "(séparés par des virgules)"
+
+msgid "(optional override)"
+msgstr "(remplacement facultatif)"
+
+msgid "e.g. Ada Lovelace, Charles Babbage"
+msgstr "p. ex. Ada Lovelace, Charles Babbage"
+
+msgid "auto (e.g. 21 juin 2026)"
+msgstr "auto (p. ex. 21 juin 2026)"
+
+msgid "Authors"
+msgstr "Auteurs"
+
+msgid "Bibliography"
+msgstr "Bibliographie"
+
+msgid "Warnings"
+msgstr "Avertissements"
+
+msgid "Render"
+msgstr "Convertir"
+
+msgid "Import"
+msgstr "Importer"
+
+msgid "Open"
+msgstr "Ouvrir"
+
+msgid "Save"
+msgstr "Enregistrer"
+
+msgid "Clear"
+msgstr "Effacer"
+
+msgid "Twin"
+msgstr "Jumeau"
+
+msgid "Theme"
+msgstr "Thème"
+
+msgid "Date"
+msgstr "Date"
+
+msgid "Ready"
+msgstr "Prêt"
+
+msgid "and/or"
+msgstr "et/ou"
+
+# ── audit findings (md2star/pptx_audit.py) ───────────────────────────────
+# The `kind` inside this frame stays English on purpose: it is the closed
+# machine vocabulary a caller greps and a bug report quotes.
+msgid "slide %(n)d: %(kind)s%(where)s — %(detail)s"
+msgstr "diapositive %(n)d : %(kind)s%(where)s — %(detail)s"
+
+msgid "%(pt).0fpt past the left edge"
+msgstr "%(pt).0f pt au-delà du bord gauche"
+
+msgid "%(pt).0fpt past the top edge"
+msgstr "%(pt).0f pt au-delà du bord supérieur"
+
+msgid "%(pt).0fpt past the right edge"
+msgstr "%(pt).0f pt au-delà du bord droit"
+
+msgid "%(pt).0fpt past the bottom edge"
+msgstr "%(pt).0f pt au-delà du bord inférieur"
+
+msgid "%(a)r and %(b)r share %(share).0f%% of the smaller box"
+msgstr "%(a)r et %(b)r se recouvrent sur %(share).0f %% de la plus petite boîte"
+
+msgid "unfilled placeholder"
+msgstr "emplacement non rempli"
+
+msgid "%(sizes)s is under the %(floor)gpt legibility floor"
+msgstr "%(sizes)s passe sous le plancher de lisibilité de %(floor)g pt"
+
+msgid "#%(fg)s on #%(bg)s is %(ratio).1f:1, under the %(floor)g:1 floor"
+msgstr "#%(fg)s sur #%(bg)s donne %(ratio).1f:1, sous le plancher de %(floor)g:1"
+
+msgid "text needs %(times).1fx its box at %(pt)gpt (fits at ~%(fits).0fpt)"
+msgstr "le texte réclame %(times).1f fois sa boîte à %(pt)g pt (tiendrait à ~%(fits).0f pt)"

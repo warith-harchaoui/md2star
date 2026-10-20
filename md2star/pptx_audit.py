@@ -4,7 +4,7 @@
 *should* fit a candidate layout. This module asks the complementary question
 *after* assembly, of the saved ``.pptx`` itself: given the shapes that actually
 exist, with the geometry and the font sizes they actually carry, is anything
-wrong with this deck? Five checks, all arithmetic on OOXML — no model, no
+wrong with this deck? Six checks, all arithmetic on OOXML — no model, no
 render, no network:
 
 ``off-slide``
@@ -23,6 +23,17 @@ render, no network:
 ``illegible-type``
     A run below :data:`LEGIBLE_MIN_PT`. Not the 30 pt ideal — the size below
     which a projected slide stops being readable at all.
+``low-contrast``
+    Text a reader cannot separate from what is behind it, by the WCAG ratio
+    (sRGB-linearised relative luminance), against the 3:1 floor large type
+    earns and the 4.5:1 floor small type does not. The backdrop is resolved
+    the way a renderer resolves it — shapes under the text, then the slide's
+    background, then the layout's shapes and background, then the master's —
+    because on a real template the colour panel a heading sits on is a shape
+    on the *layout* while the layout's own background is the other half of the
+    slide. Only runs that state their own colour are judged, and a backdrop
+    this module cannot read (a photograph, a gradient) is left unjudged rather
+    than guessed at.
 ``overrun``
     The text needs more room than its box gives it at the size it declares.
     Reported with the size that *would* fit, because PowerPoint's auto-shrink
@@ -53,7 +64,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pptx import Presentation
+from pptx.dml.color import MSO_COLOR_TYPE
+from pptx.enum.dml import MSO_FILL
+from pptx.enum.shapes import MSO_SHAPE_TYPE
 
+from .i18n import gettext as _
+from .i18n import ngettext as _n
 from .logging import get_logger
 
 # One-way dependency, on purpose: the assembler owns the placeholder vocabulary
@@ -70,6 +86,16 @@ logger = get_logger(__name__)
 #: (30 pt): that is the *ideal* this project reports against, while this is the
 #: floor under which something has gone wrong — a caption nobody can read.
 LEGIBLE_MIN_PT = 12.0
+
+#: WCAG 2.x calls type *large* at 18 pt, or 14 pt when bold, and asks 3:1 of
+#: it against its background instead of the 4.5:1 it asks of body copy. A
+#: slide is mostly large type by that definition, which is why the floor here
+#: is usually the lenient one — and why a run that falls under it is a real
+#: problem rather than a strict reading of a web rule.
+CONTRAST_LARGE_PT = 18.0
+CONTRAST_LARGE_BOLD_PT = 14.0
+CONTRAST_MIN_LARGE = 3.0
+CONTRAST_MIN_NORMAL = 4.5
 
 #: How far past the canvas edge a shape may sit before it counts as bleeding
 #: off the slide, as a fraction of the canvas. Designer templates routinely
@@ -90,6 +116,7 @@ KINDS: tuple[str, ...] = (
     "overlap",
     "ghost-placeholder",
     "illegible-type",
+    "low-contrast",
     "overrun",
 )
 
@@ -127,7 +154,16 @@ class Finding:
 
     def __str__(self) -> str:
         where = f" [{self.shape}]" if self.shape else ""
-        return f"slide {self.slide}: {self.kind}{where} — {self.detail}"
+        # The kind keeps its English name inside a translated frame: it is the
+        # closed vocabulary (:data:`KINDS`) a caller greps and a bug report
+        # quotes, and a French build whose findings were named differently
+        # would be a different machine interface, not a translated one.
+        return _("slide %(n)d: %(kind)s%(where)s — %(detail)s") % {
+            "n": self.slide,
+            "kind": self.kind,
+            "where": where,
+            "detail": self.detail,
+        }
 
 
 # ── geometry helpers ─────────────────────────────────────────────────────────
@@ -209,13 +245,17 @@ def _check_bounds(index: int, shape, box, canvas) -> list[Finding]:
     # corner is one mistake, and reporting it twice would read as two.
     over = []
     if left < -tol_x:
-        over.append(f"{(-left) / EMU_PER_PT:.0f}pt past the left edge")
+        over.append(_("%(pt).0fpt past the left edge") % {"pt": (-left) / EMU_PER_PT})
     if top < -tol_y:
-        over.append(f"{(-top) / EMU_PER_PT:.0f}pt past the top edge")
+        over.append(_("%(pt).0fpt past the top edge") % {"pt": (-top) / EMU_PER_PT})
     if left + width > slide_w + tol_x:
-        over.append(f"{(left + width - slide_w) / EMU_PER_PT:.0f}pt past the right edge")
+        over.append(
+            _("%(pt).0fpt past the right edge") % {"pt": (left + width - slide_w) / EMU_PER_PT}
+        )
     if top + height > slide_h + tol_y:
-        over.append(f"{(top + height - slide_h) / EMU_PER_PT:.0f}pt past the bottom edge")
+        over.append(
+            _("%(pt).0fpt past the bottom edge") % {"pt": (top + height - slide_h) / EMU_PER_PT}
+        )
     if not over:
         return []
     return [Finding(index, "off-slide", ", ".join(over), shape.name)]
@@ -243,11 +283,169 @@ def _check_overlaps(
                     Finding(
                         index,
                         "overlap",
-                        f"{shape_a.name!r} and {shape_b.name!r} share "
-                        f"{fraction:.0%} of the smaller box",
+                        _("%(a)r and %(b)r share %(share).0f%% of the smaller box")
+                        % {"a": shape_a.name, "b": shape_b.name, "share": fraction * 100},
                     )
                 )
     return findings
+
+
+# ── contrast: what a reader can actually read ────────────────────────────────
+def _relative_luminance(rgb) -> float:
+    """WCAG relative luminance of an ``RGBColor``, sRGB-linearised."""
+    channels = []
+    for raw in (rgb[0], rgb[1], rgb[2]):
+        c = raw / 255.0
+        channels.append(c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+
+
+def _contrast_ratio(a, b) -> float:
+    """Contrast ratio between two colours, 1:1 (identical) to 21:1 (b/w)."""
+    first, second = _relative_luminance(a), _relative_luminance(b)
+    lighter, darker = max(first, second), min(first, second)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def _solid_rgb(shape):
+    """The shape's own solid fill as an ``RGBColor``, or ``None``.
+
+    ``None`` covers everything this check cannot responsibly resolve: a
+    gradient, a pattern, a theme reference, a picture fill, and a shape with no
+    fill of its own. The caller treats that as "keep looking", never as "this
+    is white".
+    """
+    try:
+        fill = shape.fill
+        if fill.type != MSO_FILL.SOLID:
+            return None
+        return fill.fore_color.rgb
+    except Exception:  # noqa: BLE001 — a picture/graphic frame has no fill at all
+        return None
+
+
+def _covers(outer: tuple[int, int, int, int], inner: tuple[int, int, int, int]) -> bool:
+    """Whether *outer* contains *inner* whole.
+
+    Containment, not overlap, and deliberately: a text box lying across two
+    backgrounds — half on a designer's colour panel, half on the dark slide —
+    has no single contrast ratio, and inventing one would be worse than saying
+    nothing. Those are left unjudged.
+    """
+    return (
+        outer[0] <= inner[0]
+        and outer[1] <= inner[1]
+        and outer[0] + outer[2] >= inner[0] + inner[2]
+        and outer[1] + outer[3] >= inner[1] + inner[3]
+    )
+
+
+def _backdrop_in(shapes, box, *, below=None):
+    """Topmost resolvable colour behind *box* among *shapes*.
+
+    Walks back-to-front like a renderer does, so the nearest thing under the
+    text wins. Returns ``(rgb, True)`` when a colour was found, ``(None,
+    False)`` when nothing here is behind it, and ``(None, True)`` when
+    something is — a picture, a gradient — that this check cannot read: that
+    is a "stop looking", because whatever is further back is not what the
+    reader sees.
+    """
+    ordered = list(shapes)
+    if below is not None:
+        ordered = ordered[: ordered.index(below)]
+    for candidate in reversed(ordered):
+        candidate_box = _box(candidate)
+        if candidate_box is None or not _covers(candidate_box, box):
+            continue
+        rgb = _solid_rgb(candidate)
+        if rgb is not None:
+            return rgb, True
+        if candidate.shape_type == MSO_SHAPE_TYPE.PICTURE:
+            return None, True  # a photograph: unknowable, and not worth guessing
+    return None, False
+
+
+def _background_of(part):
+    """A slide/layout/master's own background colour, or ``None``."""
+    try:
+        fill = part.background.fill
+        return fill.fore_color.rgb if fill.type == MSO_FILL.SOLID else None
+    except Exception:  # noqa: BLE001 — no explicit background is the common case
+        return None
+
+
+def _backdrop(slide, shape, box):
+    """What a reader sees behind *shape*, resolved the way a renderer would.
+
+    Shapes under it on the slide, then the slide's own background, then the
+    layout's shapes and background, then the master's. The chain matters: on a
+    real designer template the colour panel a title sits on is a shape **on the
+    layout**, while the layout's own background is the dark half of the slide —
+    read only the latter and a black heading on a lime panel looks like black
+    on black.
+    """
+    rgb, blocked = _backdrop_in(slide.shapes, box, below=shape)
+    if rgb is not None or blocked:
+        return rgb
+    own = _background_of(slide)
+    if own is not None:
+        return own
+    layout = slide.slide_layout
+    rgb, blocked = _backdrop_in(layout.shapes, box)
+    if rgb is not None or blocked:
+        return rgb
+    inherited = _background_of(layout)
+    if inherited is not None:
+        return inherited
+    master = layout.slide_master
+    rgb, blocked = _backdrop_in(master.shapes, box)
+    if rgb is not None or blocked:
+        return rgb
+    return _background_of(master)
+
+
+def _check_contrast(index: int, slide, shape, box) -> list[Finding]:
+    """Flag text a reader cannot separate from what is behind it.
+
+    Only runs that state their own colour are judged. A run that inherits one
+    from the theme is left alone for the same reason an inherited size is: the
+    value comes from the designer's master, and guessing at it would invent
+    findings rather than report them. That is the known limit of this check,
+    and it is a limit in the conservative direction.
+    """
+    behind = _backdrop(slide, shape, box)
+    if behind is None:
+        return []
+    worst: tuple[float, float, object] | None = None
+    for paragraph in shape.text_frame.paragraphs:
+        for run in paragraph.runs:
+            if not run.text.strip():
+                continue
+            colour = run.font.color
+            try:
+                rgb = colour.rgb if colour.type == MSO_COLOR_TYPE.RGB else None
+            except Exception:  # noqa: BLE001 — an unresolvable colour is not a finding
+                rgb = None
+            if rgb is None:
+                continue
+            size = run.font.size.pt if run.font.size else LEGIBLE_MIN_PT
+            large = size >= CONTRAST_LARGE_PT or (run.font.bold and size >= CONTRAST_LARGE_BOLD_PT)
+            floor = CONTRAST_MIN_LARGE if large else CONTRAST_MIN_NORMAL
+            ratio = _contrast_ratio(rgb, behind)
+            if ratio < floor and (worst is None or ratio < worst[0]):
+                worst = (ratio, floor, rgb)
+    if worst is None:
+        return []
+    ratio, floor, rgb = worst
+    return [
+        Finding(
+            index,
+            "low-contrast",
+            _("#%(fg)s on #%(bg)s is %(ratio).1f:1, under the %(floor)g:1 floor")
+            % {"fg": rgb, "bg": behind, "ratio": ratio, "floor": floor},
+            shape.name,
+        )
+    ]
 
 
 def _check_type(index: int, shape) -> list[Finding]:
@@ -258,11 +456,15 @@ def _check_type(index: int, shape) -> list[Finding]:
     if not tiny:
         return []
     sizes = ", ".join(f"{pt:g}pt" for pt in tiny)
+    # One message with the sizes pre-joined: a language that needs a different
+    # separator can still change the sentence around them, and the list itself
+    # is numbers, which read the same everywhere.
     return [
         Finding(
             index,
             "illegible-type",
-            f"{sizes} is under the {LEGIBLE_MIN_PT:g}pt legibility floor",
+            _("%(sizes)s is under the %(floor)gpt legibility floor")
+            % {"sizes": sizes, "floor": LEGIBLE_MIN_PT},
             shape.name,
         )
     ]
@@ -283,8 +485,8 @@ def _check_overrun(index: int, shape, box) -> list[Finding]:
         Finding(
             index,
             "overrun",
-            f"text needs {needed / available:.1f}x its box at {largest:g}pt "
-            f"(fits at ~{implied:.0f}pt)",
+            _("text needs %(times).1fx its box at %(pt)gpt (fits at ~%(fits).0fpt)")
+            % {"times": needed / available, "pt": largest, "fits": implied},
             shape.name,
             measured_pt=largest,
             fits_pt=implied,
@@ -337,12 +539,18 @@ def audit(deck: Path, *, canvas: tuple[int, int] | None = None) -> list[Finding]
                 # an empty date/footer/slide-number one is PowerPoint's to fill.
                 if shape.is_placeholder and placeholder_kind(shape) not in LATENT_KINDS:
                     findings.append(
-                        Finding(index, "ghost-placeholder", "unfilled placeholder", shape.name)
+                        Finding(
+                            index,
+                            "ghost-placeholder",
+                            _("unfilled placeholder"),
+                            shape.name,
+                        )
                     )
                 continue
             findings += _check_type(index, shape)
             if box is not None:
                 findings += _check_overrun(index, shape, box)
+                findings += _check_contrast(index, slide, shape, box)
                 if not is_ornament(shape.text_frame.text.strip()):
                     # A one-glyph ornament — the "01" of a numbered step, an
                     # arrow — sitting inside a title's generous box is the
@@ -382,16 +590,25 @@ def summarise(findings: list[Finding], *, slides: int | None = None) -> str:
     'layout audit: 1 finding on 1 slide (1 overlap)'
     """
     if not findings:
-        where = f" ({slides} slides)" if slides else ""
-        return f"layout audit: clean{where}"
+        if slides:
+            return _("layout audit: clean (%(slides)d slides)") % {"slides": slides}
+        return _("layout audit: clean")
     counts = {kind: sum(1 for f in findings if f.kind == kind) for kind in KINDS}
+    # The kind names are the closed machine vocabulary (:data:`KINDS`) and stay
+    # in English in every language: they are what a caller greps and what an
+    # issue report quotes. Only the sentence around them is translated.
     breakdown = ", ".join(f"{n} {kind}" for kind, n in counts.items() if n)
     affected = len({f.slide for f in findings})
-    plural = "s" if len(findings) > 1 else ""
-    return (
-        f"layout audit: {len(findings)} finding{plural} on {affected} "
-        f"slide{'s' if affected > 1 else ''} ({breakdown})"
-    )
+    # Two separate plural lookups rather than one sentence with two numbers:
+    # "3 findings on 1 slide" is a real outcome, so each count has to choose
+    # its own form — and gettext's plural rules work on one number at a time.
+    things = _n("%(n)d finding", "%(n)d findings", len(findings)) % {"n": len(findings)}
+    where = _n("%(n)d slide", "%(n)d slides", affected) % {"n": affected}
+    return _("layout audit: %(things)s on %(where)s (%(breakdown)s)") % {
+        "things": things,
+        "where": where,
+        "breakdown": breakdown,
+    }
 
 
 def log_findings(findings: list[Finding]) -> None:
