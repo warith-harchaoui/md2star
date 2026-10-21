@@ -43,6 +43,7 @@ Author
 from __future__ import annotations
 
 import argparse
+import contextlib
 import os
 import shutil
 import subprocess
@@ -241,6 +242,16 @@ def _localized_bibliography_heading(content: str, explicit_lang: str | None) -> 
         except Exception:
             pass
     return _BIBLIOGRAPHY_HEADING_BY_LANG.get(lang_prefix, "Bibliography")
+
+
+def _raw_byte(exc: UnicodeDecodeError) -> int:
+    """The offending byte from a decode error, for a message that names it.
+
+    ``exc.object[exc.start]`` is the byte the codec choked on; reporting it
+    with its offset is what turns "not valid UTF-8" into something the user
+    can locate in their file.
+    """
+    return exc.object[exc.start]
 
 
 def _require_pandoc() -> str:
@@ -544,7 +555,21 @@ def _convert(fmt: str, argv: list[str]) -> int:
         docx_path = out_path
 
     # 1. Preprocess
-    raw = in_path.read_text(encoding="utf-8")
+    try:
+        raw = in_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        # Typed, not a traceback: a Latin-1 or UTF-16 source is the user's
+        # file, not a bug in md2star, and this module's contract is that a
+        # traceback means "please file this". Exit 2 says invalid input.
+        raise InvalidInputError(
+            _("md2%(fmt)s: %(path)s is not valid UTF-8 (byte %(byte)#04x at offset %(pos)d)")
+            % {"fmt": fmt, "path": in_path, "byte": _raw_byte(exc), "pos": exc.start},
+            hint=(
+                "md2star reads Markdown as UTF-8. Convert the file first, e.g. "
+                "`iconv -f latin1 -t utf-8 in.md > out.md`, or re-save it as "
+                "UTF-8 from your editor."
+            ),
+        ) from exc
     processed = preprocess_markdown(
         raw,
         base_dir=str(in_path.parent),
@@ -617,9 +642,28 @@ def _convert(fmt: str, argv: list[str]) -> int:
     # 3. Write the preprocessed Markdown to a temp file in the SAME dir as
     #    the input so any relative image paths still resolve. os_helper's
     #    temporary_filename(directory=...) owns creation + cleanup of the file.
-    with osh.temporary_filename(
-        suffix=".md", prefix=".preprocessed_", directory=str(in_path.parent)
-    ) as temp_name:
+    # Entered through an ExitStack rather than a plain `with` so the failure
+    # to *create* the file can be told apart from anything pandoc raises
+    # inside the block — only the former means "this directory is read-only".
+    stack = contextlib.ExitStack()
+    try:
+        temp_name = stack.enter_context(
+            osh.temporary_filename(
+                suffix=".md", prefix=".preprocessed_", directory=str(in_path.parent)
+            )
+        )
+    except OSError as exc:
+        raise InvalidInputError(
+            _("md2%(fmt)s: cannot write a working file next to %(path)s (%(reason)s)")
+            % {"fmt": fmt, "path": in_path.name, "reason": exc.strerror or exc},
+            hint=(
+                "The preprocessed Markdown is written beside the input so "
+                "relative image paths keep resolving, which needs a writable "
+                "source directory. Copy the Markdown somewhere writable and "
+                "convert it there."
+            ),
+        ) from exc
+    with stack:
         temp_path = Path(temp_name)
         Path(temp_path).write_text(processed, encoding="utf-8")
 

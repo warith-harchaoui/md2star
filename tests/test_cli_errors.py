@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import logging
 
+import pytest
+
 from md2star import errors
 from md2star.cli import (
     _render_error,
@@ -114,3 +116,57 @@ def test_missing_pandoc_returns_127(caplog, monkeypatch, tmp_path) -> None:
     # The message names the missing tool and the install hint.
     assert "pandoc not found" in caplog.text
     assert "brew install pandoc" in caplog.text
+
+
+# ──────────────────────────────────────────────────────────────────
+# Unreadable input — the user's file/directory, not an md2star bug.
+# ──────────────────────────────────────────────────────────────────
+
+
+def test_non_utf8_input_returns_2_not_a_traceback(caplog, tmp_path) -> None:
+    """A Latin-1 source is invalid input, so it must not raise.
+
+    `read_text(encoding="utf-8")` used to let UnicodeDecodeError escape, and
+    this module's contract is that a traceback means "please file a bug" — so
+    a user whose file came out of a Windows editor was being told they had
+    found one. The message names the offending byte and its offset so they
+    can find it.
+    """
+    caplog.set_level(logging.DEBUG, logger="md2star")
+    src = tmp_path / "latin1.md"
+    src.write_bytes("# Café\n\npère\n".encode("latin-1"))
+
+    rc = md2docx_main([str(src), "-o", str(tmp_path / "out.docx"), "--offline"])
+    assert rc == 2
+    assert "not valid UTF-8" in caplog.text
+    assert "0xe9" in caplog.text  # the byte it choked on
+    assert "offset 5" in caplog.text
+    assert "iconv" in caplog.text  # an actionable way out
+
+
+def test_unwritable_source_dir_returns_2_not_a_traceback(caplog, tmp_path) -> None:
+    """A read-only source directory is a setup problem, reported as one.
+
+    The preprocessed Markdown is written beside the input on purpose, so that
+    relative image paths keep resolving — which means a read-only source dir
+    cannot work. It used to surface as a raw PermissionError from tempfile.
+    """
+    import os
+    import stat
+
+    src_dir = tmp_path / "readonly"
+    src_dir.mkdir()
+    src = src_dir / "doc.md"
+    src.write_text("# Hi\n\nText.\n", encoding="utf-8")
+    os.chmod(src_dir, stat.S_IRUSR | stat.S_IXUSR)
+    try:
+        if os.access(src_dir, os.W_OK):  # running as root ignores the mode
+            pytest.skip("source dir is still writable (running as root?)")
+        caplog.set_level(logging.DEBUG, logger="md2star")
+        rc = md2docx_main([str(src), "-o", str(tmp_path / "out.docx"), "--offline"])
+        assert rc == 2
+        assert "cannot write a working file next to doc.md" in caplog.text
+        assert "writable" in caplog.text
+    finally:
+        # Restore before tmp_path cleanup, which otherwise cannot recurse in.
+        os.chmod(src_dir, stat.S_IRWXU)
