@@ -462,6 +462,23 @@ def _host_name(value: str) -> str:
     return value.rsplit(":", 1)[0] if ":" in value else value
 
 
+def _single_line_header(value: str, limit: int = 4000) -> str:
+    """Flatten *value* so it can only ever be one header value.
+
+    ``BaseHTTPRequestHandler.send_header`` writes ``name: value\\r\\n`` without
+    validating anything, so a newline inside *value* does not get escaped — it
+    ends the header early and whatever follows is read as the next header, or,
+    after a blank line, as the response body. Encoding to ASCII does not help:
+    ``\\r`` and ``\\n`` *are* ASCII, so they survive ``errors="replace"``.
+
+    Collapsing every run of whitespace to a single space makes the guarantee
+    structural rather than a question of what the captured text happens to
+    contain today: the result has no CR, LF or tab left to split on. The cap
+    keeps one verbose warning from pushing the real headers out of a response.
+    """
+    return " ".join(value.encode("ascii", "replace").decode("ascii").split())[:limit]
+
+
 class _Handler(BaseHTTPRequestHandler):
     """One request → one response. Threading is handled by the parent server."""
 
@@ -760,11 +777,13 @@ class _Handler(BaseHTTPRequestHandler):
             # Forward any stderr from the CLI so the GUI can show "rendered
             # OK, with warnings" — pulling the bytes through a header keeps
             # the body a clean PDF/DOCX/PPTX stream.
-            if stderr_buf.captured.strip():
-                self.send_header(
-                    "X-Md2star-Stderr",
-                    stderr_buf.captured.strip().encode("ascii", "replace").decode("ascii")[:4000],
-                )
+            # Flattened to a single line on the way out: this is free text
+            # reaching a header, and send_header validates nothing (see
+            # _single_line_header). The failure path above carries the same
+            # text in JSON, where the encoder escapes it already.
+            warned = _single_line_header(stderr_buf.captured)
+            if warned:
+                self.send_header("X-Md2star-Stderr", warned)
             self.end_headers()
             self.wfile.write(data)
 

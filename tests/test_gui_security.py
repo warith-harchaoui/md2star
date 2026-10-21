@@ -262,3 +262,100 @@ def test_host_name_parsing_keeps_ipv6_literals_whole() -> None:
     assert gui_server._host_name("localhost") == "localhost"
     assert gui_server._host_name("[::1]:8765") == "[::1]"
     assert gui_server._host_name("LocalHost:1234") == "localhost"
+
+
+# ── free text reaching a response header ─────────────────────────────────────
+# A successful render forwards the converter's warnings in `X-Md2star-Stderr`.
+# `send_header` writes `name: value\r\n` and validates nothing, so that header
+# is the one place where captured text decides response *structure*.
+
+
+def test_a_newline_cannot_split_the_render_response(live_server, monkeypatch) -> None:
+    """A multi-line warning must not forge a header or a body.
+
+    `encode("ascii", "replace")` does not save us here: CR and LF *are* ASCII,
+    so they pass through untouched. Driven over a raw socket because the defect
+    is only visible in the bytes on the wire — an HTTP client library parses
+    the forged header as if the server had meant it.
+    """
+    import http.client
+    import io
+    import socket
+
+    request, port, root = live_server
+
+    # A converter that succeeds while warning in several lines, which is the
+    # "rendered OK, with warnings" case the header exists to carry.
+    def fake_convert(fmt: str, argv: list[str]) -> int:
+        out = Path(argv[argv.index("-o") + 1])
+        out.write_bytes(b"%PDF-1.4 real output")
+        # Shaped exactly like a splitting payload: a plausible warning, then a
+        # forged header, then the blank line that would end the header block,
+        # then a body of the attacker's choosing.
+        sys.stderr.write(
+            "\r\n".join(
+                [
+                    "md2star warning: postprocess failed",
+                    "X-Injected: yes",
+                    "",
+                    "<html>forged body</html>",
+                ]
+            )
+        )
+        return 0
+
+    # Patched at its source: the handler does `from .cli import _convert`
+    # inside the request, so the name it resolves is md2star.cli's.
+    import md2star.cli
+
+    monkeypatch.setattr(md2star.cli, "_convert", fake_convert)
+
+    body = json.dumps({"markdown": "# hi\n", "format": "pdf"})
+    sock = socket.create_connection(("127.0.0.1", port), timeout=30)
+    try:
+        sock.sendall(
+            (
+                f"POST /render HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\n"
+                f"Content-Type: application/json\r\nContent-Length: {len(body)}\r\n"
+                "Connection: close\r\n\r\n"
+            ).encode()
+            + body.encode()
+        )
+        raw = b""
+        while True:
+            chunk = sock.recv(65536)
+            if not chunk:
+                break
+            raw += chunk
+    finally:
+        sock.close()
+
+    head, _, payload = raw.partition(b"\r\n\r\n")
+    lines = head.split(b"\r\n")
+
+    # The attacker's text may appear *inside* one header value — harmless. What
+    # must not happen is it becoming a header line, or a body, of its own.
+    assert not any(line.lower().startswith(b"x-injected") for line in lines), head
+    assert payload == b"%PDF-1.4 real output", payload[:120]
+
+    # The warning still arrives, flattened onto exactly one line: a fix that
+    # dropped the text would pass the checks above and tell the user nothing.
+    carried = [line for line in lines if line.lower().startswith(b"x-md2star-stderr:")]
+    assert len(carried) == 1
+    assert b"postprocess failed" in carried[0]
+    assert b"forged body" in carried[0]
+
+    # And a real client agrees there is one well-formed header block.
+    parsed = http.client.parse_headers(io.BytesIO(head.split(b"\r\n", 1)[1] + b"\r\n\r\n"))
+    assert parsed.get("X-Injected") is None
+    assert "postprocess failed" in parsed["X-Md2star-Stderr"]
+
+
+def test_single_line_header_flattens_every_whitespace_run() -> None:
+    """No CR, LF or tab may survive, and the text must stay readable."""
+    assert gui_server._single_line_header("a\r\nb") == "a b"
+    assert gui_server._single_line_header("a\n\nX-Evil: 1") == "a X-Evil: 1"
+    assert gui_server._single_line_header("  padded \t out  ") == "padded out"
+    assert gui_server._single_line_header("héllo") == "h?llo"
+    assert gui_server._single_line_header("x" * 50, limit=10) == "x" * 10
+    assert gui_server._single_line_header("   ") == ""
