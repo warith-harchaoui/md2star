@@ -579,6 +579,59 @@ def default_chat(*, kind: str, model: str | None = None) -> ChatFn:
     return _call
 
 
+def parse_json_reply(raw: object) -> dict | None:
+    """Recover the JSON object from whatever :data:`ChatFn` actually returned.
+
+    A schema-constrained call *usually* comes back as a ``dict``, and "usually"
+    is the whole problem: ``llm.chat`` documents that it hands back the raw
+    string when the model does not honour the schema, and on the vision side
+    that is the common case rather than the exotic one — the strongest local
+    VLMs are precisely the ones Ollama cannot hold to a schema. Those replies
+    arrive as the right JSON wrapped in prose or a ``` fence.
+
+    Parsing that with a bare :func:`json.loads` raised
+    :class:`json.JSONDecodeError` straight out of whatever stage made the call,
+    which turned "this one model reply was chatty" into "the catalog build /
+    the tie-break / the whole eyeball loop died". Every one of those stages is
+    written to degrade on a bad reply, so the exception was the only thing
+    standing between them and the fallback they already had.
+
+    So: a ``dict`` passes through, a string is searched for its first ``{...}``
+    span and parsed, and anything unusable is ``None`` — the value every caller
+    here already treats as "no answer, use the fallback". Same tolerance
+    :func:`md2star.reverse_diagrams._parse_verdict` has always applied to the
+    diagram loop's verdicts; this is that stance, shared.
+
+    Parameters
+    ----------
+    raw : object
+        Whatever the transport returned: a parsed ``dict``, a string that may
+        or may not be pure JSON, or ``None`` from a failed call.
+
+    Returns
+    -------
+    dict or None
+        The recovered object, or ``None`` when there is nothing usable in it.
+    """
+    if isinstance(raw, dict):
+        return raw
+    if not isinstance(raw, str):
+        return None
+    # Greedy to the last brace on purpose: the verdict/caption object is the
+    # outermost one, and a non-greedy match would stop at the first nested
+    # object's closing brace and parse a truncated fragment.
+    span = re.search(r"\{.*\}", raw, re.DOTALL)
+    if span is None:
+        return None
+    try:
+        parsed = json.loads(span.group(0))
+    except (json.JSONDecodeError, TypeError):
+        return None
+    # A model answering with a bare list or number parses fine and is still
+    # not a verdict; only an object can carry the keys callers read.
+    return parsed if isinstance(parsed, dict) else None
+
+
 def smart_layout_available() -> bool:
     """Return ``True`` when the full AI-assisted pipeline (LLM + VLM) can run.
 
@@ -697,11 +750,7 @@ def build_catalog(
             if not images:
                 continue  # render unavailable (no soffice/pdftoppm) -> skip
             out = chat(_CAPTION_PROMPT, images, _CAPTION_SCHEMA)
-            data = (
-                out
-                if isinstance(out, dict)
-                else (json.loads(out) if isinstance(out, str) else None)
-            )
+            data = parse_json_reply(out)
             if not data:
                 continue  # transport failure or unparseable reply -> keep the rule-based defaults
             info.archetype = data.get("archetype", info.archetype)
@@ -1092,16 +1141,10 @@ def select_layouts(
             "names; why <= 12 words."
         )
         out = chat(prompt, None, _SELECT_SCHEMA)
-        try:
-            data = (
-                out if isinstance(out, dict) else (json.loads(out) if isinstance(out, str) else {})
-            )
-            choices = data.get("choices", [])
-        except (json.JSONDecodeError, AttributeError):
-            # A transport failure (None) or a malformed reply both land here;
-            # an empty choices list means every slide in this batch falls
-            # through to the archetype-fallback branch below.
-            choices = []
+        # A transport failure (None) or a malformed reply both come back as
+        # ``None`` here; an empty choices list means every slide in this batch
+        # falls through to the archetype-fallback branch below.
+        choices = (parse_json_reply(out) or {}).get("choices", [])
         by_index = {c.get("index"): c for c in choices}
         for s in group:
             c = by_index.get(s.index) or {}
@@ -1295,7 +1338,7 @@ def visual_confirm(
             ),
         )
         out = chat(prompt, images, _VISUAL_SCHEMA)
-        data = out if isinstance(out, dict) else (json.loads(out) if isinstance(out, str) else None)
+        data = parse_json_reply(out)
         if not data:
             continue
         best = data.get("best")

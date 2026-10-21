@@ -365,6 +365,81 @@ class TestEyeballLoop:
         # First pass flags+fixes, second pass's judge call reports a match -> stop.
         assert calls["judge"] == 2
 
+    def test_a_judge_that_talks_around_its_json_is_still_heard(
+        self, tmp_path: Path, default_template: Path, catalog
+    ) -> None:
+        """Regression: the verdict used to be read with a bare ``json.loads``.
+
+        The loop asks for structured output, but ``llm.chat`` documents that
+        it returns the raw *string* when the model does not honour the
+        schema — and on the vision side the strongest local models are
+        exactly the ones that don't, which is what the phase-5 bench
+        (``scripts/bench_vlm_judge.py``) set out to measure. A fenced,
+        prose-wrapped reply raised ``JSONDecodeError`` out of the loop, so one
+        chatty answer cost the whole deck its verification instead of costing
+        one slide its verdict.
+        """
+        slides = pl.segment("# Cover\n\n- a\n- b\n- c\n")
+        slides[0].chosen_layout = "Title and Content"
+        out = tmp_path / "out.pptx"
+        for c in catalog:
+            if c.name == "Title and Content":
+                c.example_pages = [1]
+
+        calls = {"judge": 0}
+
+        def fenced_chat(_prompt, _images, _schema):
+            # The literal shape gemma3:12b returns when asked for the same
+            # verdict without a schema, observed in the bench run.
+            calls["judge"] += 1
+            if calls["judge"] == 1:
+                return (
+                    '```json\n{"matches": false, "overflow": true, '
+                    '"discrepancies": "the body runs past its box"}\n```'
+                )
+            return '```json\n{"matches": true}\n```'
+
+        result = pa.eyeball_slides(
+            slides,
+            catalog,
+            default_template,
+            out,
+            max_iterations=2,
+            chat=fenced_chat,
+            render_template=lambda _t, _p: b"target-png",
+            render_deck=lambda _p: {1: b"candidate-png"},
+        )
+        # Not merely "did not raise": the verdict buried in the fence was
+        # acted on, with the same bounded fix a clean dict would have earned.
+        assert result.placed == 1
+        assert slides[0].overrides.get("font_delta") == -4
+        assert calls["judge"] == 2
+
+    def test_a_judge_answering_in_prose_costs_one_verdict_not_the_run(
+        self, tmp_path: Path, default_template: Path, catalog
+    ) -> None:
+        """A reply with no JSON at all degrades to "no verdict", as designed."""
+        slides = pl.segment("# Cover\n\n- a\n- b\n- c\n")
+        slides[0].chosen_layout = "Title and Content"
+        out = tmp_path / "out.pptx"
+        for c in catalog:
+            if c.name == "Title and Content":
+                c.example_pages = [1]
+
+        result = pa.eyeball_slides(
+            slides,
+            catalog,
+            default_template,
+            out,
+            max_iterations=1,
+            chat=lambda _p, _i, _s: "I'm sorry, I can't view those images.",
+            render_template=lambda _t, _p: b"target-png",
+            render_deck=lambda _p: {1: b"candidate-png"},
+        )
+        # The deck still exists and nothing was invented from an unread reply.
+        assert result.placed == 1
+        assert slides[0].overrides == {}
+
     def test_no_target_page_skips_judging(
         self, tmp_path: Path, default_template: Path, catalog
     ) -> None:

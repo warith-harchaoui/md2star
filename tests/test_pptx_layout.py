@@ -443,3 +443,118 @@ class TestACoverIsMeasuredAsOne:
 
     def test_a_single_slide_deck_is_both(self) -> None:
         assert pl.segment("# Only\n\n- a\n")[0].title_only is True
+
+
+# ── tolerant reply parsing (the lenient half of the phase-5 bench) ───────────
+class TestParseJsonReply:
+    """``parse_json_reply`` is what lets a schema-ignoring VLM still be used.
+
+    The strongest local vision models do not honour Ollama's structured
+    output, so ``llm.chat`` hands their reply back as a *string* with the JSON
+    wrapped in prose. Every stage that judges an image goes through here.
+    """
+
+    def test_a_dict_passes_through_untouched(self) -> None:
+        verdict = {"matches": False, "overflow": True}
+        assert pl.parse_json_reply(verdict) is verdict
+
+    def test_pure_json_text_is_parsed(self) -> None:
+        assert pl.parse_json_reply('{"matches": true}') == {"matches": True}
+
+    def test_json_wrapped_in_prose_is_recovered(self) -> None:
+        # The qwen3-vl shape: a sentence, then the object that was asked for.
+        reply = 'Looking at both images, here is my verdict:\n{"matches": false, "too_empty": true}'
+        assert pl.parse_json_reply(reply) == {"matches": False, "too_empty": True}
+
+    def test_json_in_a_fenced_block_is_recovered(self) -> None:
+        reply = 'Sure!\n```json\n{"matches": false, "overflow": true}\n```\nHope that helps.'
+        assert pl.parse_json_reply(reply) == {"matches": False, "overflow": True}
+
+    def test_a_nested_object_is_not_truncated(self) -> None:
+        # Greedy-to-the-last-brace matters: a non-greedy match would stop at
+        # the inner closing brace and parse a fragment that is not valid JSON.
+        reply = 'verdict: {"matches": false, "detail": {"where": "body"}}'
+        assert pl.parse_json_reply(reply) == {"matches": False, "detail": {"where": "body"}}
+
+    def test_a_transport_failure_is_none_not_an_exception(self) -> None:
+        assert pl.parse_json_reply(None) is None
+
+    def test_prose_with_no_object_is_none(self) -> None:
+        assert pl.parse_json_reply("I cannot compare these two images.") is None
+
+    def test_malformed_json_is_none_not_an_exception(self) -> None:
+        assert pl.parse_json_reply('{"matches": tru') is None
+
+    def test_a_bare_list_is_not_a_verdict(self) -> None:
+        # Parses fine as JSON, carries none of the keys a caller reads.
+        assert pl.parse_json_reply("[1, 2, 3]") is None
+
+
+class TestAChattyModelDoesNotKillTheStage:
+    """Regression: a string reply used to reach a bare ``json.loads``.
+
+    Four stages call the transport with a schema and have to cope when the
+    reply comes back as text instead. Only one of them — ``select_layouts``,
+    below — ever caught the ``JSONDecodeError``, and it is the one on the
+    *text* model, where schemas are honoured. The three on the **vision**
+    path, where the design already knew the strongest models ignore schemas,
+    had no guard at all: catalog captioning and the visual tie-break here,
+    and the eyeball loop in ``tests/test_pptx_assemble.py``. Each is written
+    to degrade on a bad reply, and the uncaught exception was the one thing
+    standing between them and that fallback, so a chatty model took down the
+    whole stage instead of costing one judgement.
+    """
+
+    @staticmethod
+    def _chatty(_prompt: str, _images, _schema):
+        """A model that ignores the schema and talks around its JSON."""
+        return 'Of course! Here is the result:\n```json\n{"archetype": "cover"}\n```'
+
+    @staticmethod
+    def _unparseable(_prompt: str, _images, _schema):
+        """A model that ignores the question entirely."""
+        return "I am not able to look at images right now."
+
+    def _one_slide_template(self, tmp_path: Path) -> Path:
+        prs = pptx.Presentation()
+        prs.slides.add_slide(prs.slide_layouts[0])
+        path = tmp_path / "one_slide.pptx"
+        prs.save(str(path))
+        return path
+
+    def test_catalog_captioning_survives_a_chatty_reply(self, tmp_path: Path) -> None:
+        template = self._one_slide_template(tmp_path)
+        catalog = pl.build_catalog(
+            template,
+            chat=self._chatty,
+            render=lambda _t, page: b"png" if page == 1 else None,
+            cache_path=tmp_path / "catalog.json",
+        )
+        # Not merely "did not raise": the caption stage actually used the
+        # object it had to dig out of the prose.
+        assert next(c for c in catalog if c.name == "Title Slide").archetype == "cover"
+
+    def test_catalog_captioning_survives_an_unparseable_reply(self, tmp_path: Path) -> None:
+        template = self._one_slide_template(tmp_path)
+        catalog = pl.build_catalog(
+            template,
+            chat=self._unparseable,
+            render=lambda _t, page: b"png" if page == 1 else None,
+            cache_path=tmp_path / "catalog.json",
+        )
+        # Degraded, not dead: every layout keeps its rule-based description.
+        assert len(catalog) == len(pl.extract_layouts(template))
+
+    def test_selection_survives_a_chatty_reply(self) -> None:
+        slides = pl.segment("# Cover\n\n***\n\n## Bullets\n\n- a\n- b\n")
+        catalog = [pl.LayoutInfo(name="Only Layout", archetype="bulleted-content")]
+
+        def chatty(_prompt: str, _images, _schema):
+            return (
+                "Here you go:\n"
+                '{"choices": [{"index": 1, "layout_name": "Only Layout", '
+                '"confidence": 0.9, "why": "the only one"}]}'
+            )
+
+        pl.select_layouts(slides, catalog, chat=chatty)
+        assert slides[0].chosen_layout == "Only Layout"

@@ -1,7 +1,7 @@
 # scripts/
 
 Thin shell wrappers around `pipx` for installing and uninstalling md2star,
-plus the integration test runner.
+plus the integration test runner and the Python developer tools.
 
 | File | Description |
 |------|-------------|
@@ -11,6 +11,19 @@ plus the integration test runner.
 | `uninstall.ps1` | Windows equivalent. |
 | `update.ps1` | Windows: `git pull` + `pipx install --force .`. |
 | `test.sh` | Integration suite — exercises `md2docx` / `md2pptx` against `assets/docx/*.md` and `assets/pptx/*.md`, inspects the OOXML for expected content. |
+
+## Developer tools (Python)
+
+Not part of an install — these are run from a checkout, and the first three
+gate the build.
+
+| File | Description |
+|------|-------------|
+| `audit_comments.py` | Comment-density auditor (house rule 4): fails below the 15 % floor, reports against the 25 % target. |
+| `check_triggers.py` | Verifies the skill's trigger catalogue stays in sync with the CLI surface. |
+| `compile_catalogs.py` | Compiles `md2star/data/locales/<lang>/*.po` into the `.mo` files `md2star.i18n` loads. |
+| `positioning.py` | Regenerates `LANDSCAPE.md`'s positioning map from `assets/landscape.csv`. |
+| `bench_vlm_judge.py` | Benches the eyeball loop's vision judge — strict-JSON vs. lenient parsing, on a corpus whose ground truth `pptx_audit` confirms. Needs Ollama + LibreOffice + a designer template; see `docs/design/pptx-template-intelligence.md` §10.7. |
 
 ## Quick reference
 

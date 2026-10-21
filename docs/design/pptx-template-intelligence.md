@@ -18,9 +18,12 @@ loop (§4.4, `--eyeball-iterations`). **Placeholder-vs-overlay reconciliation
 is closed as of 3.6.0** — see §10.1 for what the answer turned out to be and
 why it is asymmetric. The **reference-slide seam of §10.4 shipped in 3.7.0**
 as `--reference-slides` (`md2star/pptx_clone.py`); §10.4 now records what the
-clone actually does and which pages it refuses. Phase 5 (bench gemma3-JSON vs.
-qwen3-vl-lenient) remains the open follow-up; §10 records the adjacent work
-this round read and what was taken from it. The
+clone actually does and which pages it refuses. **Phase 5 is run** —
+`scripts/bench_vlm_judge.py`, written up in §10.7: it found an unguarded
+`json.loads` on three vision-path stages (fixed), and it found that the
+auto-picked VLM approves every slide it is shown, so the division of labour
+it argues for is arithmetic-owns-geometry, model-owns-emptiness. §10 records
+the adjacent work this round read and what was taken from it. The
 rest of this document is the design record that shaped the implementation.
 Reference template used
 during investigation: `assets/templates/pptx/Jellysmack-Presentation-Template.pptx`
@@ -156,6 +159,11 @@ Apple M2 Max / 96 GB (budget 61 GB, 400 GB/s):
    `qwen3-vl:14b/32b`. Given the eyeball loop only needs `{matches, discrepancies}`
    and md2star already parses that defensively, **option 2 is attractive** and
    should be a benchmarked toggle.
+
+**Benched, and the auto-pick lost** — see §10.7. "Honours structured JSON" is
+the criterion that selected `gemma3:12b` here, and it turns out to be the
+wrong criterion for a judge: it approves every slide it is shown. Prefer a
+`qwen3-vl:*` tag via `BEST_LLM_VISION` for the eyeball loop.
 
 Everything stays overridable via `BEST_LLM_TEXT` / `BEST_LLM_VISION` env vars
 and the picker's persisted config — nothing hard-coded, per suite policy.
@@ -348,6 +356,7 @@ and prompts change:
 4. **Eyeball loop** — wire the target-matching loop (reuse `_reconstruct`);
    measure how often it fixes overflow/misplacement within 3 iterations.
 5. **Bench VLM** — gemma3-JSON vs qwen3-vl-lenient on step-4 verdict quality.
+   *Done* — `scripts/bench_vlm_judge.py`, answered in §10.7.
 6. Fold into `md2star pptx --smart-layout` behind an extra, with graceful
    degradation to the pandoc path.
 
@@ -613,3 +622,121 @@ sets the bar. The difference is whose vocabulary it draws on: Designer
 composes from Microsoft's catalogue, while the job here is mapping onto *your*
 designer's layouts and leaving their design alone. `LANDSCAPE.md` says so out
 loud rather than quietly scoring md2star above it.
+
+### 10.7 Phase 5, run: what the vision judge is actually good for
+
+Phase 5 of §7 asked for a bench of **gemma3-JSON vs. qwen3-vl-lenient on
+step-4 verdict quality**. It is run, in `scripts/bench_vlm_judge.py`, and it
+answered a different and more useful question than the one posed.
+
+**How the corpus gets a ground truth.** Six slides, all built by the project's
+own assembler on one designer layout (`Segmentation 2A`, demonstrated on
+page 36 of the reference template), each then broken in exactly one way. The
+layout earns the job by being one of the few a plain three-bullet slide
+assembles onto with *no* audit finding, so the clean control is genuinely
+clean. The label is then **confirmed by arithmetic before the case is
+scored**: `pptx_audit` is asked whether it sees the defect that was injected,
+and a case it cannot confirm is reported as unconfirmed rather than trusted.
+Five of the six are confirmed that way; `too_empty` is the one the audit is
+blind to, which is precisely the kind a vision model exists for.
+
+**The bug the bench found before it measured anything.** The loop asks for
+structured output, but `llm.chat` documents that it returns the raw *string*
+when the model does not honour the schema — and four stages parsed that with
+a bare `json.loads`. Only one of them caught the exception, and it is the one
+on the **text** model, where schemas are honoured. The three on the *vision*
+path — catalog captioning, the visual tie-break, and the eyeball-loop judge —
+had no guard at all, on exactly the path where the design already knew the
+strongest models ignore schemas. Every one of those stages is written to
+degrade on a bad reply; the uncaught `JSONDecodeError` was the only thing
+standing between them and the fallback they already had. In the first run,
+`gemma3:12b` in lenient mode produced a fenced reply **5 times out of 5**, so
+the shipping consumer would have raised on every single one. Fixed with one
+shared tolerant parse (`pptx_layout.parse_json_reply`), regression-tested in
+both suites.
+
+**The verdict-quality result** (5 scored cases; `hidden_overrun` carried but
+not scored, see below):
+
+| model | mode | nores | usable | crash | lenient | matches | flags | false | median |
+|---|---|---|---|---|---|---|---|---|---|
+| `gemma3:12b` | strict | 0 | 5/5 | 0 | 5/5 | **1/5** | **0** | 0 | 12.1 s |
+| `gemma3:12b` | lenient | 0 | **0/5** | **5** | 5/5 | **1/5** | **0** | 0 | 6.1 s |
+| `qwen3-vl:4b` † | strict | 2 | 3/3 | 0 | 3/3 | 2/3 | 1 | 0 | 21.2 s |
+| `qwen3-vl:4b` † | lenient | 1 | 4/4 | 0 | 4/4 | **3/4** | **2** | 0 | 33.7 s |
+
+† run as a derived `num_ctx 8192` tag — see the transport note at the end of
+this section for why, and for what that did and did not fix.
+
+- **nores** — the daemon returned nothing (500 / timeout). Not a judgement,
+  so it is excluded from every denominator to its right.
+- **usable** — replies today's `eyeball_slides` consumer turns into a verdict.
+- **crash** — replies that consumer *raises* on. This is the bug, measured.
+- **lenient** — replies a tolerant first-`{...}`-span parse recovers.
+- **matches / flags / false** — correct call on "is this slide clean?", then
+  whether the right defect box was ticked, then flagged-the-clean-control.
+
+Read the `crash` column first: in lenient mode `gemma3` fenced its JSON every
+single time, so the shipping consumer would have raised on 5 replies out of 5
+while a tolerant parse recovers all 5. Then read `matches` and `flags`: the
+mode question is a parsing detail, and the model question is the real one.
+
+**What it means, and it is not "pick the bigger model".** `gemma3:12b` is the
+auto-picked VLM, and §3.2 records why: *because it honours Ollama structured
+JSON*. The bench says that criterion selected the wrong model for this job.
+It approves everything — one correct call out of five, the clean control, and
+not a single defect flag raised. `qwen3-vl:4b`, four times smaller and not
+auto-chosen, correctly flagged `low_contrast` and `too_empty` with **zero
+false alarms** on the clean control.
+
+**And gemma3 is not blind — it declines to judge.** Asked a pointed
+descriptive question about the same two images ("say plainly if any text in
+the second image is cut off at the edge"), it answers correctly: *"the text is
+cut off at the right edge of the picture"*, and reads back the truncated word.
+Asked the loop's evaluative question, it answers `matches: true,
+overflow: false` on that same pair. Three framings were tried before
+concluding — schema-constrained, observation-before-flags (reordering the
+schema so it must write `discrepancies` first), and free prose with no JSON at
+all. The evaluative framings all collapse to approval; only a narrow, pointed
+description recovers the defect, and even that produced a false positive on
+the clean control. The failure mode is acquiescence, not perception, and no
+prompt ordering fixed it. This is worth recording because the obvious remedy —
+"ask it to think before it ticks" — was tried and did **not** work.
+
+**Geometry belongs to arithmetic, and now it is measured.** Neither model
+flagged `spill` or `off_slide`, the two purely geometric defects — and the
+`hidden_overrun` case shows why one of them is unwinnable by any eye: text set
+three times too large for its box is an `overrun` the audit reads straight out
+of the XML, but PowerPoint and LibreOffice *auto-shrink* it, so the render
+looks clean. Scoring a model for missing it would measure the renderer. The
+comment above `_merged_verdict` has always asserted this; it is now
+a measurement rather than an assertion, and it is the empirical case for
+arithmetic winning the merge.
+
+**So what is the vision judge for?** `too_empty` — the one defect in the
+corpus no arithmetic check can settle, and the one `qwen3-vl` got right. That
+is the division of labour the loop should lean on: the audit owns everything
+it can measure, and the model is asked only what measurement cannot reach.
+
+**The cost of the better judge: it does not always answer.** `qwen3-vl:4b`
+returned nothing — a 120 s timeout or a 500 — on **one scored case in five**,
+and the bench reports that as `nores` in its own column, excluded from every
+denominator to its right, so a daemon that does not reply can never read as a
+model that cannot see.
+
+Two things were tried, and the honest account is that only one of them
+helped and neither fixed it. Ollama gives this model a **262144**-token
+context by default, which allocates **44 GB**; a derived tag with
+`PARAMETER num_ctx 8192` (same weights, no re-download) brings that to
+**4.5 GB** and halved the failures, from two cases to one. Unloading the
+other model so nothing competes for memory changed nothing at all.
+
+What it actually is: **the same image, every time.** Across two runs, both
+modes, capped and uncapped context, resident alongside `gemma3` and alone,
+the case that hangs is always `off_slide` — five occurrences out of five, at
+the full 120 s timeout. One mostly-black slide with clipped text at its right
+edge reliably sends this model into a generation it does not come back from.
+So the trade is real and should be stated plainly: `qwen3-vl` judges better
+and answers less often, and a loop that depends on it needs the timeout and
+the degrade-to-no-verdict path that `eyeball_slides` already has — which is
+the second reason the `json.loads` fix above matters.

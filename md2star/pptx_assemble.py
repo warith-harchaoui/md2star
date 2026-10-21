@@ -55,7 +55,6 @@ Author
 
 from __future__ import annotations
 
-import json
 import re
 import zipfile
 from collections import Counter
@@ -78,6 +77,7 @@ from .pptx_layout import (
     Slide,
     default_chat,
     default_render,
+    parse_json_reply,
     render_deck_pages,
 )
 
@@ -1137,11 +1137,7 @@ def eyeball_slides(
                 # everything else is still judged against a family resemblance.
                 prompt = _CLONE_JUDGE_PROMPT if i in result.pages else _JUDGE_PROMPT
                 out = chat(prompt, [target_png, candidate_png], _JUDGE_SCHEMA)
-                judged = (
-                    out
-                    if isinstance(out, dict)
-                    else (json.loads(out) if isinstance(out, str) else None)
-                )
+                judged = parse_json_reply(out)
                 if not judged:
                     # A transport failure or unparseable reply is
                     # indistinguishable from "matches" to the caller below —

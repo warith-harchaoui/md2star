@@ -31,7 +31,10 @@ jobs:
       # Pinned: an unpinned `--upgrade ruff` let ruff 0.16 change default
       # behaviour under the gate. Bump this deliberately, not by surprise.
       - run: python -m pip install "ruff==0.15.21"
-      - run: ruff check md2star/ tests/
+      # scripts/ is in the gate too: the developer tools there (the comment
+      # auditor, the trigger check, the VLM bench) are Python the project
+      # owns, and they were drifting ungated.
+      - run: ruff check md2star/ tests/ scripts/
 
   # ──────────────────────────────────────────────────────────────────
   # Comment-density gate (house coding-standard rule 4). Fails when any
