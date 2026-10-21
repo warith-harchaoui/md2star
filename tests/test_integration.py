@@ -236,3 +236,43 @@ class TestMermaid:
             assert "flowchart" in body or "mermaid" in body, (
                 "mermaid block was neither rendered nor preserved as text"
             )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# PDF — concurrency, which is the GUI's normal mode
+# ─────────────────────────────────────────────────────────────────────
+
+
+@needs_pandoc
+@needs_soffice
+def test_concurrent_pdf_conversions_all_succeed(tmp_path):
+    """Two PDF renders at once must both produce a PDF.
+
+    LibreOffice locks one user profile per ``UserInstallation``, and a second
+    ``soffice`` pointed at a held profile does not fail loudly — measured, it
+    either exits 0 having written nothing and said nothing, or dies with a
+    DeploymentException. Converting under the default profile therefore made a
+    PDF depend on whether anything else was using LibreOffice, including the
+    user's own open copy of it.
+
+    This is not a hypothetical for the GUI: it serves on a
+    ``ThreadingHTTPServer`` and PDF is its live-preview format, so two renders
+    overlap as soon as the user is quick or has two tabs. Against the previous
+    code this test failed two of three runs, with ``stderr: ''``.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    src = tmp_path / "doc.md"
+    src.write_text("# Title\n\nBody text.\n\n| a | b |\n|---|---|\n| 1 | 2 |\n", encoding="utf-8")
+
+    def render(n: int) -> tuple[int, Path]:
+        out = tmp_path / f"out{n}.pdf"
+        return _convert("pdf", src, out), out
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results = list(pool.map(render, range(3)))
+
+    failed = [(rc, out.name) for rc, out in results if rc != 0 or not out.exists()]
+    assert not failed, f"concurrent PDF renders failed: {failed}"
+    for _rc, out in results:
+        assert out.stat().st_size > 1024, f"{out.name} is suspiciously small"

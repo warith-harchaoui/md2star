@@ -830,6 +830,27 @@ def _find_soffice() -> str | None:
     return None
 
 
+def _soffice_profile() -> Path:
+    """The LibreOffice user profile md2star converts under.
+
+    LibreOffice keeps one profile per ``UserInstallation`` and locks it. A
+    second ``soffice`` told to use a profile that is already held does not
+    fail loudly — it **exits 0, writes no document and prints nothing**
+    (measured), which is the least debuggable outcome available. Since the
+    default profile is the one the user's own LibreOffice holds whenever it
+    is open, converting under it means every PDF depends on whether the user
+    happens to have the app running.
+
+    So we convert under our own, kept in the cache rather than created per
+    run: a fresh profile costs about 1.4s to bootstrap (measured, roughly
+    doubling a 1.5s conversion), and the GUI's live preview pays that on
+    every render. Two concurrent md2star runs can still meet on this one,
+    which is what the throwaway-profile retry in :func:`_convert_docx_to_pdf`
+    is for.
+    """
+    return cache_dir("soffice-profile")
+
+
 def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> int:
     """Render *docx_path* to *pdf_path* via headless LibreOffice. Returns rc."""
     soffice = _find_soffice()
@@ -850,37 +871,63 @@ def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> int:
     # and move the result to the user's requested path so the API stays
     # "input → output" with no surprises.
     with osh.temporary_folder(prefix="md2pdf-") as workdir:
-        cmd = [
-            soffice,
-            "--headless",
-            "--convert-to",
-            "pdf",
-            "--outdir",
-            workdir,
-            str(docx_path),
-        ]
-        try:
-            proc = subprocess.run(
-                cmd,
-                capture_output=True,
-                timeout=120,
-                check=False,
-            )
-        except subprocess.TimeoutExpired:
-            logger.error("md2pdf: LibreOffice timed out after 120s.")
-            return 1
-        if proc.returncode != 0:
-            stderr = proc.stderr.decode("utf-8", errors="replace").strip()
-            logger.error(f"md2pdf: LibreOffice exited {proc.returncode}: {stderr}")
-            return proc.returncode
-
+        # First attempt uses md2star's own persistent profile (see
+        # _soffice_profile); the second a throwaway one, which cannot be
+        # contended by definition. Contention does not announce itself the
+        # same way twice — measured, it is either "exit 0, no document, no
+        # message" or a DeploymentException on exit 1 — so the retry is keyed
+        # on the only thing that matters, whether a PDF exists.
         produced = Path(workdir) / (docx_path.stem + ".pdf")
+        last_rc, last_stderr = 1, ""
+        for attempt, profile in enumerate((_soffice_profile(), Path(workdir) / "profile")):
+            cmd = [
+                soffice,
+                f"-env:UserInstallation={profile.as_uri()}",
+                "--headless",
+                "--convert-to",
+                "pdf",
+                "--outdir",
+                workdir,
+                str(docx_path),
+            ]
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    timeout=120,
+                    check=False,
+                )
+            except subprocess.TimeoutExpired:
+                # Not retried: a second 120s wait to reach the same verdict
+                # helps nobody.
+                logger.error("md2pdf: LibreOffice timed out after 120s.")
+                return 1
+            last_rc = proc.returncode
+            last_stderr = proc.stderr.decode("utf-8", errors="replace").strip()
+            if last_rc == 0 and produced.exists():
+                break
+            if attempt == 0:
+                # Debug, not warning: the retry normally wins, and a line about
+                # LibreOffice internals on a conversion that then succeeded is
+                # noise. It is here at all because this silence is what made
+                # the symptom unreadable before.
+                logger.debug(
+                    "md2pdf: LibreOffice produced no %s (exit %d); "
+                    "retrying in a throwaway profile.",
+                    produced.name,
+                    last_rc,
+                )
+
         if not produced.exists():
+            if last_rc != 0:
+                logger.error(f"md2pdf: LibreOffice exited {last_rc}: {last_stderr}")
+                return last_rc
             logger.error(
-                f"md2pdf: LibreOffice did not produce {produced.name}. "
-                f"stderr: {proc.stderr.decode(errors='replace')!r}"
+                f"md2pdf: LibreOffice did not produce {produced.name}, "
+                f"even in a private profile. stderr: {last_stderr!r}"
             )
             return 1
+
         osh.make_directory(str(pdf_path.parent))
         shutil.move(str(produced), str(pdf_path))
     return 0
