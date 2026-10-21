@@ -359,3 +359,83 @@ def test_single_line_header_flattens_every_whitespace_run() -> None:
     assert gui_server._single_line_header("héllo") == "h?llo"
     assert gui_server._single_line_header("x" * 50, limit=10) == "x" * 10
     assert gui_server._single_line_header("   ") == ""
+
+
+# ── the extension header becomes part of a filename ──────────────────────────
+
+
+def test_extract_refuses_an_extension_that_is_a_path(live_server) -> None:
+    """``X-Md2star-Ext`` is matched whole, not suffix-sniffed.
+
+    The header lands inside the name `/extract` writes the upload to, and
+    `is_supported()` only looks at the suffix — so `../../x.pdf` passed the
+    old check. Nothing escaped, because the literal stem in front glued the
+    `../` onto a directory that does not exist, but that was the prefix
+    saving us rather than the validation, and the write failed with an
+    unhandled FileNotFoundError instead of a clean refusal.
+    """
+    request, port, _ = live_server
+    host = f"127.0.0.1:{port}"
+    for evil in ("../../../../tmp/pwned.pdf", "/../../tmp/pwned.pdf", "/tmp/pwned.pdf"):
+        status, body = request(
+            "POST",
+            "/extract",
+            headers={"Host": host, "X-Md2star-Ext": evil, "Content-Type": "application/pdf"},
+            body="%PDF-1.4 whatever",
+        )
+        assert status == 415, f"{evil!r} was not refused: {status} {body!r}"
+    assert not Path("/tmp/pwned.pdf").exists()
+
+
+def test_vendor_assets_stay_under_vendor(monkeypatch) -> None:
+    """``/vendor/...`` is confined by the guard, on every OS.
+
+    The old guard rejected a ``".."`` segment after splitting on ``"/"`` only.
+    A backslash is a separator on Windows, so ``..\\..\\secret`` arrived as one
+    segment it waved through and the OS then resolved out of the vendor
+    directory. Reachability was narrow — reading needs the reply, so a browser
+    is stopped by the Origin gate and the same-origin policy — but the
+    docstring promised confinement it did not deliver off POSIX.
+
+    The filesystem is stubbed out on purpose. On POSIX a traversal fails
+    anyway, because ``..\\..\\secret`` is merely an odd filename that does not
+    exist, so a test run here would pass against the old code and prove
+    nothing. Handing the lookup a store that answers *every* path makes the
+    guard the only thing that can refuse — which is what we mean to assert.
+    """
+
+    class _AnyFile:
+        """A store where every path exists, so only the guard can say no."""
+
+        def joinpath(self, *parts):
+            return self
+
+        def read_bytes(self):
+            return b"SECRET"
+
+    monkeypatch.setattr(gui_server.resources, "files", lambda _pkg: _AnyFile())
+
+    for evil in (
+        "..\\..\\..\\secret.txt",
+        "../../../secret.txt",
+        "/etc/passwd",
+        "subdir\\..\\..\\x",
+        "C:\\Windows\\win.ini",
+        "./x",
+        "",
+    ):
+        assert gui_server._read_vendor(evil) is None, f"{evil!r} was not refused"
+
+    # The same stub must still hand back an ordinary nested asset, so the
+    # assertions above are about traversal and not about refusing everything.
+    assert gui_server._read_vendor("pdfjs/pdf.worker.js") == b"SECRET"
+
+
+def test_a_real_vendor_asset_is_still_served() -> None:
+    """Confinement must not cost us the assets the editor needs offline."""
+    from importlib import resources
+
+    vendor = resources.files("md2star.data.gui").joinpath("vendor")
+    names = [p.name for p in vendor.iterdir() if p.is_file()]
+    assert names, "no vendored asset to test against"
+    assert gui_server._read_vendor(names[0]) is not None

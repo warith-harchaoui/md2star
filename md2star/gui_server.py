@@ -418,15 +418,27 @@ def _sniff_ooxml_format(data: bytes) -> str | None:
 
 
 def _read_vendor(rel_path: str) -> bytes | None:
-    """Read a file under ``md2star/data/gui/vendor/<rel_path>``.
+    r"""Read a file under ``md2star/data/gui/vendor/<rel_path>``.
 
-    Returns ``None`` for path-traversal attempts (``..`` segments) or for
-    files that do not exist. The vendored assets (PDF.js, Tailwind,
-    CodeMirror bundle, fonts) live there and the GUI references them via
-    ``/vendor/...`` URLs so the editor works fully offline.
+    Returns ``None`` for path-traversal attempts or for files that do not
+    exist. The vendored assets (PDF.js, Tailwind, CodeMirror bundle, fonts)
+    live there and the GUI references them via ``/vendor/...`` URLs so the
+    editor works fully offline.
+
+    Every segment is vetted, and separators are normalised first, because a
+    backslash *is* a separator on Windows: splitting on ``"/"`` alone leaves
+    ``..\..\secret`` as one innocent-looking segment that the OS then walks
+    straight out of this directory. A drive-qualified segment is refused for
+    the same reason ``_safe_within_root`` refuses one — ``joinpath("C:")``
+    re-anchors the whole path on Windows. This mirrors the confinement
+    standard the rest of the module already holds itself to.
     """
-    if not rel_path or ".." in rel_path.split("/") or rel_path.startswith("/"):
+    if not rel_path:
         return None
+    segments = rel_path.replace("\\", "/").split("/")
+    if any(seg in ("", ".", "..") or ":" in seg for seg in segments):
+        return None
+    rel_path = "/".join(segments)
     try:
         root = resources.files("md2star.data.gui").joinpath("vendor")
         target = root.joinpath(*rel_path.split("/"))
@@ -896,7 +908,12 @@ class _Handler(BaseHTTPRequestHandler):
           figures are re-authored as Mermaid; otherwise every image degrades to a
           plain scraped PNG. Requires an open folder (assets need a home).
         """
-        from .reverse import ReverseUnavailable, is_supported, to_markdown, to_markdown_twin
+        from .reverse import (
+            SUPPORTED_REVERSE_EXTENSIONS,
+            ReverseUnavailable,
+            to_markdown,
+            to_markdown_twin,
+        )
 
         length = int(self.headers.get("Content-Length", "0") or "0")
         if length <= 0:
@@ -905,12 +922,18 @@ class _Handler(BaseHTTPRequestHandler):
         if length > 50 * 1024 * 1024:
             return self.send_error(413, "upload exceeds 50 MB cap")
 
-        # The extension decides the reader path; reject anything we don't read
-        # back before spending bytes on disk or importing the heavy engine.
+        # The extension decides the reader path *and* becomes part of a filename
+        # below, so it is matched whole against the supported set rather than
+        # sniffed with is_supported(), which only inspects the suffix and so
+        # accepts a value like "../../x.pdf". Nothing escapes today — the
+        # literal stem in front of it glues the "../" onto a directory that
+        # does not exist, and the write fails — but that is the prefix saving
+        # us, not the check, and the failure arrives as an unhandled
+        # FileNotFoundError. An equality test is correct by construction.
         ext = (self.headers.get("X-Md2star-Ext") or "").strip().lower()
-        if not ext.startswith("."):
-            ext = "." + ext if ext else ""
-        if not is_supported("x" + ext):
+        if ext and not ext.startswith("."):
+            ext = "." + ext
+        if ext not in SUPPORTED_REVERSE_EXTENSIONS:
             return self.send_error(415, "expected a .docx, .pptx or .pdf upload")
 
         # A header flag toggles the twin path; anything else is a plain text load.
