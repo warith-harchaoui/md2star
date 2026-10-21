@@ -439,3 +439,62 @@ def test_a_real_vendor_asset_is_still_served() -> None:
     names = [p.name for p in vendor.iterdir() if p.is_file()]
     assert names, "no vendored asset to test against"
     assert gui_server._read_vendor(names[0]) is not None
+
+
+# ── the macOS folder prompt is interpolated into AppleScript ─────────────────
+
+
+def test_applescript_prompt_cannot_become_code() -> None:
+    """A quote in the prompt must not end the string literal.
+
+    `_native_folder_picker` builds `choose folder with prompt "<prompt>"` and
+    hands it to `osascript`. A bare `"` ends that literal and the rest is
+    AppleScript, which has `do shell script`; the un-escaped form was shown to
+    run a command that way. No caller passes anything but a constant, so
+    nothing was reachable — this pins the quoting so that stays true of any
+    future localised prompt.
+    """
+    payload = 'x" & (do shell script "echo pwned") & "'
+    quoted = gui_server._applescript_literal(payload)
+
+    # One literal: the quotes that open and close it, and no others unescaped.
+    assert quoted.startswith('"') and quoted.endswith('"')
+    inner = quoted[1:-1]
+    assert '\\"' in inner
+    assert not _has_bare_quote(inner)
+    # Backslashes are doubled before quotes are escaped, so this survives too.
+    assert gui_server._applescript_literal('a\\"b') == '"a\\\\\\"b"'
+    # A literal cannot span lines.
+    assert "\n" not in gui_server._applescript_literal("a\nb")
+
+
+def _has_bare_quote(inner: str) -> bool:
+    """True if *inner* holds a ``"`` that is not preceded by its escape."""
+    i = 0
+    while i < len(inner):
+        if inner[i] == "\\":
+            i += 2
+            continue
+        if inner[i] == '"':
+            return True
+        i += 1
+    return False
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="osascript is macOS-only")
+def test_applescript_quoting_holds_against_the_real_interpreter(tmp_path) -> None:
+    """Ask osascript itself: the payload must come back as text, not run.
+
+    Uses `return <literal>` rather than the picker's own `choose folder`, so
+    the check needs no dialog and no interaction.
+    """
+    import subprocess
+
+    marker = tmp_path / "pwned.txt"
+    payload = f'x" & (do shell script "echo pwned > {marker}") & "'
+    script = f"return {gui_server._applescript_literal(payload)}"
+    out = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    assert not marker.exists(), "the payload executed"
+    # It came back as the plain text it always was.
+    assert "do shell script" in out.stdout

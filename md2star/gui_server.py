@@ -279,6 +279,24 @@ def _safe_stem(name: str) -> str:
     return cleaned[:80]
 
 
+def _applescript_literal(value: str) -> str:
+    r"""Quote *value* as an AppleScript string literal.
+
+    Interpolating a bare string into a script is how a prompt becomes code: a
+    ``"`` ends the literal and whatever follows is AppleScript, which has
+    ``do shell script``. Demonstrated against the un-escaped form — a prompt
+    of ``x" & (do shell script "…") & "`` ran the command. No caller passes
+    anything but a constant today, so nothing was reachable; this keeps that
+    from being the only thing standing between a future localised or
+    user-supplied prompt and arbitrary execution.
+
+    Backslash is escaped before the quote, or the escape we add would itself
+    be escaped. Newlines go too: a literal cannot span lines.
+    """
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return '"' + " ".join(escaped.split()) + '"'
+
+
 def _native_folder_picker(prompt: str) -> Path | None:
     """Pop a native folder-chooser dialog. Returns None when unsupported / cancelled.
 
@@ -289,7 +307,8 @@ def _native_folder_picker(prompt: str) -> Path | None:
     """
     try:
         if osh.macos():
-            script = f'POSIX path of (choose folder with prompt "{prompt}")'
+            # Quoted, never interpolated raw — see _applescript_literal.
+            script = f"POSIX path of (choose folder with prompt {_applescript_literal(prompt)})"
             out = (
                 subprocess.check_output(
                     ["osascript", "-e", script],
