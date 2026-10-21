@@ -14,6 +14,7 @@ Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -96,3 +97,168 @@ def test_session_template_fmt_allowlist() -> None:
         assert gui_server._session_template("../etc/passwd") is None
     finally:
         gui_server._set_folder_root(None)
+
+
+# ── who is asking: Origin / Host gate ────────────────────────────────────────
+# Path confinement answers what a request may touch. These answer who may ask.
+# They run a real server on loopback and send the exact headers a browser
+# would, because the hole they close is a property of the HTTP exchange rather
+# than of any one handler.
+
+
+@pytest.fixture
+def live_server(tmp_path):
+    """A real GUI server on a free loopback port, with a folder already open."""
+    import http.client
+    import threading
+    from http.server import ThreadingHTTPServer
+
+    root = tmp_path / "notes"
+    root.mkdir()
+    (root / "thesis.md").write_text("# years of work\n", encoding="utf-8")
+    gui_server._set_folder_root(root.resolve())
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), gui_server._Handler)
+    port = srv.server_address[1]
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
+
+    def request(method: str, path: str, *, headers: dict, body: str | None = None):
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        try:
+            conn.request(method, path, body=body, headers=headers)
+            resp = conn.getresponse()
+            return resp.status, resp.read()
+        finally:
+            conn.close()
+
+    try:
+        yield request, port, root
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        thread.join(timeout=5)
+        gui_server._set_folder_root(None)
+
+
+def test_the_page_itself_is_served(live_server) -> None:
+    """The legitimate case: same-origin, loopback Host. Must still work."""
+    request, port, root = live_server
+    host = f"127.0.0.1:{port}"
+    status, body = request(
+        "POST",
+        "/fs/save",
+        headers={"Host": host, "Origin": f"http://{host}", "Content-Type": "application/json"},
+        body=json.dumps({"path": "thesis.md", "content": "# edited\n"}),
+    )
+    assert status == 200, body
+    assert (root / "thesis.md").read_text() == "# edited\n"
+
+
+def test_a_local_script_with_no_origin_still_works(live_server) -> None:
+    """curl and scripted local use send no Origin; that must stay allowed.
+
+    A browser cannot be made to *omit* Origin on a cross-origin call, so
+    "absent" is not a hole an attacker can walk through.
+    """
+    request, port, root = live_server
+    status, body = request(
+        "POST",
+        "/fs/save",
+        headers={"Host": f"127.0.0.1:{port}", "Content-Type": "application/json"},
+        body=json.dumps({"path": "thesis.md", "content": "# by script\n"}),
+    )
+    assert status == 200, body
+    assert (root / "thesis.md").read_text() == "# by script\n"
+
+
+def test_another_site_cannot_delete_your_notes(live_server) -> None:
+    """The attack, end to end: a cross-origin simple request must not land.
+
+    ``text/plain`` is CORS-safelisted, so this is a *simple* request — there is
+    no preflight for the server to refuse, and the attacker never needs to read
+    a reply. Before the Origin gate, ``/fs/open {"path": "~"}`` followed by
+    ``/fs/delete`` ran happily from any page the user had open.
+    """
+    request, port, root = live_server
+    evil = {
+        "Host": f"127.0.0.1:{port}",
+        "Origin": "https://evil.example",
+        "Content-Type": "text/plain;charset=UTF-8",
+    }
+    # Re-point the root at the user's home…
+    status, _ = request("POST", "/fs/open", headers=evil, body=json.dumps({"path": "~"}))
+    assert status == 403
+    assert gui_server._folder_root() == root.resolve()  # root never moved
+    # …and delete / overwrite what is there.
+    status, _ = request(
+        "POST", "/fs/delete", headers=evil, body=json.dumps({"paths": ["thesis.md"]})
+    )
+    assert status == 403
+    status, _ = request(
+        "POST", "/fs/save", headers=evil, body=json.dumps({"path": "thesis.md", "content": "owned"})
+    )
+    assert status == 403
+    assert (root / "thesis.md").read_text() == "# years of work\n"
+
+
+def test_a_rebound_domain_is_refused_even_though_its_origin_matches(live_server) -> None:
+    """DNS rebinding: Origin agrees with Host, and Host is the giveaway.
+
+    An attacker domain resolved to 127.0.0.1 is same-origin to the browser, so
+    the Origin check alone would pass it. What it cannot change is the name it
+    puts in ``Host``.
+    """
+    request, port, root = live_server
+    status, _ = request(
+        "POST",
+        "/fs/delete",
+        headers={
+            "Host": f"evil.example:{port}",
+            "Origin": f"http://evil.example:{port}",
+            "Content-Type": "application/json",
+        },
+        body=json.dumps({"paths": ["thesis.md"]}),
+    )
+    assert status == 403
+    assert (root / "thesis.md").exists()
+
+
+def test_an_opaque_origin_is_not_treated_as_absent(live_server) -> None:
+    """A sandboxed iframe or a file:// page sends ``Origin: null``.
+
+    It is not this page, so folding it in with "no Origin at all" would hand
+    the hole straight back.
+    """
+    request, port, root = live_server
+    status, _ = request(
+        "POST",
+        "/fs/delete",
+        headers={
+            "Host": f"127.0.0.1:{port}",
+            "Origin": "null",
+            "Content-Type": "application/json",
+        },
+        body=json.dumps({"paths": ["thesis.md"]}),
+    )
+    assert status == 403
+    assert (root / "thesis.md").exists()
+
+
+def test_reading_your_markdown_is_gated_too(live_server) -> None:
+    """GET is not exempt: ``/fs/read`` hands back the user's own prose."""
+    request, port, _ = live_server
+    status, _ = request(
+        "GET",
+        "/fs/read?path=thesis.md",
+        headers={"Host": f"127.0.0.1:{port}", "Origin": "https://evil.example"},
+    )
+    assert status == 403
+
+
+def test_host_name_parsing_keeps_ipv6_literals_whole() -> None:
+    """Splitting on the last colon would cut ``[::1]:8765`` in half."""
+    assert gui_server._host_name("127.0.0.1:8765") == "127.0.0.1"
+    assert gui_server._host_name("localhost") == "localhost"
+    assert gui_server._host_name("[::1]:8765") == "[::1]"
+    assert gui_server._host_name("LocalHost:1234") == "localhost"

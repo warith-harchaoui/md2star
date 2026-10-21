@@ -26,11 +26,24 @@ or Vite's dev server.
 
 Security note
 -------------
-The only untrusted input is the ``/fs/*`` path a browser sends. Every such
-path is funnelled through :func:`_safe_within_root`, which rejects ``..``
-segments, absolute paths and symlink escapes so a request can never read or
-write outside the single folder root the user opened. That confinement is
-unit-tested in ``tests/test_gui_security.py``.
+Two different questions, and both have to be answered.
+
+**What may a request touch?** Every ``/fs/*`` path is funnelled through
+:func:`_safe_within_root`, which rejects ``..`` segments, absolute paths and
+symlink escapes, so a request can never read or write outside the single
+folder root the user opened.
+
+**Who is asking?** Binding to loopback keeps the port off the network, but it
+does not keep it away from *the user's own browser*: any page they have open
+can post to ``127.0.0.1:8765``. A cross-origin POST with a CORS-safelisted
+content type is a simple request, so there is no preflight to refuse, and an
+attacker never has to read a reply — ``/fs/open`` with ``{"path": "~"}``
+followed by ``/fs/delete`` is pure side effect. So every request first passes
+:meth:`_Handler._caller_is_this_page`, which checks ``Origin`` (cross-site
+calls) and ``Host`` (DNS rebinding) before a handler runs.
+
+Both halves are unit-tested in ``tests/test_gui_security.py``, the second with
+a live server and the exact headers a browser would send.
 
 
 Author
@@ -422,6 +435,33 @@ def _read_vendor(rel_path: str) -> bytes | None:
         return None
 
 
+#: Host names a loopback-bound server will answer to. A browser reaching
+#: ``http://127.0.0.1:8765/`` sends exactly one of these; an attacker domain
+#: that has been pointed at 127.0.0.1 (DNS rebinding) sends its own name and
+#: is turned away here, before any handler runs.
+_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
+
+#: The address :func:`main` bound to. Only ever leaves ``"127.0.0.1"`` when the
+#: operator passed ``--bind`` and read the banner, and that is exactly when the
+#: Host allowlist has to stand down: a LAN client legitimately arrives with the
+#: machine's own name or address in ``Host``.
+_BIND_ADDRESS = "127.0.0.1"
+
+
+def _host_name(value: str) -> str:
+    """The host part of a ``Host``/``netloc`` value, port removed, lowercased.
+
+    IPv6 literals keep their brackets (``[::1]:8765`` → ``[::1]``), because
+    that is the form they are compared against — splitting on the last colon
+    would otherwise cut an address like ``::1`` in half.
+    """
+    value = value.strip().lower()
+    if value.startswith("["):
+        end = value.find("]")
+        return value[: end + 1] if end != -1 else value
+    return value.rsplit(":", 1)[0] if ":" in value else value
+
+
 class _Handler(BaseHTTPRequestHandler):
     """One request → one response. Threading is handled by the parent server."""
 
@@ -434,10 +474,71 @@ class _Handler(BaseHTTPRequestHandler):
         sys.stderr.write("md2star gui: " + (format % args) + "\n")
 
     # ─────────────────────────────────────────────────────────────────
+    # Who is asking — the gate every request passes before any handler
+    # ─────────────────────────────────────────────────────────────────
+
+    def _caller_is_this_page(self) -> str:
+        """Return "" when the request may proceed, else why it may not.
+
+        Path confinement answers *what* a request may touch; it cannot answer
+        *who* is asking, and for a server that writes files those are two
+        different questions. Without this gate, any page the user happens to
+        have open can drive the whole ``/fs/*`` API: a cross-origin ``POST``
+        with a CORS-safelisted content type is a *simple request*, so there is
+        no preflight to decline, and the attacker never needs to read a reply —
+        ``/fs/open`` with ``{"path": "~"}`` followed by ``/fs/delete`` is all
+        side effect. Two independent checks close it:
+
+        **Origin**, when present, must be this very server. Browsers attach it
+        to every cross-origin request and the page itself cannot forge it, so
+        a mismatch is conclusive. Absent is allowed on purpose: ``curl`` and
+        scripted local use send no Origin, and a browser cannot be made to
+        omit one on a cross-origin call.
+
+        **Host** must name the loopback interface while we are bound to it.
+        This is the DNS-rebinding answer: an attacker domain resolved to
+        127.0.0.1 is same-origin as far as the browser is concerned — Origin
+        would match — but it still carries its own name in ``Host``. The check
+        stands down when the operator bound off-loopback, which is the one
+        case where a non-loopback Host is the legitimate one (and which the
+        startup banner already calls a security risk).
+        """
+        host = self.headers.get("Host") or ""
+        if _BIND_ADDRESS == "127.0.0.1" and _host_name(host) not in _LOOPBACK_HOSTS:
+            return f"unexpected Host header {host!r}"
+        origin = (self.headers.get("Origin") or "").strip()
+        # "null" is what a sandboxed iframe or a file:// page sends. It is not
+        # this page, and treating it as "absent" would reopen the hole.
+        if origin and origin.lower() != "null":
+            parsed = urllib.parse.urlsplit(origin)
+            if parsed.scheme not in ("http", "https") or parsed.netloc.lower() != host.lower():
+                return f"cross-origin request from {origin!r}"
+        elif origin:
+            return "opaque origin"
+        return ""
+
+    def _reject_foreign_caller(self) -> bool:
+        """Send 403 and return ``True`` when this request is not ours to serve."""
+        why = self._caller_is_this_page()
+        if not why:
+            return False
+        # Logged, not silent: a user whose GUI suddenly refuses a request
+        # deserves to find out why in the terminal, and a real attempt is
+        # something they should see.
+        logger.warning("gui: refused a request — %s", why)
+        self.send_error(403, f"refused: {why}")
+        return True
+
+    # ─────────────────────────────────────────────────────────────────
     # GET — static assets only
     # ─────────────────────────────────────────────────────────────────
 
     def do_GET(self) -> None:  # noqa: N802
+        # GET is gated too, not just the mutating verbs: `/fs/read` hands back
+        # the user's Markdown, and the Host half of the gate is what stops a
+        # rebound domain from reading it as same-origin.
+        if self._reject_foreign_caller():
+            return
         # Strip the query string before path matching — every static
         # asset has a `?v={{CACHE_BUST}}` appended for browser cache
         # busting and `self.path` keeps the raw query string verbatim.
@@ -514,6 +615,10 @@ class _Handler(BaseHTTPRequestHandler):
     # ─────────────────────────────────────────────────────────────────
 
     def do_POST(self) -> None:  # noqa: N802
+        # Before anything is dispatched: is this request even ours? Everything
+        # below writes files, spawns a converter or stops the process.
+        if self._reject_foreign_caller():
+            return
         # Every mutating action is a distinct POST path; dispatch on the path
         # (query string stripped) to the matching handler. Unknown paths 404
         # rather than silently succeeding.
@@ -1279,6 +1384,11 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+
+    # Tell the request gate where we actually bound, so it knows whether the
+    # loopback Host allowlist applies (see _caller_is_this_page).
+    global _BIND_ADDRESS
+    _BIND_ADDRESS = args.bind
 
     port = _pick_port(args.port) if args.bind == "127.0.0.1" else args.port
     server = ThreadingHTTPServer((args.bind, port), _Handler)
