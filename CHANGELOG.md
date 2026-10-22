@@ -4,6 +4,64 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.0] - 2026-10-22
+
+### Fixed
+
+- **An HTML table cell containing a pipe silently lost data.** `<td>a|b</td>`
+  emitted `| a|b |`, which Pandoc reads as one cell more than the header
+  declares — so it truncated the row and dropped the *last* cell, with nothing
+  raised and nothing logged. A cell written as `a&#124;b`, the author saying
+  "this is a pipe character, not markup", unescaped to the same thing: doing
+  it correctly failed exactly like doing it wrong. Pipes are now escaped.
+
+- **A newline inside a cell split the row in two.** `<td>a\nb</td>` turned one
+  row into two, moving every value after the break into a row that did not
+  exist in the source. Newlines inside a `<td>` are completely ordinary in
+  formatted HTML. Whitespace runs now collapse to a single space, a pipe table
+  being one line per row by construction.
+
+- **A nested table lost the outer table's cells and left raw HTML behind.**
+  The block pattern was non-greedy, so it stopped at the *first* `</table>` —
+  the inner one — and the outer table's `</td></tr></table>` tail survived in
+  the body. Pandoc's DOCX writer then drops raw HTML without a word, which is
+  the precise failure this module exists to prevent. Tables are now found by
+  walking tag depth; a nested one flattens into its parent (a pipe table
+  cannot nest) and says so once in the log rather than silently. An unclosed
+  `<table>` is left alone instead of swallowing the rest of the document.
+
+- **An image in a cell broke on brackets and parentheses.** Both halves of
+  `![alt](src)` come from the HTML and neither was sanitised, so
+  `<img src="a(1).png" alt="b]c">` rendered as `![b]c](a(1).png)` — not a link
+  at all. The alt's brackets are escaped and a source carrying a space or
+  parenthesis is wrapped in `<…>`, Markdown's own way of delimiting a target.
+
+  All four are covered by tests proven to fail without their fix.
+
+### Changed
+
+- **`md2star/i18n.py` delegates to `os_helper.Catalog`** instead of carrying
+  its own `.po` parser, `.mo` writer and language negotiation. The suite had
+  two gettext implementations since the other eight GUIs migrated; now it has
+  one. `scripts/compile_catalogs.py` keeps its command line and loses 110
+  lines of duplicated format code.
+
+  The **policy** stays here, because it is md2star's and not the suite's: the
+  CLI answers to `MD2STAR_LANG` and never to `LANG`, and its default is the
+  English source rather than the French every other member's GUI defaults to.
+  A converter prints the language its caller asked for.
+
+  Three capabilities moved *up* into os-helper 2.8.0 rather than being
+  dropped — region fallback (`fr-CA` → `fr`), `ngettext`, and
+  `Accept-Language` negotiation — so the rest of the suite gains them too. One
+  bug was fixed on the way: a malformed `q` value (`fr;q=high`) discarded the
+  language instead of defaulting its weight, because the header pattern
+  matched digits only and the `float()` guard written for that case could
+  never run.
+
+- `i18n.reset_cache()` replaces reaching into `translator.cache_clear()`, now
+  that two caches sit behind a lookup.
+
 ## [3.8.0] - 2026-10-20
 
 ### Added

@@ -45,7 +45,7 @@ dependencies = [
     # metadata, and the named-logger convenience functions (no stray root
     # basicConfig). Core dep. (Model-tag choice moved to best-engine-ai-helper
     # below, so os-helper's llm_model() is no longer used.)
-    "os-helper>=2.0.0,<3",
+    "os-helper>=2.8.0,<3",
     # best-engine-ai-helper is the suite's brief -> engine contract AND the LLM
     # transport. md2star commits `md2star/llm.brief.yaml`; on first use
     # `beh.ensure()` resolves it against this machine, writes the gitignored

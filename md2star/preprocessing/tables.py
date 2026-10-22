@@ -22,9 +22,16 @@ import html
 import re
 from html.parser import HTMLParser
 
+from ..logging import get_logger
 from .images import _CELL_IMG_RE, resize_image_for_cell
 from .math import MATH_FORMULA_RE
 from .regexes import PIPE_TABLE_ROW_RE
+
+# Module logger — child of the root "md2star" logger (configured by the CLI).
+logger = get_logger(__name__)
+
+#: Any run of whitespace, including the newlines a formatted ``<td>`` carries.
+_WHITESPACE_RUN_RE = re.compile(r"\s+")
 
 # HTML inline tag → (open_marker, close_marker) Markdown equivalents.
 _INLINE_TAGS: dict[str, tuple[str, str]] = {
@@ -74,6 +81,13 @@ class _TableParser(HTMLParser):
         """
         tag = tag.lower()
         if tag == "tr":
+            # Close any row still open before starting another. A well-formed
+            # table never needs this — `</tr>` has already filed it — but a
+            # NESTED table opens a `<tr>` while the outer row is mid-build, and
+            # simply resetting here dropped every cell the outer row had
+            # collected so far. Filing it first is what makes the flattening
+            # lossless in content, if not in structure.
+            self._close_row()
             self._current_row = []
         elif tag in ("td", "th"):
             self._in_cell = True
@@ -90,7 +104,7 @@ class _TableParser(HTMLParser):
             src = attr_dict.get("src", "")
             alt = attr_dict.get("alt", "")
             if src and self._current_cell is not None:
-                self._current_cell.append(f"![{alt}]({src})")
+                self._current_cell.append(_image_md(alt, src))
 
     def handle_endtag(self, tag: str) -> None:
         """Close a cell/row or pop an inline marker on the matching end tag.
@@ -108,9 +122,7 @@ class _TableParser(HTMLParser):
             self._in_cell = False
             self._inline_stack.clear()
         elif tag == "tr":
-            if self._current_row is not None:
-                self.rows.append(self._current_row)
-            self._current_row = None
+            self._close_row()
         elif self._in_cell and tag in _INLINE_TAGS:
             _, close_marker = _INLINE_TAGS[tag]
             if self._current_cell is not None:
@@ -128,6 +140,57 @@ class _TableParser(HTMLParser):
         """
         if self._in_cell and self._current_cell is not None:
             self._current_cell.append(html.unescape(data))
+
+    def _close_row(self) -> None:
+        """File the row being built, if it has anything in it.
+
+        Empty rows are dropped rather than emitted: unwrapping a nested table
+        leaves the parent's trailing ``</tr>`` with nothing left to close, and
+        a blank row in the output would read as a rendering fault.
+        """
+        if self._current_row:
+            self.rows.append(self._current_row)
+        self._current_row = None
+
+
+def _image_md(alt: str, src: str) -> str:
+    """Build ``![alt](src)`` so that neither half can break out of it.
+
+    Both halves arrive from the HTML and neither is sanitised there. A ``]`` in
+    the alt text closes the label early, and a ``(`` or ``)`` in the source
+    closes the target early — so ``<img src="a(1).png" alt="b]c">`` used to
+    render as ``![b]c](a(1).png)``, which is not a link at all.
+
+    The alt's brackets are backslash-escaped. A source carrying a space or a
+    parenthesis goes inside angle brackets, which is Markdown's own way of
+    saying "all of this is the target".
+    """
+    safe_alt = alt.replace("\\", "\\\\").replace("[", r"\[").replace("]", r"\]")
+    safe_src = f"<{src}>" if any(ch in src for ch in "() ") else src
+    return f"![{safe_alt}]({safe_src})"
+
+
+def _cell_safe(text: str) -> str:
+    """Make one cell's Markdown safe to sit between two pipes.
+
+    Two characters end a pipe-table cell early, and both lose data silently
+    rather than raising:
+
+    * **A pipe.** `<td>a|b</td>` becomes `| a|b |`, which Pandoc reads as two
+      cells. It then truncates the row to the header's width, so the *last*
+      cell of that row is dropped and never reported. A cell written as
+      ``a&#124;b`` — the author saying "this is a pipe character, not markup" —
+      unescapes to the same thing, so doing it right failed the same way.
+    * **A newline.** `<td>a\nb</td>` splits the row in two, so one row becomes
+      two and every value after the break lands in the wrong one. Newlines
+      inside a `<td>` are completely ordinary in formatted HTML.
+
+    A pipe is therefore backslash-escaped, which Pandoc renders as a literal
+    ``|``, and any run of whitespace collapses to one space: a pipe table is a
+    single line per row by construction, so there is nowhere for a newline to
+    go.
+    """
+    return _WHITESPACE_RUN_RE.sub(" ", text).replace("|", r"\|").strip()
 
 
 def html_table_to_markdown(table_html: str, base_dir: str = ".") -> str:
@@ -175,11 +238,13 @@ def html_table_to_markdown(table_html: str, base_dir: str = ".") -> str:
             alt = m.group(1)
             src = m.group(2)
             resized = resize_image_for_cell(src, base_dir)
-            return f"![{alt}]({resized})"
+            return _image_md(alt, resized)
 
         return _CELL_IMG_RE.sub(_resize, cell)
 
-    rows = [[_fix_cell_images(c) for c in row] for row in rows]
+    # Images first (the rewrite can introduce a path), then make each cell
+    # safe to sit between pipes.
+    rows = [[_cell_safe(_fix_cell_images(c)) for c in row] for row in rows]
 
     col_count = max(len(r) for r in rows)
     col_widths = [1] * col_count
@@ -226,31 +291,66 @@ def html_table_to_markdown(table_html: str, base_dir: str = ".") -> str:
 
 
 # Complete <table>…</table> block (case-insensitive, multi-line, non-greedy).
-_TABLE_RE = re.compile(
-    r"(<table(?:[^>]*)>.*?</table>)",
-    re.IGNORECASE | re.DOTALL,
-)
+#: An opening or closing ``<table>`` tag, used to walk nesting depth. A regex
+#: alone cannot match a balanced pair — which is exactly the bug this replaced:
+#: ``<table>…<table>…</table>…</table>`` with a non-greedy ``.*?`` matched up to
+#: the FIRST ``</table>``, i.e. the inner one, so the outer table's own cells
+#: were lost and its ``</td></tr></table>`` tail survived as raw HTML. Pandoc's
+#: DOCX writer then silently drops that tail, which is the precise failure this
+#: whole module exists to prevent.
+_TABLE_TAG_RE = re.compile(r"<(/?)table\b[^>]*>", re.IGNORECASE)
+
+
+def _table_spans(content: str) -> list[tuple[int, int]]:
+    """Every outermost ``<table>…</table>`` span, as ``(start, end)`` offsets.
+
+    Walks the tags counting depth, so a nested table is returned as part of its
+    parent rather than as a sibling. An unclosed ``<table>`` yields no span at
+    all: leaving the markup alone is better than consuming the rest of the
+    document into a table that was never terminated.
+    """
+    spans: list[tuple[int, int]] = []
+    depth = 0
+    start = 0
+    for tag in _TABLE_TAG_RE.finditer(content):
+        if tag.group(1):  # closing
+            if depth:
+                depth -= 1
+                if depth == 0:
+                    spans.append((start, tag.end()))
+        else:
+            if depth == 0:
+                start = tag.start()
+            depth += 1
+    return spans
 
 
 def convert_html_tables(content: str, base_dir: str = ".") -> str:
-    """Replace every ``<table>`` block in *content* with a pipe-table equivalent."""
+    """Replace every ``<table>`` block in *content* with a pipe-table equivalent.
 
-    def _replace(match: re.Match) -> str:
-        """Convert one matched ``<table>`` block to a blank-line-padded pipe-table.
+    Nested tables are converted as one table, because a pipe table cannot nest:
+    the inner rows flatten into the outer one. That loses the nesting, which is
+    unavoidable here, but it no longer loses the outer table's cells or leaves
+    raw HTML behind — and it says so, once, rather than silently.
+    """
+    spans = _table_spans(content)
+    if not spans:
+        return content
 
-        Parameters
-        ----------
-        match : re.Match
-            A match of :data:`_TABLE_RE`; group 1 is the full ``<table>`` block.
-
-        Returns
-        -------
-        str
-            The pipe-table string wrapped in surrounding blank lines.
-        """
-        return "\n\n" + html_table_to_markdown(match.group(1), base_dir) + "\n\n"
-
-    return _TABLE_RE.sub(_replace, content)
+    out: list[str] = []
+    cursor = 0
+    for start, end in spans:
+        block = content[start:end]
+        if len(_TABLE_TAG_RE.findall(block)) > 2:
+            logger.warning(
+                "md2star warning: a nested <table> was flattened into its parent — "
+                "a pipe table cannot nest, so the inner rows now follow the outer ones."
+            )
+        out.append(content[cursor:start])
+        out.append("\n\n" + html_table_to_markdown(block, base_dir) + "\n\n")
+        cursor = end
+    out.append(content[cursor:])
+    return "".join(out)
 
 
 # ---------------------------------------------------------------------------

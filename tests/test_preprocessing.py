@@ -787,3 +787,110 @@ def test_isolation_is_idempotent() -> None:
     assert once == twice
     # And exactly one blank separator was inserted, not a growing pile.
     assert once.count("\n##\n") + once.count("\n## \n") <= 1
+
+
+# --------------------------------------------------------------------------- #
+# HTML tables: the ways a cell used to end early and lose data in silence
+# --------------------------------------------------------------------------- #
+
+
+def test_a_pipe_in_a_cell_does_not_split_it() -> None:
+    """A pipe inside a `<td>` used to cost the row its last cell.
+
+    `<td>a|b</td><td>c</td>` emitted `| a|b | c |`, which Pandoc reads as three
+    cells against a two-column header — so it truncated the row and dropped
+    `c` entirely, with nothing raised and nothing logged.
+    """
+    from md2star.preprocessing.tables import html_table_to_markdown
+
+    out = html_table_to_markdown(
+        "<table><tr><th>A</th><th>B</th></tr><tr><td>a|b</td><td>c</td></tr></table>"
+    )
+    body = out.splitlines()[-1]
+    assert r"a\|b" in body, f"the pipe was not escaped: {body}"
+    assert "c" in body, "the trailing cell was dropped"
+    # Count the delimiters, not every `|`: the escaped one is content.
+    assert body.replace(r"\|", "").count("|") == 3, f"the row is not two cells wide: {body}"
+
+
+def test_an_html_escaped_pipe_is_treated_as_a_character_not_as_markup() -> None:
+    """`&#124;` is the author saying "this is a pipe character".
+
+    It unescapes to a bare `|` on the way in, so doing it the right way used to
+    fail exactly like doing it the wrong way.
+    """
+    from md2star.preprocessing.tables import html_table_to_markdown
+
+    out = html_table_to_markdown(
+        "<table><tr><th>A</th><th>B</th></tr><tr><td>a&#124;b</td><td>c</td></tr></table>"
+    )
+    body = out.splitlines()[-1]
+    assert r"a\|b" in body and "c" in body
+
+
+def test_a_newline_in_a_cell_does_not_split_the_row() -> None:
+    """Newlines inside a `<td>` are ordinary in formatted HTML.
+
+    They used to turn one row into two, moving every value after the break
+    into a row that did not exist in the source.
+    """
+    from md2star.preprocessing.tables import html_table_to_markdown
+
+    out = html_table_to_markdown(
+        "<table><tr><th>A</th><th>B</th></tr><tr><td>a\nb</td><td>c</td></tr></table>"
+    )
+    rows = [line for line in out.splitlines() if line.startswith("|")]
+    assert len(rows) == 3, f"expected header, separator and one body row, got {rows}"
+    assert "a b" in rows[-1]
+
+
+def test_a_nested_table_keeps_the_outer_cells_and_leaves_no_raw_html() -> None:
+    """The failure this module exists to prevent, reached from the inside.
+
+    `_TABLE_RE`'s non-greedy match stopped at the FIRST `</table>` — the inner
+    one — so the outer table's cells were lost and its `</td></tr></table>`
+    tail stayed in the body as raw HTML, which Pandoc's DOCX writer then drops
+    without a word. The nesting itself cannot survive a pipe table, so the
+    rows flatten; the content must not vanish.
+    """
+    from md2star.preprocessing.tables import convert_html_tables
+
+    out = convert_html_tables(
+        "<table><tr><td>outer</td><td><table><tr><td>inner</td></tr></table></td></tr></table>"
+    )
+    assert "outer" in out, "the outer table's cell was lost"
+    assert "inner" in out
+    assert "</table>" not in out and "</td>" not in out, f"raw HTML survived: {out!r}"
+
+
+def test_an_unclosed_table_is_left_alone() -> None:
+    """Better untouched markup than the rest of the document eaten as a table."""
+    from md2star.preprocessing.tables import convert_html_tables
+
+    source = "<table><tr><td>dangling</td></tr>\n\nA following paragraph.\n"
+    assert convert_html_tables(source) == source
+
+
+def test_two_sibling_tables_are_both_converted() -> None:
+    """Depth tracking must not merge tables that merely follow one another."""
+    from md2star.preprocessing.tables import convert_html_tables
+
+    out = convert_html_tables(
+        "<table><tr><td>one</td></tr></table>\ntext\n<table><tr><td>two</td></tr></table>"
+    )
+    assert "one" in out and "two" in out and "text" in out
+    assert "</table>" not in out
+
+
+def test_an_image_in_a_cell_survives_brackets_and_parentheses() -> None:
+    """Both halves of `![alt](src)` come from the HTML and neither is sanitised.
+
+    A `]` in the alt closed the label early and a `(` in the source closed the
+    target early, so the result was not a link at all.
+    """
+    from md2star.preprocessing.tables import html_table_to_markdown
+
+    out = html_table_to_markdown('<table><tr><td><img src="a(1).png" alt="b]c"></td></tr></table>')
+    assert r"!\[" not in out, "the image marker itself was escaped"
+    assert r"b\]c" in out, f"the alt text's bracket was not escaped: {out}"
+    assert "<a(1).png>" in out, f"the parenthesised source was not bracketed: {out}"
