@@ -242,6 +242,12 @@ msgstr ""
 msgid "md2%(fmt)s: input file not found: %(path)s"
 msgstr "md2%(fmt)s : fichier d'entrée introuvable : %(path)s"
 
+msgid "md2%(fmt)s: %(path)s is both the input and the output"
+msgstr "md2%(fmt)s : %(path)s est à la fois l'entrée et la sortie"
+
+msgid "Writing the converted file over its own source would destroy the document. Pass a different --output, or drop --output to write next to the source with the right extension."
+msgstr "Écrire le fichier converti par-dessus sa propre source détruirait le document. Donnez un --output différent, ou retirez --output pour écrire à côté de la source avec la bonne extension."
+
 msgid "md2%(fmt)s: %(path)s is not valid UTF-8 (byte %(byte)#04x at offset %(pos)d)"
 msgstr "md2%(fmt)s : %(path)s n'est pas de l'UTF-8 valide (octet %(byte)#04x à la position %(pos)d)"
 

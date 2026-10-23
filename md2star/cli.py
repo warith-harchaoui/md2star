@@ -540,6 +540,25 @@ def _convert(fmt: str, argv: list[str]) -> int:
         Path(args.output).expanduser().resolve() if args.output else in_path.with_suffix(f".{fmt}")
     )
 
+    # The destination must not be the source. `md2docx doc.md -o doc.md`
+    # replaced a 37-byte Markdown file with a 16 kB DOCX and printed
+    # "Wrote: doc.md" as though that were a success: the document the user was
+    # converting is gone, and nothing says so. Both paths are already
+    # `.resolve()`d above, so `==` settles `doc.md` against `./doc.md` too.
+    #
+    # The sidecar logic below already avoids stomping an unrelated `.docx` the
+    # user might own; this is the same care turned on the input itself.
+    if out_path == in_path:
+        raise InvalidInputError(
+            _("md2%(fmt)s: %(path)s is both the input and the output")
+            % {"fmt": fmt, "path": in_path},
+            hint=_(
+                "Writing the converted file over its own source would destroy "
+                "the document. Pass a different --output, or drop --output to "
+                "write next to the source with the right extension."
+            ),
+        )
+
     # PDF detours through DOCX. The temp DOCX lives next to the requested
     # PDF output so the user's source dir stays clean. We always use a
     # sidecar `.md2star.tmp.docx` name when generating a PDF so we never
