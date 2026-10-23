@@ -350,7 +350,7 @@ md2pptx presentation.md --template ./marque/Modele-Entreprise.pptx --smart-layou
 Ajoutez `--eyeball-iterations N` (0 par défaut, désactivé) pour exécuter
 une **boucle Ralph Eyeball par appariement de cible** après l'assemblage :
 chaque passe rend le deck, montre au modèle de vision à la fois une
-diapositive candidate et la vignette de la disposition choisie, et
+diapositive candidate et la vignette de la disposition choisie et
 applique des corrections bornées (réduire un titre qui débordait, limiter
 le nombre de puces, agrandir une image trop petite) — sans jamais toucher
 à l'image, seulement à la spécification que l'assembleur relit.
@@ -394,13 +394,13 @@ distingue le texte bouche-trou du dessin : l'ornement reste (le « 01 »
 d'une étape numérotée **est** le dessin), une simple zone de texte part,
 et une forme automatique est vidée mais conservée, parce qu'un chevron est
 un objet dessiné. Leur photo d'illustration est retirée du fichier
-lui-même, et pas seulement de la diapositive ; leurs liens hypertextes ne
+lui-même et pas seulement de la diapositive ; leurs liens hypertextes ne
 survivent pas aux mots auxquels ils étaient attachés.
 
 Une page qui ne peut pas porter honnêtement une diapositive est
 **refusée, pas remplie à moitié** : une composition à trois colonnes exige
 au moins trois puces ; une diapositive avec image exige un emplacement
-photo, et une page composée autour d'une photographie exige une image (leur
+photo et une page composée autour d'une photographie exige une image (leur
 photo d'illustration doit partir, or le reste de la page a été composé
 autour de sa forme) ; enfin une page portant un graphique ou un tableau est
 refusée d'office, aucun remplacement ne pouvant reformuler les chiffres de
@@ -416,7 +416,7 @@ lecteur verra. Les diapositives refusées repassent par l'assembleur
 habituel : l'option ne fait donc qu'ajouter — et un modèle distribué sans
 aucune page d'exemple se construit exactement comme sans elle.
 
-La boucle Ralph Eyeball a **deux yeux**, et un seul a besoin d'un modèle.
+La boucle Ralph Eyeball a **deux yeux** et un seul a besoin d'un modèle.
 Chaque passe exécute l'audit déterministe de md2star sur le fichier qui
 vient d'être écrit — du texte qui réclame plus de place que sa boîte, une
 forme hors du cadre, un corps sous 12 pt — et renvoie chaque constat sous
@@ -464,7 +464,7 @@ l'assembleur nu, qui sait toujours la placer.
 
 ### Notes de l'orateur
 
-Un bloc Pandoc `::: notes` est le script de l'orateur, et il part dans le
+Un bloc Pandoc `::: notes` est le script de l'orateur et il part dans le
 volet des notes sur les deux chemins — le chemin Pandoc ordinaire comme
 `--smart-layout` :
 
@@ -523,11 +523,11 @@ résout un moteur de rendu (les formes sous le texte, puis le fond de la
 diapositive, puis les formes et le fond de la mise en page, puis ceux du
 masque), parce que le panneau coloré sur lequel un titre est posé est
 d'ordinaire une forme de la *mise en page* alors que le fond de celle-ci
-est l'autre moitié de la diapositive. Du texte sur une photographie, ou
+est l'autre moitié de la diapositive. Du texte sur une photographie ou
 une graphie qui hérite sa couleur du thème, est laissé sans jugement
 plutôt que deviné. Un `overrun` est une observation
 plutôt qu'une erreur : PowerPoint réduit le texte automatiquement, la
-conséquence est donc silencieuse, et le constat vous dit quelle est la
+conséquence est donc silencieuse et le constat vous dit quelle est la
 vraie taille de la diapositive. Disponible aussi comme appel de
 bibliothèque :
 

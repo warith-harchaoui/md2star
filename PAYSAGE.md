@@ -96,7 +96,7 @@ Les douze critères, en bref :
   sur l'autre, corps trop petit pour être lu, plus de texte que la
   boîte n'en contient — ou vous rend-il un fichier en supposant que le
   rendu s'est bien passé ? La plupart des convertisseurs sont dans le
-  second cas, et c'est pourquoi une mauvaise diapositive se découvre
+  second cas et c'est pourquoi une mauvaise diapositive se découvre
   d'ordinaire en ouvrant la présentation. L'avertissement « Overfull
   \hbox » de LaTeX est le plus ancien exemple du premier cas ; le
   vérificateur d'accessibilité de PowerPoint en est le plus connu.
@@ -111,7 +111,7 @@ Les douze critères, en bref :
   [SlidesGen-Bench](https://arxiv.org/html/2601.09487), dont le résultat
   principal mérite d'être redit : sur les systèmes mesurés, la force
   esthétique était **inversement corrélée** à la profondeur de
-  modifiabilité, et aucun ne réussissait les deux. Une « barrière
+  modifiabilité et aucun ne réussissait les deux. Une « barrière
   structurelle », selon ses termes. Tout le pari de md2star est que cette
   barrière vient de ce que l'on *génère* le design au lieu d'en hériter :
   prenez le design du gabarit d'un vrai graphiste et la sortie peut
@@ -137,12 +137,12 @@ tranquille.
 est le système de recherche auquel le chemin `--reference-slides` de
 md2star doit son idée centrale : éditer une *diapositive de référence*,
 pas une mise en page. Il mérite pour cela l'autre cinq étoiles de la
-colonne Gabarit-ajusté, et la note maximale en Modifiable, puisqu'une
+colonne Gabarit-ajusté et la note maximale en Modifiable, puisqu'une
 diapositive de référence éditée est native par construction. Là où il
 diffère : il rédige aussi le contenu, son auto-contrôle PPTEval est un
 banc d'évaluation pour l'article plutôt qu'un garde-fou que l'outil
-passe sur votre fichier, et il lui faut un modèle à chaque étape. md2star
-garde les mots de l'auteur, exécute son audit sans aucun modèle, et
+passe sur votre fichier et il lui faut un modèle à chaque étape. md2star
+garde les mots de l'auteur, exécute son audit sans aucun modèle et
 retombe sur une conversion Pandoc ordinaire quand aucun moteur n'est
 disponible.
 
@@ -198,7 +198,7 @@ Là où `md2star` ne domine délibérément pas le tableau :
   exécutable et citations.
 - **Typst**: une alternative LaTeX rapide et moderne pour des PDF
   riches en maths et typographiés avec précision.
-- **md2pptx**: Markdown → PPTX sans Pandoc dans la boucle, et de loin
+- **md2pptx**: Markdown → PPTX sans Pandoc dans la boucle et de loin
   le plus grand vocabulaire d'écriture de cette liste (cartes,
   entonnoirs, diapositives de tâches, sommaire généré, hooks Python en
   ligne). À choisir quand ce vocabulaire vous intéresse et que vous
