@@ -242,6 +242,12 @@ msgstr ""
 msgid "md2%(fmt)s: input file not found: %(path)s"
 msgstr "md2%(fmt)s : fichier d'entrée introuvable : %(path)s"
 
+msgid "md2%(fmt)s: %(path)s is not valid UTF-8 (byte %(byte)#04x at offset %(pos)d)"
+msgstr "md2%(fmt)s : %(path)s n'est pas de l'UTF-8 valide (octet %(byte)#04x à la position %(pos)d)"
+
+msgid "md2%(fmt)s: cannot write a working file next to %(path)s (%(reason)s)"
+msgstr "md2%(fmt)s : impossible d'écrire un fichier de travail à côté de %(path)s (%(reason)s)"
+
 msgid "md2star accepts a single .md / .markdown file as the first argument."
 msgstr "md2star accepte un seul fichier .md / .markdown comme premier argument."
 

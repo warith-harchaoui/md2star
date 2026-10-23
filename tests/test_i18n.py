@@ -22,6 +22,7 @@ Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import re
 import sys
@@ -235,3 +236,65 @@ def test_the_shared_loader_is_what_resolves_the_strings() -> None:
     import os_helper as osh
 
     assert isinstance(i18n.catalog(), osh.Catalog)
+
+
+# ── catalogue soundness ───────────────────────────────────────────────────
+
+
+def test_the_catalogues_are_sound() -> None:
+    """A `.mo` that is missing, stale against its `.po`, or carries an empty
+    translation. md2star had no test calling this at all, so the guard existed
+    in os-helper and nothing in this repo ever ran it.
+
+    Deliberately called *without* ``used``: the two code-versus-catalogue
+    checks need the complete set of strings the code looks up, and md2star's
+    live in six places (`gui_server.UI_STRINGS`, `_()` call sites, class-level
+    hints in `errors`, the audit findings, the doctor table, and `ngettext`
+    pairs). An incomplete set makes the orphan half report dead entries that
+    are not dead — 69 of them on a first attempt, every one an artefact. The
+    half that *is* sound under an incomplete set is tested below.
+    """
+    assert i18n.catalog().problems() == []
+
+
+def _msgids_from_calls() -> set[str]:
+    """Every literal msgid passed to ``_()`` or ``gettext()`` in the package.
+
+    Read from the AST rather than by regex so a string spanning lines, or one
+    holding a parenthesis, is seen exactly as Python sees it.
+    """
+    found: set[str] = set()
+    for path in sorted((_ROOT / "md2star").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id in {"_", "gettext"}
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+            ):
+                found.add(node.args[0].value)
+    return found
+
+
+def test_every_translated_call_site_has_a_french_entry() -> None:
+    """The fault this catches, found by hand and only once it was looked for.
+
+    Two `cli.py` diagnostics — the non-UTF-8 input and the unwritable working
+    file — called ``_()`` on strings no catalogue carried. Nothing failed:
+    gettext falls back to the English source, so a French user simply read
+    English on those two errors and the suite stayed green. Rewording a source
+    string does the same thing silently, because here the msgid *is* the
+    English copy.
+
+    This direction is sound even though `_msgids_from_calls` is not the whole
+    translatable surface: a string the code demonstrably asks for and the
+    catalogue lacks is a fault regardless of what else exists. The converse —
+    a catalogue entry nothing asks for — is not asserted, because proving it
+    needs the complete set.
+    """
+    catalog = i18n.catalog()
+    english = sorted(m for m in _msgids_from_calls() if catalog.gettext("fr", m) == m)
+    assert english == [], f"{len(english)} msgid(s) served in English to a French reader: {english}"
