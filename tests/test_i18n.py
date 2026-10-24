@@ -22,12 +22,12 @@ Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 
 from __future__ import annotations
 
-import ast
 import importlib.util
 import re
 import sys
 from pathlib import Path
 
+import os_helper as osh
 import pytest
 
 from md2star import i18n
@@ -233,7 +233,6 @@ def test_the_shared_loader_is_what_resolves_the_strings() -> None:
     negotiation until 3.9.0. This pins the delegation so a future edit cannot
     quietly grow a second copy back.
     """
-    import os_helper as osh
 
     assert isinstance(i18n.catalog(), osh.Catalog)
 
@@ -258,25 +257,18 @@ def test_the_catalogues_are_sound() -> None:
 
 
 def _msgids_from_calls() -> set[str]:
-    """Every literal msgid passed to ``_()`` or ``gettext()`` in the package.
+    """Every literal msgid the package asks for, from os-helper.
 
-    Read from the AST rather than by regex so a string spanning lines, or one
-    holding a parenthesis, is seen exactly as Python sees it.
+    This used to be a twenty-line AST walk inlined here. It now lives in
+    `os_helper.extract_call_sites`, because every member whose strings sit in
+    `_()` calls rather than in one template needs the same walk, and because
+    the inline version missed the plurals: it matched only the conventional
+    names, while this package writes `from .i18n import ngettext as _n`. The
+    shared one reads each file's own imports, so both of md2star's plurals are
+    collected and their combined catalogue entries are no longer mistaken for
+    dead ones.
     """
-    found: set[str] = set()
-    for path in sorted((_ROOT / "md2star").rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
-        for node in ast.walk(tree):
-            if (
-                isinstance(node, ast.Call)
-                and isinstance(node.func, ast.Name)
-                and node.func.id in {"_", "gettext"}
-                and node.args
-                and isinstance(node.args[0], ast.Constant)
-                and isinstance(node.args[0].value, str)
-            ):
-                found.add(node.args[0].value)
-    return found
+    return osh.extract_call_sites(_ROOT / "md2star")
 
 
 def test_every_translated_call_site_has_a_french_entry() -> None:
@@ -284,17 +276,36 @@ def test_every_translated_call_site_has_a_french_entry() -> None:
 
     Two `cli.py` diagnostics — the non-UTF-8 input and the unwritable working
     file — called ``_()`` on strings no catalogue carried. Nothing failed:
-    gettext falls back to the English source, so a French user simply read
-    English on those two errors and the suite stayed green. Rewording a source
-    string does the same thing silently, because here the msgid *is* the
-    English copy.
+    gettext falls back to the English source, so a French user read English on
+    those two errors and the suite stayed green. Rewording a source string does
+    the same thing silently, because here the msgid *is* the English copy.
 
-    This direction is sound even though `_msgids_from_calls` is not the whole
-    translatable surface: a string the code demonstrably asks for and the
-    catalogue lacks is a fault regardless of what else exists. The converse —
-    a catalogue entry nothing asks for — is not asserted, because proving it
-    needs the complete set.
+    Each key form has to be looked up through its own door. A plural is stored
+    under ``singular\x00plural`` and answers to `ngettext`, not to `gettext`:
+    asking `gettext` for the joined key returns the key itself, which looks
+    exactly like an untranslated string. Both of this package's plurals *are*
+    translated — « %(n)d constat » / « %(n)d constats » — and a first version of
+    this test called them untranslated for that reason alone.
+
+    This direction is sound even though `extract_call_sites` sees only literal
+    arguments: a string the code demonstrably asks for and the catalogue lacks
+    is a fault regardless of what else exists. The converse — a catalogue entry
+    nothing asks for — is not asserted here, because proving it needs the
+    complete translatable surface, and this package's doctor table holds its
+    strings in data structures no scan can see.
     """
     catalog = i18n.catalog()
-    english = sorted(m for m in _msgids_from_calls() if catalog.gettext("fr", m) == m)
+    english = []
+    for msgid in sorted(_msgids_from_calls()):
+        if "\x00" in msgid:
+            one, many = msgid.split("\x00", 1)
+            served = catalog.ngettext("fr", one, many, 1)
+            untranslated = served == one
+        elif "\x04" in msgid:
+            context, text = msgid.split("\x04", 1)
+            untranslated = catalog.pgettext("fr", context, text) == text
+        else:
+            untranslated = catalog.gettext("fr", msgid) == msgid
+        if untranslated:
+            english.append(msgid)
     assert english == [], f"{len(english)} msgid(s) served in English to a French reader: {english}"
