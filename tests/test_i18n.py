@@ -22,7 +22,6 @@ Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 
 from __future__ import annotations
 
-import ast
 import importlib.util
 import re
 import sys
@@ -258,69 +257,21 @@ def test_the_catalogues_are_sound() -> None:
 
 
 def _msgids_from_calls() -> set[str]:
-    """Every literal msgid the package asks for, read from the syntax tree.
+    """Every literal msgid the package asks for, from os-helper.
 
-    This walk belongs in os-helper and now lives there as
-    `os_helper.extract_call_sites`, since every member whose strings sit in
-    `_()` calls rather than in one template needs it. It is kept inline **here**
-    until an os-helper carrying that function is released and this package's
-    floor is raised to it: CI installs os-helper from PyPI, and importing a
-    function that exists only in the working copy turned this suite red while
-    passing locally against an editable install.
+    The syntax-tree walk lived here until os-helper 2.10.0 carried it as
+    `os_helper.extract_call_sites`: every member whose strings sit in `_()`
+    calls rather than in one template needs the same walk, and keeping a copy
+    per member is the duplication a shared loader exists to remove.
 
-    The alias handling is the part worth keeping either way. Matching only the
-    conventional names missed every plural, because this package writes
-    `from .i18n import ngettext as _n`, and each plural catalogue entry was then
-    reported as a dead orphan. The aliases are read from each file's own
-    imports, and the three shapes are keyed as the catalogue keys them --
-    `\x00` between a plural's two halves, `\x04` after a context -- so the two
-    sides compare directly.
+    It briefly lived in both places. The first attempt to call the shared one
+    turned this suite red, because CI installs os-helper from PyPI while the
+    function existed only in the working tree — and os-helper's version had not
+    been bumped, so the repository and the wheel disagreed under one number.
+    Hence the floor in `pyproject.toml`: `os-helper>=2.10.0` is not decoration,
+    it is the version this import needs.
     """
-    canonical = {
-        "gettext": "single",
-        "ugettext": "single",
-        "_": "single",
-        "ngettext": "plural",
-        "ungettext": "plural",
-        "_n": "plural",
-        "pgettext": "context",
-        "_p": "context",
-    }
-    found: set[str] = set()
-
-    def literal(node: ast.expr) -> str | None:
-        """The string a node spells out, or None when it is not a literal."""
-        if isinstance(node, ast.Constant) and isinstance(node.value, str):
-            return node.value
-        return None
-
-    for path in sorted((_ROOT / "md2star").rglob("*.py")):
-        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
-        kinds = dict(canonical)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom):
-                for alias in node.names:
-                    kind = canonical.get(alias.name)
-                    if kind and alias.asname:
-                        kinds[alias.asname] = kind
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
-            kind = kinds.get(name)
-            if kind == "single" and node.args:
-                text = literal(node.args[0])
-                if text is not None:
-                    found.add(text)
-            elif kind == "plural" and len(node.args) >= 2:
-                one, many = literal(node.args[0]), literal(node.args[1])
-                if one is not None and many is not None:
-                    found.add(f"{one}\x00{many}")
-            elif kind == "context" and len(node.args) >= 2:
-                context, text = literal(node.args[0]), literal(node.args[1])
-                if context is not None and text is not None:
-                    found.add(f"{context}\x04{text}")
-    return found
+    return osh.extract_call_sites(_ROOT / "md2star")
 
 
 def test_every_translated_call_site_has_a_french_entry() -> None:
