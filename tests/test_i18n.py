@@ -22,6 +22,7 @@ Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import re
 import sys
@@ -257,18 +258,69 @@ def test_the_catalogues_are_sound() -> None:
 
 
 def _msgids_from_calls() -> set[str]:
-    """Every literal msgid the package asks for, from os-helper.
+    """Every literal msgid the package asks for, read from the syntax tree.
 
-    This used to be a twenty-line AST walk inlined here. It now lives in
-    `os_helper.extract_call_sites`, because every member whose strings sit in
-    `_()` calls rather than in one template needs the same walk, and because
-    the inline version missed the plurals: it matched only the conventional
-    names, while this package writes `from .i18n import ngettext as _n`. The
-    shared one reads each file's own imports, so both of md2star's plurals are
-    collected and their combined catalogue entries are no longer mistaken for
-    dead ones.
+    This walk belongs in os-helper and now lives there as
+    `os_helper.extract_call_sites`, since every member whose strings sit in
+    `_()` calls rather than in one template needs it. It is kept inline **here**
+    until an os-helper carrying that function is released and this package's
+    floor is raised to it: CI installs os-helper from PyPI, and importing a
+    function that exists only in the working copy turned this suite red while
+    passing locally against an editable install.
+
+    The alias handling is the part worth keeping either way. Matching only the
+    conventional names missed every plural, because this package writes
+    `from .i18n import ngettext as _n`, and each plural catalogue entry was then
+    reported as a dead orphan. The aliases are read from each file's own
+    imports, and the three shapes are keyed as the catalogue keys them --
+    `\x00` between a plural's two halves, `\x04` after a context -- so the two
+    sides compare directly.
     """
-    return osh.extract_call_sites(_ROOT / "md2star")
+    canonical = {
+        "gettext": "single",
+        "ugettext": "single",
+        "_": "single",
+        "ngettext": "plural",
+        "ungettext": "plural",
+        "_n": "plural",
+        "pgettext": "context",
+        "_p": "context",
+    }
+    found: set[str] = set()
+
+    def literal(node: ast.expr) -> str | None:
+        """The string a node spells out, or None when it is not a literal."""
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        return None
+
+    for path in sorted((_ROOT / "md2star").rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+        kinds = dict(canonical)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    kind = canonical.get(alias.name)
+                    if kind and alias.asname:
+                        kinds[alias.asname] = kind
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            name = getattr(node.func, "id", None) or getattr(node.func, "attr", None)
+            kind = kinds.get(name)
+            if kind == "single" and node.args:
+                text = literal(node.args[0])
+                if text is not None:
+                    found.add(text)
+            elif kind == "plural" and len(node.args) >= 2:
+                one, many = literal(node.args[0]), literal(node.args[1])
+                if one is not None and many is not None:
+                    found.add(f"{one}\x00{many}")
+            elif kind == "context" and len(node.args) >= 2:
+                context, text = literal(node.args[0]), literal(node.args[1])
+                if context is not None and text is not None:
+                    found.add(f"{context}\x04{text}")
+    return found
 
 
 def test_every_translated_call_site_has_a_french_entry() -> None:
