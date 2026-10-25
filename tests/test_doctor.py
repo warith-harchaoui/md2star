@@ -197,12 +197,12 @@ class TestCli:
         report = _make_report_only_pandoc()
         # Plain mode: optional gaps never fail the command.
         with patch.object(doctor, "run_checks", return_value=report):
-            assert doctor.main([]) == 0
+            assert doctor.run() == 0
         capsys.readouterr()  # drop the plain-mode output before re-running
 
         # --json mode: same rc, plus a well-formed, documented payload shape.
         with patch.object(doctor, "run_checks", return_value=report):
-            rc = doctor.main(["--json"])
+            rc = doctor.run(as_json=True)
         assert rc == 0
         payload = json.loads(capsys.readouterr().out)
         assert payload["core_failing"] is False
@@ -232,7 +232,7 @@ class TestCli:
             Captures the rendered report for the MISSING assertion.
         """
         with patch.object(doctor, "run_checks", return_value=_make_report_missing_pandoc()):
-            rc = doctor.main([])
+            rc = doctor.run()
         # Non-zero exit + a visible MISSING marker for Pandoc.
         assert rc == 1
         out = capsys.readouterr().out

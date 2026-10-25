@@ -227,24 +227,24 @@ class TestCommandLine:
 
     def test_a_clean_deck_exits_zero(self, tmp_path: Path, capsys) -> None:
         clean = _saved(_blank(), tmp_path, "clean.pptx")
-        assert au.main([str(clean)]) == 0
+        assert au.run(str(clean)) == 0
         assert "clean" in capsys.readouterr().out
 
     def test_a_defect_exits_one(self, broken: Path, capsys) -> None:
-        assert au.main([str(broken)]) == 1
+        assert au.run(str(broken)) == 1
         assert "overlap" in capsys.readouterr().out
 
     def test_an_overrun_alone_is_not_a_failure(self, dense: Path) -> None:
         """PowerPoint auto-shrinks the text, so a dense deck is a choice."""
-        assert au.main([str(dense)]) == 0
+        assert au.run(str(dense)) == 0
 
     def test_strict_makes_an_overrun_a_failure(self, dense: Path) -> None:
-        assert au.main([str(dense), "--strict"]) == 1
+        assert au.run(str(dense), strict=True) == 1
 
     def test_json_output_is_parseable(self, broken: Path, capsys) -> None:
         import json
 
-        assert au.main([str(broken), "--json"]) == 1
+        assert au.run(str(broken), as_json=True) == 1
         payload = json.loads(capsys.readouterr().out)
         assert payload[0]["kind"] == "overlap"
         assert set(payload[0]) == {"slide", "kind", "detail", "shape"}
@@ -253,7 +253,7 @@ class TestCommandLine:
         """The size it declares and the size that would fit, as numbers."""
         import json
 
-        au.main([str(dense), "--json"])
+        au.run(str(dense), as_json=True)
         payload = json.loads(capsys.readouterr().out)
         overrun = next(row for row in payload if row["kind"] == "overrun")
         assert overrun["fits_pt"] < overrun["measured_pt"]
@@ -261,13 +261,13 @@ class TestCommandLine:
         assert f"{overrun['fits_pt']:.0f}pt" in overrun["detail"]
 
     def test_a_missing_file_is_a_usage_error(self, tmp_path: Path, capsys) -> None:
-        assert au.main([str(tmp_path / "nope.pptx")]) == 2
+        assert au.run(str(tmp_path / "nope.pptx")) == 2
         assert "no such file" in capsys.readouterr().err
 
     def test_a_file_that_is_not_a_deck_is_a_usage_error(self, tmp_path: Path, capsys) -> None:
         notes = tmp_path / "notes.md"
         notes.write_text("# not a deck")
-        assert au.main([str(notes)]) == 2
+        assert au.run(str(notes)) == 2
         assert "cannot read" in capsys.readouterr().err
 
 

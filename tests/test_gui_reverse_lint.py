@@ -140,12 +140,12 @@ def test_extract_twin_writes_assets_and_markdown(
 )
 def test_extract_docx_roundtrips_to_markdown(server: str, tmp_path) -> None:
     """A DOCX built by the converter is read back to Markdown through /extract."""
-    from md2star.cli import _convert
+    from md2star.cli import main as cli_main
 
     md = tmp_path / "in.md"
     md.write_text("# Heading One\n\nA **bold** word.\n", encoding="utf-8")
     docx = tmp_path / "out.docx"
-    assert _convert("docx", [str(md), "-o", str(docx)]) == 0
+    assert cli_main(["docx", str(md), "-o", str(docx)]) == 0
 
     status, body = _post(
         server + "/extract",

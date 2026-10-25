@@ -249,9 +249,9 @@ def _find_soffice() -> str | None:
     working even if that ever changes.
     """
     try:
-        from .cli import _find_soffice as _cli_find_soffice
+        from .pipeline import _find_soffice as _engine_find_soffice
 
-        return _cli_find_soffice()
+        return _engine_find_soffice()
     except Exception:  # noqa: BLE001 — a resolver problem must never crash extraction
         # Minimal inline fallback mirroring the CLI's search order.
         path = shutil.which("soffice") or shutil.which("libreoffice")

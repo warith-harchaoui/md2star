@@ -4,6 +4,116 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.0] - 2026-10-25
+
+### Changed
+
+- **One command line, built with click.** md2star shipped two parsers: an
+  argparse CLI (`md2star` / `md2docx` / `md2pptx` / `md2pdf`) and a click twin
+  installed as `md2star-x`, which rebuilt an argv list and handed it back to
+  the argparse engine to be re-parsed. The flag naming the parsing library
+  described the implementation, not the interface — and two parsers for one
+  interface meant two places to add a flag. `md2star/click_cli.py` is deleted;
+  `md2star/cli.py` is now the click CLI and nothing else.
+
+  `md2docx` / `md2pptx` / `md2pdf` stay. They are not aliases: they resolve to
+  the *same* click command objects as `md2star docx|pptx|pdf`, asserted by
+  identity in `tests/test_cli_surface.py`, so a flag added once exists on
+  every spelling.
+
+- **The conversion engine moved to `md2star/pipeline.py`** and takes a typed
+  `ConvertOptions` dataclass plus the Pandoc passthrough list, instead of an
+  argv it re-parses. Three in-tree callers (the CLI, `gui_server.py`'s
+  `/render`, `api.py`'s `/convert`) each had to know md2star's exact flag
+  spellings to call their own package; now each builds a `ConvertOptions`. The
+  engine also read five of its twenty inputs through
+  `getattr(args, name, False)`, because the pptx-only flags did not exist on
+  the docx parser — every field is now present for every format, with the
+  default the CLI advertises.
+
+- **`doctor`, `gui`, `twin`, `audit` and `templates` no longer parse an argv.**
+  Each had its own `argparse.ArgumentParser` inside a `main(argv)`; click
+  parses their flags once and calls `doctor.run()`, `gui_server.serve()`,
+  `twin_cli.run()`, `pptx_audit.run()`, `templates.cmd_list()` /
+  `templates.cmd_path()` with typed arguments. `doctor`'s two translated help
+  strings stayed translated — they are the only translated help text in the
+  CLI, as they were before.
+
+- **The `click` dependency comment**, which said click backed `md2star-x`. It
+  backs every console script now, which is why it cannot be optional.
+
+- **`os-helper` cap widened to `<4`.** os-helper 3.0.0 dropped its own CLI,
+  which md2star never imported. The floor stays `>=2.10.0`: that is where
+  `extract_call_sites` landed, and `tests/test_i18n.py` needs it.
+
+### Added
+
+- **Five commands the click side never had**: `audit` (lint any `.pptx`),
+  `cache-dir`, `clear-cache`, `templates list` and `templates path`. They
+  existed only in the argparse dispatcher's hand-written `if sub == …` chain.
+
+- **Nine options the click side never had**: `--allow-remote-templates` and
+  `--no-lint` on `docx` and `pdf`; `--eyeball-iterations`,
+  `--no-visual-confirm`, `--reference-slides`, `--smart-layout` and
+  `--template` on `pptx`.
+
+- **`-h` as well as `--help`**, on the group and on every subcommand, and
+  `-V` / `--version` printing `md2star <version>` from the package's own
+  `__version__` rather than from installed distribution metadata (which in an
+  editable checkout reports whatever was last pip-installed).
+
+- **`tests/test_cli_surface.py`** replaces `tests/test_click_cli.py`: 25 tests
+  covering the passthrough, option parity per format, the five new commands,
+  exit-code propagation and the shorthand entry points.
+
+### Removed
+
+- **The `md2star-x` console script** and `md2star/click_cli.py`.
+
+### How parity was verified
+
+Reading the source was not enough for the one behaviour that matters here, so
+it was run:
+
+- **The Pandoc passthrough, against a real pandoc.** `md2star docx in.md --toc`
+  produces a document whose `word/document.xml` carries a TOC field while the
+  control document does not; `--metadata=subject:X` lands in
+  `docProps/core.xml`; and `--this-is-not-a-pandoc-flag` is refused *by pandoc*
+  with pandoc's own exit code (6), which is what proves md2star forwarded it
+  rather than swallowing it. All three are now tests.
+
+- **Flag-before-input ordering.** `md2star docx --toc in.md` worked under
+  argparse's `parse_known_args` and does **not** work under click's
+  `ignore_unknown_options` alone: an unknown option stays in the leftover args
+  in place, so the positional binds to `--toc`. `cli._split_input` takes the
+  first token that is not option-shaped as the input, which was chosen by
+  checking what argparse actually did — including the case they both get wrong
+  (`--metadata key:val in.md` makes `key:val` the input under either).
+
+- **One real conversion per format** (docx, pptx, pdf), plus every one of the
+  five new commands, and every `--help` read as *rendered* output rather than
+  as source.
+
+- 462 tests pass (437 before), `ruff check` and `ruff format --check` are
+  clean, and the comment-density gate passes.
+
+### Migration
+
+- `md2star-x <command>` → `md2star <command>`. Every subcommand keeps its name
+  and its flags; `docx` / `pptx` / `pdf` additionally gained the seven options
+  listed above, and `audit` / `cache-dir` / `clear-cache` / `templates` are
+  reachable from a click surface for the first time.
+- Code calling `md2star.cli._convert(fmt, argv)` should call
+  `md2star.pipeline.convert(fmt, ConvertOptions(...), pandoc_args)`.
+  `md2star.cli._find_soffice`, `_resolve_reference_doc`, `_TEMPLATE_URLS`,
+  `_data_path` and `_localized_bibliography_heading` moved to
+  `md2star.pipeline` as well.
+- `md2star.doctor.main(argv)`, `md2star.gui_server.main(argv)`,
+  `md2star.twin_cli.main(argv)`, `md2star.pptx_audit.main(argv)` and
+  `md2star.templates.main(argv)` are replaced by `doctor.run()`,
+  `gui_server.serve()`, `twin_cli.run()`, `pptx_audit.run()` and
+  `templates.cmd_list()` / `templates.cmd_path()`.
+
 ## [3.9.0] - 2026-10-22
 
 ### Fixed

@@ -3,13 +3,14 @@
 md2star exposes the same conversion pipeline through five surfaces. The CLI is
 the default; reach for the others when the situation calls for it.
 
-## 1. CLI — argparse (default) and click
+## 1. CLI — one surface, built with click
 
-- **argparse** (`md2docx`/`md2pptx`/`md2pdf`/`md2star …`): the primary surface,
-  including the Pandoc `--help` passthrough. Documented in `cli-reference.md`.
-- **click** (`md2star-x`): a modern click front-end over the same conversions
-  (`md2star-x docx|pptx|pdf|gui|doctor`). Same delegation to the core pipeline;
-  use it when a click-style UX (grouped commands, rich `--help`) is preferred.
+`md2star docx|pptx|pdf|gui|twin|audit|doctor|templates|cache-dir|clear-cache`,
+with `md2docx` / `md2pptx` / `md2pdf` as shorthands bound to the same three
+commands. Flags md2star does not recognise are forwarded to Pandoc verbatim.
+Documented in `cli-reference.md`. There is no second command line: the old
+`md2star-x` click twin of an argparse CLI was removed in 3.10.0, when the
+argparse side went away and click became the only parser.
 
 ## 2. HTTP API — FastAPI (`md2star[api]`)
 
@@ -57,7 +58,7 @@ Use as a hackable, embeddable minimal preview when the full GUI is overkill.
 
 | Situation | Surface |
 |-----------|---------|
-| Agent can shell out | CLI (argparse or click) |
+| Agent can shell out | CLI (`md2star …`) |
 | Human wants a full editor | GUI (`md2star gui`) |
 | Quick browser convert (no install of the editor) | API bench (`GET /gui`) |
 | Embeddable minimal preview | `minimal-gui/server.py` |

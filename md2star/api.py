@@ -81,13 +81,17 @@ except ImportError as exc:  # pragma: no cover
     ) from exc
 
 from . import __version__
-from .cli import _convert
 from .doctor import run_checks
 from .errors import (
     InvalidInputError,
     Md2starError,
     MissingDependencyError,
 )
+
+# Aliased: this module's own ``/convert`` endpoint is a coroutine named
+# ``convert``, so importing the engine under its own name would shadow it.
+from .pipeline import ConvertOptions
+from .pipeline import convert as run_conversion
 
 app = FastAPI(
     title="md2star",
@@ -255,15 +259,14 @@ async def convert(
         with open(in_path, "wb") as f:
             f.write(await file.read())
 
-        # Translate the optional query params into the same CLI flags the
-        # converter already understands — only appending a flag when the
-        # caller supplied it.
-        argv = [in_path, "-o", out_path]
-        for flag, value in (("--author", author), ("--lang", lang), ("--date", date)):
-            if value:
-                argv += [flag, value]
-
-        _convert(fmt, argv)
+        # The optional query params go straight into the engine's typed
+        # options; an absent one is simply None. This used to assemble a CLI
+        # argv for the converter to re-parse, which meant this module had to
+        # know md2star's exact flag spellings to call its own package.
+        run_conversion(
+            fmt,
+            ConvertOptions(input=in_path, output=out_path, author=author, lang=lang, date=date),
+        )
 
         if not os.path.exists(out_path):  # pragma: no cover — defensive
             raise HTTPException(status_code=500, detail="conversion produced no output file")

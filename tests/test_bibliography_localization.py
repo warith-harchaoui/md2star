@@ -18,7 +18,7 @@ Warith HARCHAOUI — https://linkedin.com/in/warith-harchaoui/
 
 from __future__ import annotations
 
-from md2star.cli import _BIBLIOGRAPHY_HEADING_BY_LANG, _localized_bibliography_heading
+from md2star.pipeline import _BIBLIOGRAPHY_HEADING_BY_LANG, _localized_bibliography_heading
 
 
 def test_explicit_lang_precedence_and_english_fallback():

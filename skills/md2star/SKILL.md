@@ -12,7 +12,7 @@ description: >-
   PDF back into Markdown", "make an editable twin of this doc", "check this
   PowerPoint for overlapping text", "lint / audit my .pptx", or types
   `md2docx`, `md2pptx`, `md2pdf`, `md2star docx|pptx|pdf|gui|doctor|twin|audit`,
-  `md2star-x`, `md2star-api`, `md2star-mcp`. Do NOT use to extract plain text
+  `md2star-api`, `md2star-mcp`. Do NOT use to extract plain text
   from a document, to author the Markdown itself, or for HTML output. The
   exhaustive trigger catalogue is in `references/triggers.md`.
 license: BSD-3-Clause

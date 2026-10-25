@@ -31,10 +31,12 @@ detailed audit these priorities came from.
 
 ## P1: shipped
 
-- [x] **click front-end `md2star-x`** (Unreleased): a modern
-      `md2star-x docx|pptx|pdf|gui|doctor` surface over the exact same
-      pipeline (thin adapter to `cli._convert`; `click>=8,<9` is a core
-      dep), alongside the argparse wrappers.
+- [x] **One command line, in click** (3.10.0): `md2star` is a single
+      click surface (`docx|pptx|pdf|gui|twin|audit|doctor|templates|
+      cache-dir|clear-cache`), with `md2docx` / `md2pptx` / `md2pdf` as
+      shorthands bound to the very same command objects. The engine moved to
+      `md2star/pipeline.py` behind a typed `ConvertOptions`; the second
+      front-end and its `md2star-x` script are gone.
 - [x] **Agent skill packaging** (Unreleased): md2star ships as a
       Claude Skill *and* an OpenCode skill under `skills/md2star/`
       (`SKILL.md` + `references/` + install README), with

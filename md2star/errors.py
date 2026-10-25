@@ -6,7 +6,7 @@ Two purposes:
    keyword whose string is printed below the headline error so the
    user knows what to *do*, not just what went wrong. The CLI's
    top-level handler renders this as a multi-line block (see
-   :func:`md2star.cli.handle_known_error`) instead of a Python
+   :func:`md2star.cli._render_error`) instead of a Python
    stacktrace.
 2. **Mark which failures are "expected".** Anything that subclasses
    :class:`Md2starError` is something we predicted and want to

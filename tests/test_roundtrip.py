@@ -58,12 +58,12 @@ _DATE_H1 = re.compile(
 
 def _md_to_docx(md_text: str, tmp_path, tag: str):
     """Convert Markdown text to a DOCX via the real CLI path. Returns the path."""
-    from md2star.cli import _convert
+    from md2star.cli import main as cli_main
 
     src = tmp_path / f"{tag}.md"
     out = tmp_path / f"{tag}.docx"
     src.write_text(md_text, encoding="utf-8")
-    rc = _convert("docx", [str(src), "-o", str(out), "--offline"])
+    rc = cli_main(["docx", str(src), "-o", str(out), "--offline"])
     assert rc == 0, f"md2docx failed on {tag} (rc={rc})"
     return out
 

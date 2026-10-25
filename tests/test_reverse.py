@@ -76,14 +76,14 @@ class TestRoundTrip:
     """Markdown → DOCX → Markdown should recover the salient content."""
 
     def test_docx_roundtrip_recovers_text(self, tmp_path: Path) -> None:
-        from md2star.cli import _convert
+        from md2star.cli import main as cli_main
 
         src_md = tmp_path / "in.md"
         src_md.write_text(
             "# Heading One\n\nA **bold** word and a list:\n\n- alpha\n- beta\n", encoding="utf-8"
         )
         docx = tmp_path / "out.docx"
-        assert _convert("docx", [str(src_md), "-o", str(docx)]) == 0
+        assert cli_main(["docx", str(src_md), "-o", str(docx)]) == 0
         assert docx.is_file()
 
         md = reverse.to_markdown(docx)

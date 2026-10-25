@@ -162,8 +162,8 @@ md2star-mcp                    # mêmes outils (doctor / convert) via MCP
 > téléchargez le résultat. C'est le petit frère de l'éditeur complet
 > `md2star gui` (aperçu PDF en direct).
 
-Vous préférez click ? `md2star-x docx|pptx|pdf|gui|doctor` est une façade click
-au-dessus du même pipeline (fournie avec l'installation cœur). md2star se
+md2star n'a qu'une seule ligne de commande — `md2star` (en click), avec
+`md2docx` / `md2pptx` / `md2pdf` comme raccourcis des trois conversions. md2star se
 distribue aussi comme **Claude Skill / OpenCode skill**, pour qu'un agent le
 pilote : voir [`skills/md2star/`](https://github.com/warith-harchaoui/md2star/blob/main/skills/md2star/SKILL.md) et
 [`skills/README.md`](https://github.com/warith-harchaoui/md2star/blob/main/skills/README.md). Le catalogue complet de ce qui

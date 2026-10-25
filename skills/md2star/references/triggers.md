@@ -15,7 +15,7 @@ host model actually sees, this file is the human-reviewable superset.
 
 **Explicit tool/command mentions**
 - `md2docx`, `md2pptx`, `md2pdf`
-- `md2star docx|pptx|pdf|gui|doctor|templates`, `md2star-x`, `md2star-api`, `md2star-mcp`
+- `md2star docx|pptx|pdf|gui|twin|audit|doctor|templates`, `md2star-api`, `md2star-mcp`
 - "the md2star tool", "md2star", "how do I install/run md2star"
 
 **Branding / templates**

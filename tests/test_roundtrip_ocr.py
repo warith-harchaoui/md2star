@@ -166,12 +166,12 @@ def f(md_text: str, tmp_path: Path, tag: str) -> Path:
     """
     # Call the exact entry point the CLI uses (not a subprocess) so the test
     # exercises the same code ``md2pdf`` runs; ``--offline`` keeps it off the network.
-    from md2star.cli import _convert
+    from md2star.cli import main as cli_main
 
     src = tmp_path / f"{tag}.md"
     out = tmp_path / f"{tag}.pdf"
     src.write_text(md_text, encoding="utf-8")
-    rc = _convert("pdf", [str(src), "-o", str(out), "--offline"])
+    rc = cli_main(["pdf", str(src), "-o", str(out), "--offline"])
 
     # A non-zero return code means LibreOffice failed to render; name the tag so a
     # CI failure points straight at the offending fixture.

@@ -150,8 +150,9 @@ md2star-mcp                    # same tools (doctor / convert) over MCP
 > `GET /gui`: drop a `.md`, pick a format, download the result. It is the
 > lightweight sibling of the full `md2star gui` editor (live PDF preview).
 
-Prefer click? `md2star-x docx|pptx|pdf|gui|doctor` is a click front-end over
-the same pipeline (ships with the core install). And md2star packages itself as
+md2star has exactly one command line — `md2star` (built with click), with
+`md2docx` / `md2pptx` / `md2pdf` as shorthands for the three conversions. And
+md2star packages itself as
 a **Claude Skill / OpenCode skill** so an agent can drive it: see
 [`skills/md2star/`](https://github.com/warith-harchaoui/md2star/blob/main/skills/md2star/SKILL.md) and [`skills/README.md`](https://github.com/warith-harchaoui/md2star/blob/main/skills/README.md).
 The full catalogue of what should invoke md2star (phrasings, commands, file

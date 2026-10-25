@@ -60,7 +60,7 @@ def locales_dir() -> Path:
     """Where the compiled catalogues live, inside the installed package."""
     # Next to the module rather than via importlib.resources: gettext wants a
     # real directory path, and md2star ships as an unzipped wheel (the same
-    # assumption md2star.cli._data_path already documents and relies on).
+    # assumption md2star.pipeline._data_path already documents and relies on).
     return Path(__file__).parent / "data" / "locales"
 
 

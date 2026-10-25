@@ -101,7 +101,7 @@ def test_convert_markdown_to_docx(client: TestClient, monkeypatch: pytest.Monkey
     # the URL map so the resolver skips the network and uses the bundled
     # template — we're asserting the round-trip works, not the fetch path
     # (that lives in tests/test_offline_security.py with a mocked urlopen).
-    monkeypatch.setattr("md2star.cli._TEMPLATE_URLS", {}, raising=True)
+    monkeypatch.setattr("md2star.pipeline._TEMPLATE_URLS", {}, raising=True)
     md = "# Title\n\nA short paragraph with **bold** text.\n"
     r = client.post(
         "/convert?fmt=docx",
@@ -128,10 +128,10 @@ def test_convert_cleans_up_temp_dir_on_failure(
     """
     from md2star.errors import Md2starError
 
-    def _boom(fmt, argv):  # noqa: ANN001, ANN202, ARG001
+    def _boom(fmt, opts):  # noqa: ANN001, ANN202, ARG001
         raise Md2starError("simulated conversion failure")
 
-    monkeypatch.setattr("md2star.api._convert", _boom, raising=True)
+    monkeypatch.setattr("md2star.api.run_conversion", _boom, raising=True)
     monkeypatch.setattr(
         "md2star.api.osh.make_temporary_directory",
         lambda **_kw: str(tmp_path),
@@ -251,7 +251,7 @@ def test_extract_docx_roundtrips_to_markdown(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """DOCX produced by /convert is read back to Markdown by /extract."""
-    monkeypatch.setattr("md2star.cli._TEMPLATE_URLS", {}, raising=True)
+    monkeypatch.setattr("md2star.pipeline._TEMPLATE_URLS", {}, raising=True)
     # Forward: Markdown → DOCX.
     fwd = client.post(
         "/convert?fmt=docx",

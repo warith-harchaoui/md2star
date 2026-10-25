@@ -32,20 +32,27 @@ classifiers = [
     "Topic :: Office/Business",
 ]
 dependencies = [
-    # click backs the `md2star-x` front-end (md2star/click_cli.py); a small,
-    # ubiquitous CLI library kept in the core deps so that command is always
-    # available alongside the argparse wrappers.
+    # click IS md2star's command line since 3.10.0 (md2star/cli.py): `md2star`
+    # and the `md2docx` / `md2pptx` / `md2pdf` shorthands all import it at
+    # module load, so it belongs in the core dependencies and not in an extra.
+    # An optional click would ship a package whose console scripts fail on a
+    # clean install, and no test would catch it — every dev environment has it.
     "click>=8,<9",
     # os-helper is md2star's sibling in the same suite: it provides the hashing,
     # path/dir, temp-file, download, platform-detection, and named live-stream
-    # logging primitives the package is built on. The 2.x line is the stable
-    # AI Helpers foundation (hardened logging / file management / smart
-    # downloads); md2star uses the alt-text hash helpers,
-    # make_temporary_directory, temporary_filename(directory=), download_file
-    # metadata, and the named-logger convenience functions (no stray root
-    # basicConfig). Core dep. (Model-tag choice moved to best-engine-ai-helper
-    # below, so os-helper's llm_model() is no longer used.)
-    "os-helper>=2.10.0,<3",
+    # logging primitives the package is built on. md2star uses the alt-text
+    # hash helpers, make_temporary_directory, temporary_filename(directory=),
+    # download_file metadata, the named-logger convenience functions (no stray
+    # root basicConfig), `Catalog` for the message catalogues and
+    # `extract_call_sites` for the test that keeps them honest. Core dep.
+    # (Model-tag choice moved to best-engine-ai-helper below, so os-helper's
+    # llm_model() is no longer used.)
+    #
+    # The floor is 2.10.0 because `extract_call_sites` landed there — see the
+    # comment in tests/test_i18n.py, which records what a wrong floor cost. The
+    # cap is <4: os-helper 3.0.0 dropped its own CLI, which md2star never
+    # imported, so nothing here is affected by that major.
+    "os-helper>=2.10.0,<4",
     # best-engine-ai-helper is the suite's brief -> engine contract AND the LLM
     # transport. md2star commits `md2star/llm.brief.yaml`; on first use
     # `beh.ensure()` resolves it against this machine, writes the gitignored
@@ -142,12 +149,16 @@ dev = [
 ]
 
 [project.scripts]
+# One command line (click, md2star/cli.py) with one canonical spelling, plus
+# three shorthands. The shorthands are not aliases: they resolve to the very
+# same click command objects as `md2star docx|pptx|pdf`, so a flag cannot exist
+# on one spelling and not the other. `md2star-x` (the old click twin of the old
+# argparse CLI) is gone — a flag naming the parsing library described the
+# implementation, not the interface.
 md2star = "md2star.cli:main"
 md2docx = "md2star.cli:md2docx_main"
 md2pptx = "md2star.cli:md2pptx_main"
 md2pdf  = "md2star.cli:md2pdf_main"
-# Modern click front-end over the same conversion pipeline (md2star/click_cli.py).
-md2star-x = "md2star.click_cli:main"
 # HTTP + MCP servers (install with the [api] / [api,mcp] extras).
 md2star-api = "md2star.api:main"
 md2star-mcp = "md2star.mcp:main"
@@ -275,7 +286,8 @@ exclude = [
 select = ["E", "F", "I", "B", "UP"]
 ignore = [
     "E501",    # line length — handled by --line-length above; many comments exceed
-    "B008",    # function calls in argument defaults — fine for our argparse helpers
+    "B008",    # function calls in argument defaults — FastAPI's File()/Form()/Query()
+               # defaults in md2star/api.py are exactly this pattern by design.
     "B023",    # loop-variable late binding — we have one intentional usage in
                # md2star/preprocessing/tables.py where the closure is invoked
                # in the same iteration; the rule is too noisy for the benefit.

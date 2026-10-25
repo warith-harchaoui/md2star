@@ -80,7 +80,7 @@ class TestResolution:
 
 
 class TestCli:
-    """``templates.main`` and the top-level CLI wiring."""
+    """The two command bodies, plus the click wiring that reaches them."""
 
     def test_list_emits_both_formats_and_marks_winner(self, capsys, tmp_path: Path) -> None:
         """``list`` shows a [docx] + [pptx] block; a local template wins docx.
@@ -96,7 +96,7 @@ class TestCli:
         # pptx (no local file) stays bundled — one run covers both cases.
         (tmp_path / "template.docx").write_bytes(b"PK\x03\x04stub")
 
-        rc = tpl.main(["list", "--dir", str(tmp_path)])
+        rc = tpl.cmd_list(str(tmp_path))
         assert rc == 0
         out = capsys.readouterr().out
         # Both formats are listed.
@@ -111,15 +111,16 @@ class TestCli:
 
         Sweeps default/explicit fmt, bundled fallback vs. local override, and
         CWD- vs. source-file-relative resolution. Each case is
-        (argv_extra, local-template filename or None, use_src, expected suffix).
+        (fmt or None for the default, local-template filename or None, use_src,
+        expected suffix).
         """
         cases = [
-            ([], None, False, "template.docx"),  # default fmt = docx
-            (["--fmt", "docx"], None, False, "template.docx"),  # explicit docx
-            (["--fmt", "pptx"], "template.pptx", False, "template.pptx"),  # local CWD override
-            (["--fmt", "pptx"], "template.pptx", True, "template.pptx"),  # source-dir keying
+            (None, None, False, "template.docx"),  # default fmt = docx
+            ("docx", None, False, "template.docx"),  # explicit docx
+            ("pptx", "template.pptx", False, "template.pptx"),  # local CWD override
+            ("pptx", "template.pptx", True, "template.pptx"),  # source-dir keying
         ]
-        for i, (argv_extra, seed_local, use_src, expected_suffix) in enumerate(cases):
+        for i, (fmt, seed_local, use_src, expected_suffix) in enumerate(cases):
             # A fresh sub-CWD per case so seeded local templates don't leak across.
             work = tmp_path / f"case{i}"
             work.mkdir()
@@ -127,14 +128,16 @@ class TestCli:
             if seed_local is not None:
                 # Seed a per-project template so resolution has a local winner.
                 (work / seed_local).write_bytes(b"PK\x03\x04stub")
-            argv = ["path", *argv_extra]
+            source = None
             if use_src:
                 # A source file next to the template exercises source-dir keying.
                 src = work / "deck.md"
                 src.write_text("# Hi\n")
-                argv.append(str(src))
+                source = str(src)
 
-            rc = tpl.main(argv)
+            # `None` for fmt means "call it the way the command's default
+            # does", which is the case worth covering separately.
+            rc = tpl.cmd_path(source=source) if fmt is None else tpl.cmd_path(fmt, source)
             assert rc == 0
             line = capsys.readouterr().out.strip()
             # Ends in the expected template and points at a real file (bundled
@@ -145,18 +148,26 @@ class TestCli:
             else:
                 assert line == str((work / seed_local).resolve())
 
-    def test_cli_dispatches_templates_subcommand(self, capsys) -> None:
-        """``md2star templates list`` reaches ``templates.main`` via ``cli.main``.
+    def test_cli_dispatches_templates_subcommands(self, capsys, tmp_path: Path) -> None:
+        """Both ``templates`` verbs are reachable through the real command line.
+
+        They were reachable only through the argparse dispatcher until 3.10.0 —
+        the click front-end had no ``templates`` command at all, so this is the
+        wiring that was missing rather than merely moved.
 
         Parameters
         ----------
         capsys : pytest.CaptureFixture
             Captures the dispatched subcommand's output.
+        tmp_path : pathlib.Path
+            A directory to resolve ``--dir`` against.
         """
         from md2star.cli import main as cli_main
 
-        rc = cli_main(["templates", "list"])
-        assert rc == 0
+        assert cli_main(["templates", "list", "--dir", str(tmp_path)]) == 0
         out = capsys.readouterr().out
         # The subcommand ran and produced its two-format table.
         assert "[docx]" in out and "[pptx]" in out
+
+        assert cli_main(["templates", "path", "--fmt", "pptx"]) == 0
+        assert capsys.readouterr().out.strip().endswith("template.pptx")

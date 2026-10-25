@@ -16,7 +16,7 @@ Each *security gate* keeps its own test so a regression names the exact
 gate it broke. Value-families (allowed vs. default, etc.) are folded as
 in-body loops rather than dropped. Assertions run at the API level
 (``preprocess_markdown`` + ``_resolve_reference_doc``) so they're
-independent of the CLI's argparse layer.
+independent of the CLI's parsing layer.
 
 Author
 ------
@@ -148,7 +148,7 @@ def test_reference_doc_uses_bundled_template_without_network(tmp_path):
     Both must return the bundled ``template.docx`` and never call urlopen.
     """
     from md2star.cache import cache_dir
-    from md2star.cli import _resolve_reference_doc
+    from md2star.pipeline import _resolve_reference_doc
 
     input_path = tmp_path / "foo.md"
     input_path.write_text("# hi")
@@ -164,7 +164,7 @@ def test_reference_doc_uses_bundled_template_without_network(tmp_path):
             f.unlink()
         # The template fetch now goes through os_helper.download_file; patch it
         # to prove it is never reached when remote is opted out / offline.
-        with patch("md2star.cli.osh.download_file") as mock_dl:
+        with patch("md2star.pipeline.osh.download_file") as mock_dl:
             resolved = _resolve_reference_doc(
                 input_path,
                 "docx",
@@ -185,7 +185,7 @@ def test_reference_doc_downloads_when_online(tmp_path):
     ``download_file`` is mocked so the test never touches the real host.
     """
     from md2star.cache import cache_dir
-    from md2star.cli import _resolve_reference_doc
+    from md2star.pipeline import _resolve_reference_doc
 
     input_path = tmp_path / "foo.md"
     input_path.write_text("# hi")
@@ -201,7 +201,7 @@ def test_reference_doc_downloads_when_online(tmp_path):
         # Wipe the cache so a prior download can't mask the fetch under test.
         for f in cache_dir("templates").glob("*"):
             f.unlink()
-        with patch("md2star.cli.osh.download_file", side_effect=_fake_download) as mock_dl:
+        with patch("md2star.pipeline.osh.download_file", side_effect=_fake_download) as mock_dl:
             resolved = _resolve_reference_doc(input_path, "docx", **resolve_kwargs)
             assert mock_dl.called, resolve_kwargs
             assert resolved is not None

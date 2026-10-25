@@ -12,7 +12,7 @@ skills/md2star/
 ├── SKILL.md               # name + trigger-rich description + instructions
 └── references/
     ├── cli-reference.md    # full flags, template resolution, phases
-    ├── surfaces.md         # CLI (argparse+click), API, MCP, GUI, minimal-gui
+    ├── surfaces.md         # CLI (click), API, MCP, GUI, minimal-gui
     └── triggers.md         # exhaustive, auditable trigger catalogue
 ```
 

@@ -462,9 +462,9 @@ def extract_layouts(template: Path) -> list[LayoutInfo]:
 def _find_soffice() -> str | None:
     """Locate ``soffice``, reusing the CLI's resolver to avoid drift."""
     try:
-        from .cli import _find_soffice as _cli_find_soffice  # noqa: PLC0415
+        from .pipeline import _find_soffice as _engine_find_soffice  # noqa: PLC0415
 
-        return _cli_find_soffice()
+        return _engine_find_soffice()
     except ImportError:
         path = shutil.which("soffice") or shutil.which("libreoffice")
         if path:

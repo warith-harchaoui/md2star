@@ -32,7 +32,29 @@ more than the defaults (branding, citations, offline, phase control).
 - `--offline` — never touch the network (no remote templates, no remote images).
 - `--no-remote-templates` — do not fetch the deraison.ai default template.
 - `--allow-remote-images` — download `http(s)://` images for embedding.
-- `-v/--verbose`, `-q/--quiet`, `-V/--version`.
+- `-v/--verbose`, `-q/--quiet`, `-V/--version`. `-h` works as well as `--help`,
+  on `md2star` and on every subcommand.
+
+## pptx-only flags (template-intelligent assembly)
+
+- `--smart-layout` — map each slide onto a designer template's own named
+  layouts instead of Pandoc's ~7 generic ones. Needs `--template` and the
+  `[pptx]` extra.
+- `--template designer.pptx` — the designer's own deck (not md2star's).
+- `--reference-slides` — clone the template's own example pages, not just their
+  background.
+- `--no-visual-confirm` — skip the VLM visual tie-break (cheaper).
+- `--eyeball-iterations N` — N bounded revision passes after assembly.
+
+## Pandoc passthrough
+
+Any flag md2star does not define is forwarded to Pandoc **verbatim, and last**,
+so it overrides md2star's own choices: `md2docx report.md --toc
+--metadata=subject:Q3`. The short flags md2star defines (`-o`, `-v`, `-q`,
+`-V`) are md2star's — spell Pandoc's long form to forward it (`--variable`, not
+`-V`). Put the input file before the flags when an unknown option takes a
+separate value: `--metadata key:val in.md` is ambiguous to any parser, while
+`--metadata=key:val` is not.
 
 ## Template resolution order
 

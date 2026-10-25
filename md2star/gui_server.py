@@ -1,8 +1,8 @@
 """md2star local GUI server, Overleaf-style Markdown editor with live PDF preview.
 
-Launches a localhost-only HTTP server that fronts the existing
-``md2star`` CLI: the browser sends Markdown + a small JSON options blob;
-the server invokes ``_convert(fmt, ...)`` from :mod:`md2star.cli` against
+Launches a localhost-only HTTP server that fronts md2star's conversion
+engine: the browser sends Markdown + a small JSON options blob;
+the server invokes ``convert(fmt, ...)`` from :mod:`md2star.pipeline` against
 a temp file and streams the resulting bytes back. The frontend renders
 the PDF result inline via PDF.js (no DOCX/PPTX rendering in the browser;
 those formats are simply offered as a download).
@@ -53,7 +53,6 @@ Author
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import re
@@ -723,9 +722,9 @@ class _Handler(BaseHTTPRequestHandler):
         if fmt not in _OUTPUT_MIME:
             return self.send_error(400, f"unknown format {fmt!r}")
 
-        # The CLI is imported lazily so a thread that never converts does
+        # The engine is imported lazily so a thread that never converts does
         # not pay the import cost of pandoc / lua-filter resolution.
-        from .cli import _convert
+        from .pipeline import ConvertOptions, convert
 
         # Each render runs in a throwaway folder (auto-removed on exit) so the
         # user's disk stays clean and concurrent renders can't collide.
@@ -734,34 +733,34 @@ class _Handler(BaseHTTPRequestHandler):
             out_path = Path(workdir) / f"output.{fmt}"
             md_path.write_text(markdown, encoding="utf-8")
 
-            # Translate the JSON options blob into the same argv the CLI takes,
-            # appending each flag only when the option was actually supplied.
-            argv: list[str] = [str(md_path), "-o", str(out_path)]
-            if opts.get("author"):
-                argv.extend(["--author", str(opts["author"])])
-            if opts.get("lang"):
-                argv.extend(["--lang", str(opts["lang"])])
-            if opts.get("date"):
-                argv.extend(["--date", str(opts["date"])])
-            if opts.get("bibliography_name"):
-                argv.extend(["--bibliography-name", str(opts["bibliography_name"])])
-            if opts.get("lint"):
-                argv.append("--lint")
-            # Per-phase skips let the UI turn off e.g. mermaid or image embedding.
-            for phase in opts.get("skip_phases") or []:
-                argv.extend(["--skip-phase", str(phase)])
-
             # Honor an in-session uploaded reference template
             # (POST /template). PDF rendering shares the DOCX template
             # because the PDF goes through DOCX → soffice. If absent,
-            # the CLI's own resolver kicks in (source dir → XDG cache
+            # the engine's own resolver kicks in (source dir → XDG cache
             # → deraison.ai → bundled). --bib still not exposed in
             # the GUI; users who need bibliographies can run
             # md2docx --bib from the CLI instead.
             template_fmt = "docx" if fmt in ("docx", "pdf") else "pptx"
             uploaded = _session_template(template_fmt)
-            if uploaded is not None:
-                argv.extend(["--reference-doc", str(uploaded)])
+
+            # Translate the JSON options blob straight into the engine's typed
+            # options. This used to build a fake argv for the CLI to re-parse;
+            # a missing key now reads as the dataclass default instead of as an
+            # absent flag, which is the same thing said once rather than twice.
+            # Per-phase skips let the UI turn off e.g. mermaid or image embedding.
+            options = ConvertOptions(
+                input=str(md_path),
+                output=str(out_path),
+                author=str(opts["author"]) if opts.get("author") else None,
+                lang=str(opts["lang"]) if opts.get("lang") else None,
+                date=str(opts["date"]) if opts.get("date") else None,
+                bibliography_name=(
+                    str(opts["bibliography_name"]) if opts.get("bibliography_name") else None
+                ),
+                lint=bool(opts.get("lint")),
+                skip_phase=tuple(str(phase) for phase in opts.get("skip_phases") or []),
+                reference_doc=str(uploaded) if uploaded is not None else None,
+            )
 
             # Capture the CLI's stdout/stderr so we can surface failures
             # back to the browser instead of silently letting them drop
@@ -770,8 +769,8 @@ class _Handler(BaseHTTPRequestHandler):
             rc: int
             try:
                 with stderr_buf:
-                    rc = _convert(fmt, argv)
-            except SystemExit as exc:  # argparse exits on bad flags
+                    rc = convert(fmt, options)
+            except SystemExit as exc:  # a nested surface asking to stop
                 rc = int(exc.code or 1)
             except Exception as exc:  # noqa: BLE001
                 rc = 1
@@ -1364,7 +1363,7 @@ class _Handler(BaseHTTPRequestHandler):
 class _StdRedirect:
     """Tiny context manager that captures ``sys.stderr`` writes into a string.
 
-    Used to wrap the synchronous ``_convert`` call so any warnings the CLI
+    Used to wrap the synchronous ``convert`` call so any warnings the engine
     emits (failed mermaid render, deraison.ai download fallback, …) can be
     surfaced to the GUI instead of vanishing into the server terminal.
     """
@@ -1419,44 +1418,40 @@ def _pick_port(preferred: int) -> int:
 # ─────────────────────────────────────────────────────────────────────
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Console entry point invoked via ``md2star gui [...]``."""
-    parser = argparse.ArgumentParser(
-        prog="md2star gui",
-        description="Launch the local Markdown → PDF preview GUI.",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=8765,
-        help="Preferred port (default: %(default)s; auto-falls-back if in use).",
-    )
-    parser.add_argument(
-        "--no-browser",
-        action="store_true",
-        help="Do not auto-open the browser. The URL is still printed.",
-    )
-    parser.add_argument(
-        "--bind",
-        default="127.0.0.1",
-        help=(
-            "Bind address (default: %(default)s, localhost only). "
-            "Set to 0.0.0.0 to expose to the LAN (security risk; no auth)."
-        ),
-    )
-    args = parser.parse_args(argv)
+def serve(*, port: int = 8765, no_browser: bool = False, bind: str = "127.0.0.1") -> int:
+    """Serve the editor until Ctrl-C. The body of ``md2star gui``.
 
+    The flags arrive parsed: click owns this package's only command line (see
+    :mod:`md2star.cli`), so there is no argv to re-read here.
+
+    Parameters
+    ----------
+    port : int, optional
+        Preferred port. On a loopback bind an in-use port falls back to the
+        next free one; on a non-loopback bind the request is honoured as given,
+        because an operator exposing a port on purpose means that port.
+    no_browser : bool, optional
+        Do not auto-open a browser. The URL is still printed.
+    bind : str, optional
+        Bind address. ``0.0.0.0`` exposes the server to the LAN with no
+        authentication, which is why it prints the banner below.
+
+    Returns
+    -------
+    int
+        ``0`` once the server has been stopped cleanly.
+    """
     # Tell the request gate where we actually bound, so it knows whether the
     # loopback Host allowlist applies (see _caller_is_this_page).
     global _BIND_ADDRESS
-    _BIND_ADDRESS = args.bind
+    _BIND_ADDRESS = bind
 
-    port = _pick_port(args.port) if args.bind == "127.0.0.1" else args.port
-    server = ThreadingHTTPServer((args.bind, port), _Handler)
+    chosen = _pick_port(port) if bind == "127.0.0.1" else port
+    server = ThreadingHTTPServer((bind, chosen), _Handler)
 
-    url = f"http://{args.bind}:{port}/"
+    url = f"http://{bind}:{chosen}/"
     print(f"md2star {__version__} — GUI listening on {url}")
-    if args.bind != "127.0.0.1":
+    if bind != "127.0.0.1":
         # LAN / 0.0.0.0 binding is a footgun. Loud multi-line banner so
         # the operator cannot miss it. No prompt — we don't want to
         # block scripted deployments — but the message names the exact
@@ -1481,7 +1476,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     print("Press Ctrl-C to stop (or use the in-page Quit button).")
 
-    if not args.no_browser:
+    if not no_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
 
     try:
@@ -1494,4 +1489,4 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(serve())

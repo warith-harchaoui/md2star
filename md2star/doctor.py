@@ -27,7 +27,6 @@ Author
 
 from __future__ import annotations
 
-import argparse
 import importlib.util
 import platform
 import shutil
@@ -582,46 +581,51 @@ def render(report: Report) -> str:
     return "\n".join(out)
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Console entry point: ``md2star doctor``."""
-    from .i18n import gettext as _  # noqa: PLC0415 — see render()
+def run(*, as_json: bool = False) -> int:
+    """Run every check and print the result. Returns the process exit code.
 
-    parser = argparse.ArgumentParser(
-        prog="md2star doctor",
-        description=_("Print a diagnostic summary of the environment md2star runs in."),
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help=_("Emit the report as JSON instead of human-readable text."),
-    )
-    args = parser.parse_args(argv)
+    The ``md2star doctor`` command's whole body. It used to own an argparse
+    parser for its one flag; since 3.10.0 click parses that flag (there is one
+    command line in this package) and hands the decision here as a bool.
 
+    Parameters
+    ----------
+    as_json : bool, optional
+        Emit the machine-readable payload instead of the human-readable table.
+        The JSON deliberately stays English: section names double as keys and
+        the statuses are tokens a script greps.
+
+    Returns
+    -------
+    int
+        ``1`` when a Core check is broken, ``0`` otherwise — so CI can gate on
+        md2star being usable while tolerating missing optional tools.
+    """
     # Run the pure-logic layer once; both output modes render the same Report.
-    report = run_checks()
+    result = run_checks()
 
-    if args.json:
+    if as_json:
         # json is imported lazily: the common text path never pays for it.
         import json
 
         payload = {
             "checks": [
                 {"name": c.name, "status": c.status, "detail": c.detail, "section": c.section}
-                for c in report.checks
+                for c in result.checks
             ],
             "features": {
-                fmt: report.feature_status(fmt) for fmt in ("docx", "pptx", "pdf", "mermaid")
+                fmt: result.feature_status(fmt) for fmt in ("docx", "pptx", "pdf", "mermaid")
             },
-            "core_failing": report.core_failing(),
+            "core_failing": result.core_failing(),
         }
         print(json.dumps(payload, indent=2))
     else:
-        print(render(report))
+        print(render(result))
 
     # Exit non-zero only for Core breakage so scripts can gate on md2star being
     # usable while tolerating missing optional tools.
-    return 1 if report.core_failing() else 0
+    return 1 if result.core_failing() else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(run())

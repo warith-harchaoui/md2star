@@ -16,7 +16,7 @@ Architecture
 * ``GET  /healthz``  → ``200 OK`` if md2docx + soffice are reachable.
 
 The PDF generation pipeline mirrors what ``md2pdf`` does in
-``md2star/cli.py``: write the user's markdown to a temp file, call
+``md2star/pipeline.py``: write the user's markdown to a temp file, call
 ``md2docx`` to produce a .docx, then call headless LibreOffice
 (``soffice --headless --convert-to pdf``) to render the PDF. We
 re-implement the chain here (rather than calling ``md2pdf`` straight

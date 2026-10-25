@@ -1,38 +1,34 @@
-"""md2star command-line interface.
+"""md2star's command line, built with click.
 
-This module replaces the legacy heredoc'd shell wrappers (``scripts/install.sh``
-used to write ``~/.local/bin/md2docx`` and ``~/.local/bin/md2pptx`` directly).
-Now there is exactly one source of truth (this file) and four console
-entry points (registered in ``pyproject.toml`` ``[project.scripts]``):
+One parser, one surface. Until 3.10.0 this module held an argparse front-end
+*and* the conversion engine, while a second module (``click_cli.py``) offered a
+click façade that rebuilt an argv string list and handed it back here to be
+re-parsed. Two parsers for one command line meant two places to add a flag —
+and by the end, five commands and nine options existed on only one of them.
 
-* ``md2docx <input.md> [options...]``     → :func:`md2docx_main`
-* ``md2pptx <input.md> [options...]``     → :func:`md2pptx_main`
-* ``md2pdf  <input.md> [options...]``     → :func:`md2pdf_main`
-* ``md2star <subcommand> [options...]``   → :func:`main`
+Now the parsing happens once, here, and the engine lives in
+:mod:`md2star.pipeline` behind a typed :class:`~md2star.pipeline.ConvertOptions`.
 
-The subcommand form (``md2star docx`` / ``md2star pptx`` / ``md2star pdf``)
-is the canonical spelling; the ``md2docx`` / ``md2pptx`` / ``md2pdf`` aliases
-exist so users do not have to relearn anything.
+Console entry points (``[project.scripts]`` in ``pyproject.toml``):
 
-The CLI is intentionally thin: it parses md2star-specific flags, forwards
-everything else verbatim to pandoc, and orchestrates the four-step pipeline:
+* ``md2star <command> [...]``          → :func:`main`
+* ``md2docx <input.md> [options...]``  → :func:`md2docx_main`
+* ``md2pptx <input.md> [options...]``  → :func:`md2pptx_main`
+* ``md2pdf  <input.md> [options...]``  → :func:`md2pdf_main`
 
-1. **Preprocess** the input Markdown via :func:`md2star.preprocess_markdown`.
-2. **Resolve the reference template**: prefer ``template.{docx,pptx}`` next
-   to the input file, then the legacy ``.pandoc-reference.{docx,pptx}``,
-   then the XDG cache, then (the default since v2.5.0) a one-shot fetch
-   from ``deraison.ai`` cached under XDG, and finally the bundled template.
-   ``--no-remote-templates`` / ``--offline`` skip the fetch.
-3. **Invoke pandoc** with the bundled Lua filter, metadata defaults, and
-   resolved reference doc.
-4. **Postprocess** (DOCX only), re-inject the ``MyTable`` / ``MyTableSmall``
-   table styles that Pandoc strips when rewriting ``word/styles.xml``.
+The three ``md2<fmt>`` entries are not aliases of a single command: they are the
+*same* click command object, reachable either as ``md2star docx`` or as
+``md2docx``, so a flag can never exist on one spelling and not the other.
 
-The PDF format is implemented as a wrapper: it produces the DOCX first
-(so all of md2star's polish, from mermaid diagrams to table styles to
-slide-aware tweaks, is already applied) and then asks headless LibreOffice
-(``soffice --headless --convert-to pdf``) to render that DOCX to PDF. This
-guarantees the PDF visually matches the DOCX you would ship.
+The Pandoc passthrough
+----------------------
+md2star's defining behaviour is that **flags it does not recognise go straight
+to Pandoc**. argparse did that with ``parse_known_args``; click is strict by
+default, so each converter is declared with
+``context_settings={"ignore_unknown_options": True}`` and swallows everything
+into one ``nargs=-1, type=click.UNPROCESSED`` argument, which
+:func:`_split_input` then separates into "the input file" and "Pandoc's
+problem". See that function for why the split is positional rather than clever.
 
 
 Author
@@ -42,16 +38,10 @@ Author
 
 from __future__ import annotations
 
-import argparse
-import contextlib
-import os
-import shutil
-import subprocess
 import sys
-from importlib import resources
-from pathlib import Path
+from collections.abc import Sequence
 
-import os_helper as osh
+import click
 
 from . import __version__
 from .cache import cache_dir, clear_cache
@@ -63,251 +53,34 @@ from .errors import (
 from .i18n import gettext as _
 from .logging import configure as configure_logging
 from .logging import get_logger
-from .postprocess import (
-    center_standalone_images,
-    inject_table_styles,
-    strip_table_normal_for_pdf,
-)
-from .preprocessing import preprocess_markdown
+from .pipeline import ConvertOptions, convert
 
 # Module logger — a dotted child of the root "md2star" logger, so it inherits
 # the handler + level installed by ``configure_logging`` at CLI startup.
 logger = get_logger(__name__)
 
-# Per-format default reference template URL. Kept user-facing — when the URL
-# changes you also want to update the README / CHANGELOG / install docs.
-_TEMPLATE_URLS: dict[str, str] = {
-    "docx": "https://deraison.ai/template.docx",
-    "pptx": "https://deraison.ai/template.pptx",
-}
+# ``-h`` as well as ``--help`` everywhere: a CLI that answers only to the long
+# spelling is a CLI people type twice.
+_CONTEXT: dict[str, object] = {"help_option_names": ["-h", "--help"]}
 
+# The converters add one setting: unknown options are not an error, they are
+# Pandoc's. This single dict is what keeps md2star's headline feature alive
+# under click.
+_PASSTHROUGH_CONTEXT: dict[str, object] = {**_CONTEXT, "ignore_unknown_options": True}
 
-# ─────────────────────────────────────────────────────────────────────
-# Data-file resolution (Lua filter, defaults YAMLs, templates, mermaid cfg)
-# ─────────────────────────────────────────────────────────────────────
+# Shown under each converter's --help. It names the collision rule because the
+# alternative is a user discovering by accident that ``-V`` is md2star's version
+# flag and not Pandoc's ``--variable``.
+_PASSTHROUGH_EPILOG = (
+    "Unknown flags are forwarded to pandoc verbatim, after md2star's own, so "
+    "they win: `md2docx report.md --toc --metadata=subject:Q3`. Run `pandoc "
+    "--help` for the full list. The few short flags md2star defines itself "
+    "(-o, -v, -q, -V) are md2star's; spell pandoc's long form to forward it "
+    "(--variable, not -V)."
+)
 
-
-def _data_path(*parts: str) -> Path:
-    """Return an absolute filesystem path to a file under ``md2star/data/``.
-
-    ``importlib.resources.files()`` returns a ``Traversable`` that resolves
-    to a real path for unzipped wheel installs and for editable installs;
-    on zipped installs we'd fall back to extracting via ``as_file()``, but
-    hatchling ships md2star as an unzipped wheel so direct resolution is
-    fine.
-
-    Components are joined one at a time: Python 3.10's
-    ``MultiplexedPath.joinpath`` only accepts a single argument per call,
-    so the ``joinpath("filters", "md2star.lua")`` form blows up there.
-    """
-    ref = resources.files("md2star.data")
-    for part in parts:
-        ref = ref.joinpath(part)
-    return Path(str(ref))
-
-
-def _bundled_template(fmt: str) -> Path:
-    """Return the absolute path to the bundled ``template.<fmt>`` shipped in the wheel."""
-    return _data_path(f"template.{fmt}")
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Reference template auto-detection
-# ─────────────────────────────────────────────────────────────────────
-
-
-def _resolve_reference_doc(
-    input_path: Path,
-    fmt: str,
-    *,
-    allow_remote_templates: bool = True,
-    offline: bool = False,
-) -> Path | None:
-    """Resolve the per-project reference template for *input_path*.
-
-    Resolution order (highest priority first):
-
-    1. ``template.<fmt>`` next to the input file (committable, visible).
-       The "zero-config per-project branding" path.
-    2. ``.pandoc-reference.<fmt>`` next to the input file (legacy name;
-       still honoured with a deprecation notice).
-    3. ``$XDG_CACHE_HOME/md2star/templates/template.<fmt>`` — silently
-       reused once cached.
-    4. **(default)** Download from ``https://deraison.ai/template.<fmt>``
-       into the XDG cache. Since v2.5.0 this is the *default* branding
-       whenever no local template (steps 1-3) is found: the deraison.ai
-       template wins over the bundled fallback. Turn it off with
-       ``--no-remote-templates`` (or the hard ``--offline`` kill-switch),
-       which drops straight to the bundled default. A failed download
-       (no network, 404, timeout) also falls back to bundled, so a
-       conversion never breaks just because deraison.ai is unreachable.
-    5. Bundled package template (``md2star/data/template.<fmt>``) — the
-       always-available offline fallback. Conversion always succeeds.
-
-    Returns ``None`` only if even the bundled template is missing (an
-    install bug), in which case the caller lets pandoc fall back to its
-    own built-in styling.
-    """
-    in_dir = input_path.parent.resolve()
-
-    preferred = in_dir / f"template.{fmt}"
-    if preferred.exists():
-        return preferred
-
-    legacy = in_dir / f".pandoc-reference.{fmt}"
-    if legacy.exists():
-        # Still honoured, but nudge the user toward the current name.
-        logger.warning(
-            f"md2star: '.pandoc-reference.{fmt}' is deprecated; rename it to 'template.{fmt}'."
-        )
-        return legacy
-
-    cached = cache_dir("templates") / f"template.{fmt}"
-    if cached.exists():
-        return cached
-
-    url = _TEMPLATE_URLS.get(fmt)
-    if url is not None and allow_remote_templates and not offline:
-        try:
-            # os_helper streams the download straight to disk (flat memory,
-            # progress bar auto-suppressed off-TTY); progress=False keeps the
-            # CLI quiet since this is a small one-shot template fetch.
-            osh.download_file(url, str(cached), progress=False)
-            # Informational: confirm the (default) network fetch happened.
-            # INFO so it stays visible by default but --quiet can hide it.
-            logger.info(f"md2star: cached default template from {url} → {cached}")
-            return cached
-        except Exception as exc:
-            # Leave no partial file behind.
-            cached.unlink(missing_ok=True)
-            logger.warning(
-                f"md2star: template download failed ({exc}); falling back to the bundled default."
-            )
-
-    bundled = _bundled_template(fmt)
-    return bundled if bundled.exists() else None
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Pandoc invocation
-# ─────────────────────────────────────────────────────────────────────
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Localized bibliography heading
-# ─────────────────────────────────────────────────────────────────────
-
-
-# Per-language default heading for the bibliography section md2star
-# appends when --bib is passed. The keys match the two-letter language
-# prefix used elsewhere in md2star (see md2star/preprocessing/language.py
-# and the Lua filter's locale_dicts). When the detected / explicit
-# language isn't in this dict, we fall back to English. Translations
-# verified against the standard heading used in academic style guides
-# for each language.
-_BIBLIOGRAPHY_HEADING_BY_LANG: dict[str, str] = {
-    "en": "Bibliography",
-    "fr": "Bibliographie",
-    "es": "Bibliografía",
-    "de": "Literatur",
-    "it": "Bibliografia",
-    "pt": "Bibliografia",
-    "nl": "Bibliografie",
-    "ru": "Библиография",
-}
-
-
-def _localized_bibliography_heading(content: str, explicit_lang: str | None) -> str:
-    """Return the per-language default heading for the appended bibliography.
-
-    Precedence:
-        1. Explicit ``--lang`` flag (CLI override).
-        2. ``langdetect`` on the markdown body (best-effort).
-        3. English fallback ("Bibliography").
-
-    The function is intentionally side-effect-free so callers can wrap
-    it in tests without monkeypatching anything; the language detection
-    falls back silently when ``langdetect`` is not installed.
-    """
-    lang_prefix = ""
-    if explicit_lang:
-        lang_prefix = explicit_lang.split("-")[0].lower()
-    else:
-        try:
-            from .preprocessing.language import get_language_metadata
-
-            meta = get_language_metadata(content)
-            if meta and meta.get("lang"):
-                lang_prefix = meta["lang"].split("-")[0].lower()
-        except Exception:
-            pass
-    return _BIBLIOGRAPHY_HEADING_BY_LANG.get(lang_prefix, "Bibliography")
-
-
-def _raw_byte(exc: UnicodeDecodeError) -> int:
-    """The offending byte from a decode error, for a message that names it.
-
-    ``exc.object[exc.start]`` is the byte the codec choked on; reporting it
-    with its offset is what turns "not valid UTF-8" into something the user
-    can locate in their file.
-    """
-    return exc.object[exc.start]
-
-
-def _require_pandoc() -> str:
-    """Return the path to ``pandoc``, or exit with a clear message."""
-    path = shutil.which("pandoc")
-    if path is None:
-        raise MissingDependencyError(
-            "pandoc not found on PATH",
-            hint=(
-                "Install it from https://pandoc.org/installing.html "
-                "(macOS: `brew install pandoc`, Ubuntu: "
-                "`sudo apt install pandoc`, Windows: "
-                "`winget install --id JohnMacFarlane.Pandoc`). "
-                "Then re-run; `md2star doctor` confirms the install."
-            ),
-        )
-    return path
-
-
-def _run_pandoc(
-    fmt: str,
-    preprocessed_md: Path,
-    output: Path,
-    reference_doc: Path | None,
-    extra_args: list[str],
-) -> int:
-    """Spawn pandoc with our Lua filter + metadata, return its exit code."""
-    # _require_pandoc raises MissingDependencyError (→ exit 127) if absent.
-    pandoc = _require_pandoc()
-    # Base invocation: our bundled Lua filter + metadata defaults are always on.
-    cmd = [
-        pandoc,
-        str(preprocessed_md),
-        "-o",
-        str(output),
-        "-t",
-        fmt,
-        "--lua-filter",
-        str(_data_path("filters", "md2star.lua")),
-        "--metadata-file",
-        str(_data_path("metadata.yaml")),
-    ]
-    if reference_doc is not None:
-        # The user can override us via --reference-doc in extra_args; pandoc
-        # uses the last value, so we always put ours first.
-        cmd.extend(["--reference-doc", str(reference_doc)])
-    # Verbatim pandoc pass-through comes last so users can override anything.
-    cmd.extend(extra_args)
-    return subprocess.call(cmd)
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Argument parsing
-# ─────────────────────────────────────────────────────────────────────
-
-
+# Per-format one-liners, reused in each converter's help so the three stay
+# phrased alike.
 _FORMAT_HELP = {
     "docx": "Microsoft Word (.docx)",
     "pptx": "Microsoft PowerPoint (.pptx)",
@@ -315,685 +88,88 @@ _FORMAT_HELP = {
 }
 
 
-def _make_format_parser(fmt: str) -> argparse.ArgumentParser:
-    """Build the per-format parser used by ``md2docx`` / ``md2pptx``."""
-    parser = argparse.ArgumentParser(
-        prog=f"md2{fmt}",
-        description=f"Markdown → {_FORMAT_HELP[fmt]} via md2star + Pandoc.",
-        epilog=(
-            "Unknown flags are forwarded to pandoc verbatim. Run `pandoc --help` for the full list."
-        ),
-        add_help=True,
-    )
-    # ── Positional + output ───────────────────────────────────────────
-    parser.add_argument("input", help="Path to the input .md file.")
-    parser.add_argument(
-        "-o",
-        "--output",
-        help="Output path (default: <input>.<fmt>).",
-    )
-    # ── Document metadata forwarded to Pandoc ─────────────────────────
-    parser.add_argument("--author", help="Document author (Pandoc metadata).")
-    parser.add_argument(
-        "--bib",
-        help="Bibliography file (BibTeX). Enables --citeproc automatically.",
-    )
-    parser.add_argument(
-        "--bibliography-name",
-        default=None,  # resolved below to the language-detected value
-        help=(
-            "Heading inserted before the bibliography. When omitted, "
-            "md2star uses the localized default for the document's "
-            "language ('Bibliography' / 'Bibliographie' / 'Bibliografía' "
-            "/ 'Literatur' / 'Bibliografia' / 'Bibliografie' / "
-            "'Библиография' / fallback 'Bibliography')."
-        ),
-    )
-    parser.add_argument("--lang", help="Document language metadata (BCP 47, e.g. en-US).")
-    parser.add_argument(
-        "--date",
-        help=(
-            "Override the auto-generated date in the subtitle. The string "
-            "you pass is used verbatim (e.g. '21 juin 2026', '2026-Q2', "
-            "'submitted 14 March'). When omitted, md2star formats today's "
-            "date via the language-aware `date_format` metadata."
-        ),
-    )
-
-    # ── Lint toggle (mutually exclusive so --lint/--no-lint can't clash) ─
-    lint_group = parser.add_mutually_exclusive_group()
-    lint_group.add_argument(
-        "--lint",
-        action="store_true",
-        help=(
-            "Opt in to the local LLM linter (off by default). Also fills "
-            "empty image alt text with a vision-model description. The backend "
-            "and model are resolved from md2star's committed llm.brief.yaml by "
-            "best-engine-ai-helper (written to a per-machine llm.engine.yaml)."
-        ),
-    )
-    lint_group.add_argument(
-        "--no-lint",
-        action="store_true",
-        help="Explicit no-op (same as the default).",
-    )
-
-    parser.add_argument(
-        "--skip-phase",
-        action="append",
-        default=[],
-        metavar="NAME",
-        help=(
-            "Skip a preprocessing phase. Repeatable. Known phases: "
-            "lint, remote_images, html_tables, html_images, absolutize, "
-            "image_assets, language, line_pass, table_resize, "
-            "table_normalize, image_widths, pptx_isolation."
-        ),
-    )
-    parser.add_argument(
-        "--reference-doc",
-        help="Override the auto-detected reference template.",
-    )
-
-    # ── Network policy (offline-by-default since v1.2.0) ──────────
-    parser.add_argument(
-        "--offline",
-        action="store_true",
-        help=(
-            "Forbid every network-touching phase (overrides "
-            "--allow-remote-*). Useful for air-gapped runs and to "
-            "make the refusal explicit in scripts."
-        ),
-    )
-    parser.add_argument(
-        "--no-remote-templates",
-        action="store_true",
-        help=(
-            "Opt OUT of the deraison.ai default template. Since "
-            "v2.5.0 md2star fetches https://deraison.ai/template."
-            "{docx,pptx} whenever no local template.{docx,pptx} is "
-            "found, caching it under XDG. Pass this (or --offline) "
-            "to skip the fetch and use the bundled template."
-        ),
-    )
-    parser.add_argument(
-        # Back-compat no-op: remote templates are now the default, so the
-        # old opt-in flag has nothing left to enable. Accepted silently so
-        # existing scripts/CI that still pass it don't error out.
-        "--allow-remote-templates",
-        action="store_true",
-        help=argparse.SUPPRESS,
-    )
-    parser.add_argument(
-        "--allow-remote-images",
-        action="store_true",
-        help=(
-            "Opt in to downloading ``![](https://...)`` images "
-            "referenced in the markdown. Off by default — the "
-            "preprocessor leaves remote refs in place and warns "
-            "once on stderr when any were skipped."
-        ),
-    )
-    # ── Verbosity (routes md2star's own diagnostics through logging) ──
-    # Mutually exclusive: --verbose lowers the threshold to DEBUG, --quiet
-    # raises it to ERROR. The default (neither) is INFO, which preserves the
-    # pre-logging behaviour where every diagnostic printed unconditionally.
-    verbosity_group = parser.add_mutually_exclusive_group()
-    verbosity_group.add_argument(
-        "-v",
-        "--verbose",
-        action="store_true",
-        help="Show debug-level diagnostics on stderr.",
-    )
-    verbosity_group.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="Suppress info + warnings; only errors reach stderr.",
-    )
-
-    parser.add_argument(
-        "-V",
-        "--version",
-        action="version",
-        version=f"md2star {__version__}",
-    )
-
-    if fmt == "pptx":
-        # ── Template-intelligent PPTX (opt-in, bypasses Pandoc entirely) ──
-        parser.add_argument(
-            "--smart-layout",
-            action="store_true",
-            help=(
-                "Map each slide onto a real designer PowerPoint template's own "
-                "named layouts (AI layout selection, python-pptx assembly) "
-                "instead of Pandoc's ~7 generic layouts. Requires --template; "
-                "degrades to a clear error without a resolvable LLM+VLM engine "
-                "or python-pptx installed (`pip install 'md2star[pptx]'`)."
-            ),
-        )
-        parser.add_argument(
-            "--template",
-            help="Designer .pptx template for --smart-layout (its own file, not md2star's).",
-        )
-        parser.add_argument(
-            "--reference-slides",
-            action="store_true",
-            help=(
-                "--smart-layout only: clone the designer's own example slide "
-                "for each layout (their decorative shapes and typography, not "
-                "just their background) and replace its text with yours. Any "
-                "page that cannot carry a slide's content is declined, and "
-                "that slide is built on the bare layout as usual."
-            ),
-        )
-        parser.add_argument(
-            "--no-visual-confirm",
-            action="store_true",
-            help=(
-                "--smart-layout only: skip the VLM visual tie-break stage "
-                "(cheaper, text-only layout selection)."
-            ),
-        )
-        parser.add_argument(
-            "--eyeball-iterations",
-            type=int,
-            default=0,
-            metavar="N",
-            help=(
-                "--smart-layout only: run the target-matching Ralph Eyeball Loop "
-                "for N bounded revision passes after assembly (0 = off, the "
-                "default; each pass re-renders the deck and costs one VLM call "
-                "per slide)."
-            ),
-        )
-    return parser
-
-
-def _split_known(parser: argparse.ArgumentParser, argv: list[str]):
-    """Parse known args, return ``(namespace, extras_for_pandoc)``."""
-    return parser.parse_known_args(argv)
-
-
 # ─────────────────────────────────────────────────────────────────────
-# Per-format entry points
+# Shared plumbing
 # ─────────────────────────────────────────────────────────────────────
 
 
-def _convert(fmt: str, argv: list[str]) -> int:
-    """Run the full Markdown → .docx/.pptx/.pdf pipeline. Returns the exit code."""
-    parser = _make_format_parser(fmt)
-    args, pandoc_extras = _split_known(parser, argv)
+class _OrderedGroup(click.Group):
+    """A group whose ``--help`` lists commands as declared, not alphabetically.
 
-    # Wire the logging surface first, before any resolver/preprocess step can
-    # emit a diagnostic, so --verbose/--quiet take effect for the whole run.
-    configure_logging(verbose=args.verbose, quiet=args.quiet)
-
-    in_path = Path(args.input).expanduser().resolve()
-    if not in_path.exists():
-        raise InvalidInputError(
-            _("md2%(fmt)s: input file not found: %(path)s") % {"fmt": fmt, "path": in_path},
-            hint="md2star accepts a single .md / .markdown file as the first argument.",
-        )
-
-    out_path = (
-        Path(args.output).expanduser().resolve() if args.output else in_path.with_suffix(f".{fmt}")
-    )
-
-    # The destination must not be the source. `md2docx doc.md -o doc.md`
-    # replaced a 37-byte Markdown file with a 16 kB DOCX and printed
-    # "Wrote: doc.md" as though that were a success: the document the user was
-    # converting is gone, and nothing says so. Both paths are already
-    # `.resolve()`d above, so `==` settles `doc.md` against `./doc.md` too.
-    #
-    # The sidecar logic below already avoids stomping an unrelated `.docx` the
-    # user might own; this is the same care turned on the input itself.
-    if out_path == in_path:
-        raise InvalidInputError(
-            _("md2%(fmt)s: %(path)s is both the input and the output")
-            % {"fmt": fmt, "path": in_path},
-            hint=_(
-                "Writing the converted file over its own source would destroy "
-                "the document. Pass a different --output, or drop --output to "
-                "write next to the source with the right extension."
-            ),
-        )
-
-    # PDF detours through DOCX. The temp DOCX lives next to the requested
-    # PDF output so the user's source dir stays clean. We always use a
-    # sidecar `.md2star.tmp.docx` name when generating a PDF so we never
-    # stomp on a real .docx the user may already have. (An earlier
-    # version computed the sidecar only when `out_path.with_suffix(".docx")`
-    # already existed, but `Path.samefile(out_path)` raises FileNotFoundError
-    # when the PDF doesn't exist yet — a bug only the first invocation
-    # would hit.)
-    docx_fmt = "docx" if fmt == "pdf" else fmt
-    if fmt == "pdf":
-        docx_path = out_path.with_suffix(".md2star.tmp.docx")
-    else:
-        docx_path = out_path
-
-    # 1. Preprocess
-    try:
-        raw = in_path.read_text(encoding="utf-8")
-    except UnicodeDecodeError as exc:
-        # Typed, not a traceback: a Latin-1 or UTF-16 source is the user's
-        # file, not a bug in md2star, and this module's contract is that a
-        # traceback means "please file this". Exit 2 says invalid input.
-        raise InvalidInputError(
-            _("md2%(fmt)s: %(path)s is not valid UTF-8 (byte %(byte)#04x at offset %(pos)d)")
-            % {"fmt": fmt, "path": in_path, "byte": _raw_byte(exc), "pos": exc.start},
-            hint=(
-                "md2star reads Markdown as UTF-8. Convert the file first, e.g. "
-                "`iconv -f latin1 -t utf-8 in.md > out.md`, or re-save it as "
-                "UTF-8 from your editor."
-            ),
-        ) from exc
-    processed = preprocess_markdown(
-        raw,
-        base_dir=str(in_path.parent),
-        lint_enabled=args.lint,
-        skip_phases=args.skip_phase,
-        allow_remote_images=args.allow_remote_images,
-        offline=args.offline,
-    )
-
-    # 1b. Template-intelligent PPTX detour: bypasses Pandoc AND the whole
-    #     reference-doc/metadata block below entirely (checked here, before
-    #     either does any work, so --smart-layout never triggers a wasted
-    #     remote-template fetch it would just discard). Checked with getattr
-    #     since --smart-layout/--template only exist on the pptx parser
-    #     (fmt == "pptx").
-    if getattr(args, "smart_layout", False):
-        return _convert_smart_layout(fmt, in_path, out_path, processed, args)
-    if getattr(args, "reference_slides", False):
-        # Said out loud rather than ignored: the Pandoc path has no notion of
-        # the template's example pages, so a run that asked for them and got a
-        # perfectly ordinary deck would look like the flag did nothing.
-        raise InvalidInputError(
-            "md2pptx: --reference-slides only applies to --smart-layout",
-            hint="Add --smart-layout --template <designer.pptx>, or drop --reference-slides.",
-        )
-
-    # Build the pandoc metadata / flag list from our high-level options. Each
-    # is appended only when supplied, so unset options fall back to the
-    # template / metadata.yaml defaults rather than injecting empty values.
-    if args.author:
-        pandoc_extras.extend(["--metadata", f"author={args.author}"])
-    if args.lang:
-        pandoc_extras.extend(["--metadata", f"lang={args.lang}"])
-    if args.date:
-        # The Lua filter checks meta.date_override before falling back
-        # to the auto-localized date_format path; using our own key
-        # avoids colliding with Pandoc's own ``date`` metadata.
-        pandoc_extras.extend(["--metadata", f"date_override={args.date}"])
-    if args.bib:
-        pandoc_extras.extend(["--citeproc", "--bibliography", args.bib])
-
-    # Reference doc: explicit override > auto-detection.
-    # For PDF we look up the DOCX template since that is what feeds soffice.
-    reference_doc: Path | None
-    if args.reference_doc:
-        reference_doc = Path(args.reference_doc).expanduser().resolve()
-    else:
-        # Remote templates are the default since v2.5.0; --no-remote-templates
-        # (and the hard --offline switch, handled inside the resolver) opt out.
-        reference_doc = _resolve_reference_doc(
-            in_path,
-            docx_fmt,
-            allow_remote_templates=not args.no_remote_templates,
-            offline=args.offline,
-        )
-
-    # 2. Append the bibliography heading if requested. We do this on the
-    #    preprocessed text rather than the source so the user's source file
-    #    is never mutated. The heading text defaults to the localized
-    #    "Bibliography" for the document's detected language (or the
-    #    explicit --lang) — `args.bibliography_name` is None unless the
-    #    user supplied it.
-    if args.bib:
-        heading = args.bibliography_name or _localized_bibliography_heading(
-            raw,
-            args.lang,
-        )
-        processed = f"{processed}\n\n# {heading}\n"
-
-    # 3. Write the preprocessed Markdown to a temp file in the SAME dir as
-    #    the input so any relative image paths still resolve. os_helper's
-    #    temporary_filename(directory=...) owns creation + cleanup of the file.
-    # Entered through an ExitStack rather than a plain `with` so the failure
-    # to *create* the file can be told apart from anything pandoc raises
-    # inside the block — only the former means "this directory is read-only".
-    stack = contextlib.ExitStack()
-    try:
-        temp_name = stack.enter_context(
-            osh.temporary_filename(
-                suffix=".md", prefix=".preprocessed_", directory=str(in_path.parent)
-            )
-        )
-    except OSError as exc:
-        raise InvalidInputError(
-            _("md2%(fmt)s: cannot write a working file next to %(path)s (%(reason)s)")
-            % {"fmt": fmt, "path": in_path.name, "reason": exc.strerror or exc},
-            hint=(
-                "The preprocessed Markdown is written beside the input so "
-                "relative image paths keep resolving, which needs a writable "
-                "source directory. Copy the Markdown somewhere writable and "
-                "convert it there."
-            ),
-        ) from exc
-    with stack:
-        temp_path = Path(temp_name)
-        Path(temp_path).write_text(processed, encoding="utf-8")
-
-        # 4. Run pandoc → DOCX (always, even for PDF).
-        rc = _run_pandoc(docx_fmt, temp_path, docx_path, reference_doc, pandoc_extras)
-        if rc != 0:
-            return rc
-
-    # 5. DOCX-only postprocess: re-inject MyTable / MyTableSmall styles, then
-    #    centre standalone (non-table) images — Pandoc leaves them left-aligned.
-    #    Both run for the DOCX and the PDF (which builds from this same DOCX).
-    if docx_fmt == "docx":
-        try:
-            inject_table_styles(str(docx_path))
-        except Exception as exc:
-            logger.warning(
-                f"md2star warning: postprocess failed ({exc}); the .docx is otherwise complete."
-            )
-        try:
-            center_standalone_images(str(docx_path))
-        except Exception as exc:
-            logger.warning(
-                f"md2star warning: image-centring pass failed ({exc}); "
-                "images will render left-aligned."
-            )
-
-    # 6. PDF-only: shell out to headless LibreOffice. The intermediate
-    #    DOCX is correct as-is for Word, but the bundled template's
-    #    ``TableNormal0`` style triggers a soffice render bug where
-    #    cells leak out of the table. We mutate the intermediate
-    #    DOCX (zip-level) to drop ``TableNormal0`` so soffice falls
-    #    back to its default table rendering. The user's actual DOCX
-    #    output (md2docx) is never touched. Documented in
-    #    CHANGELOG v1.1.1 + v2.0.0.
-    if fmt == "pdf":
-        try:
-            strip_table_normal_for_pdf(str(docx_path))
-        except Exception as exc:
-            logger.warning(
-                f"md2star warning: TableNormal0 strip failed ({exc}); "
-                "PDF tables may render with empty cells."
-            )
-        rc = _convert_docx_to_pdf(docx_path, out_path)
-        # Always remove the intermediate DOCX — the user asked for a PDF.
-        docx_path.unlink(missing_ok=True)
-        if rc != 0:
-            return rc
-
-    print(_("Wrote: %(path)s") % {"path": out_path})
-    return 0
-
-
-def _mermaid_renderer(out_dir: Path):
-    """Build a ``str -> Path | None`` Mermaid renderer for the smart-layout
-    assembler, or ``None`` when the Mermaid toolchain module can't be
-    imported (never fatal — Mermaid slides then degrade to title-only)."""
-    try:
-        from .preprocessing.mermaid import render_mermaid_local  # noqa: PLC0415
-    except ImportError:
-        return None
-
-    def _render(src: str) -> Path | None:
-        try:
-            return Path(render_mermaid_local(src, out_dir=str(out_dir)))
-        except Exception as exc:  # noqa: BLE001 — degrade to title-only slide
-            logger.debug("smart-layout: mermaid render failed: %s", exc)
-            return None
-
-    return _render
-
-
-def _convert_smart_layout(fmt: str, in_path: Path, out_path: Path, processed: str, args) -> int:
-    """Route ``md2pptx --smart-layout`` through the AI layout assembler.
-
-    Bypasses Pandoc and the whole reference-doc pipeline: ``--template``
-    (the designer's own PPTX) plays the role a Pandoc reference-doc normally
-    plays. See :mod:`md2star.pptx_layout` / :mod:`md2star.pptx_assemble` for
-    the catalog/selection/assembly/eyeball-loop stages this wires together.
+    click sorts by default, which would open md2star's help with ``audit`` and
+    ``cache-dir`` and bury the three conversions the tool exists for.
     """
-    if fmt != "pptx":
-        raise InvalidInputError(
-            _("md2%(fmt)s: --smart-layout is only valid for pptx") % {"fmt": fmt}
-        )
-    if not args.template:
-        raise InvalidInputError(
-            "md2pptx --smart-layout: --template <designer.pptx> is required",
-            hint="Point --template at the designer's own PPTX, not md2star's bundled template.",
-        )
-    template = Path(args.template).expanduser().resolve()
-    if not template.exists():
-        raise InvalidInputError(_("md2pptx: template not found: %(path)s") % {"path": template})
 
-    try:
-        import pptx  # noqa: F401, PLC0415 — optional dep, probed here for a clear error
-    except ImportError as exc:
-        raise Md2starError(
-            "md2pptx --smart-layout needs python-pptx: pip install 'md2star[pptx]'"
-        ) from exc
-
-    from .pptx_assemble import assemble, eyeball_slides  # noqa: PLC0415
-    from .pptx_layout import (  # noqa: PLC0415
-        build_catalog,
-        segment,
-        select_layouts,
-        smart_layout_available,
-        visual_confirm,
-    )
-
-    if not smart_layout_available():
-        raise Md2starError(
-            "md2pptx --smart-layout needs a resolved LLM+VLM engine; run "
-            '`best-engine-ai-helper report --task "..."` or check '
-            "md2star/llm.engine.yaml for what best-engine-ai-helper resolved."
-        )
-
-    slides = segment(processed)
-    if not slides:
-        raise InvalidInputError(_("md2pptx: no slides found in %(path)s") % {"path": in_path})
-
-    logger.info("smart-layout: cataloging %s", template)
-    catalog = build_catalog(template)
-    logger.info("smart-layout: selecting layouts for %d slides", len(slides))
-    # The template gives the canvas for the compositional checks; the source
-    # directory is where relative image paths resolve, so the aspect check can
-    # read real dimensions rather than guess from a count.
-    select_layouts(slides, catalog, template=template, image_base_dir=in_path.parent)
-    if not args.no_visual_confirm:
-        logger.info("smart-layout: visual tie-break")
-        visual_confirm(slides, catalog, template=template)
-
-    render_mermaid = _mermaid_renderer(out_path.parent)
-    reference_slides = getattr(args, "reference_slides", False)
-    if args.eyeball_iterations > 0:
-        result = eyeball_slides(
-            slides,
-            catalog,
-            template,
-            out_path,
-            max_iterations=args.eyeball_iterations,
-            image_base_dir=in_path.parent,
-            render_mermaid=render_mermaid,
-            reference_slides=reference_slides,
-        )
-    else:
-        result = assemble(
-            slides,
-            catalog,
-            template,
-            out_path,
-            image_base_dir=in_path.parent,
-            render_mermaid=render_mermaid,
-            reference_slides=reference_slides,
-        )
-    # Never `_("")`: the empty msgid is a catalogue's own metadata header, and
-    # translating it would hand the user the Content-Type of the .mo file.
-    note = (
-        _(", %(cloned)d from the template's own pages") % {"cloned": result.cloned}
-        if result.cloned
-        else ""
-    )
-    print(
-        _("Wrote: %(path)s (%(placed)d/%(total)d slides%(note)s)")
-        % {
-            "path": result.pptx_path,
-            "placed": result.placed,
-            "total": result.total,
-            "note": note,
-        }
-    )
-    if reference_slides and not result.cloned:
-        # Asked for and silently not delivered is the worst outcome here: the
-        # flag is only ever as good as the template's example pages, and a
-        # template distributed as layouts alone has none to clone.
-        logger.warning(
-            "--reference-slides: no example page in %s could carry a slide; "
-            "every slide was built on its bare layout",
-            template.name,
-        )
-    # Deterministic last word on the deck we just wrote. Runs whatever the AI
-    # stages did or could not do — no model, no render — so a conversion on a
-    # machine with no VLM still reports whether anything overlaps, bleeds off
-    # the canvas, or needs type nobody can read. See md2star/pptx_audit.py.
-    from .pptx_audit import audit, log_findings, summarise  # noqa: PLC0415
-
-    findings = audit(result.pptx_path)
-    log_findings(findings)
-    print(summarise(findings, slides=result.total))
-    return 0
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        """Return the command names in insertion order."""
+        return list(self.commands)
 
 
-# ─────────────────────────────────────────────────────────────────────
-# PDF helper — headless LibreOffice (soffice) bridge
-# ─────────────────────────────────────────────────────────────────────
+def _version_option() -> click.Option:
+    """``-V`` / ``--version``, as an Option object rather than a decorator.
 
+    The converters declare their parameters as an explicit list (see
+    :func:`_format_command`) so the ``--help`` order is the order written, and
+    ``click.version_option`` is a decorator, not an object. Building it by hand
+    also lets the message stay exactly what the argparse CLI printed —
+    ``md2star 3.9.0`` — which is what scripts parsing it already expect.
 
-def _find_soffice() -> str | None:
-    """Return the absolute path to ``soffice``, or None if not found.
+    ``-V`` is capital because ``-v`` is ``--verbose``.
 
-    Looks first on ``PATH`` (covers Homebrew / Linux package installs),
-    then in the standard macOS LibreOffice.app bundle location.
+    Returns
+    -------
+    click.Option
+        An eager, non-exposed flag that prints the version and exits 0.
     """
-    path = shutil.which("soffice") or shutil.which("libreoffice")
-    if path:
-        return path
-    mac_app = "/Applications/LibreOffice.app/Contents/MacOS/soffice"
-    if os.path.exists(mac_app):
-        return mac_app
-    return None
+
+    def _show(ctx: click.Context, param: click.Parameter, value: bool) -> None:
+        # `resilient_parsing` is set while click builds shell completions; a
+        # version banner printed there would end up inside the completion.
+        if not value or ctx.resilient_parsing:
+            return
+        click.echo(f"md2star {__version__}")
+        ctx.exit()
+
+    return click.Option(
+        ["-V", "--version"],
+        is_flag=True,
+        expose_value=False,
+        is_eager=True,
+        callback=_show,
+        help="Show the version and exit.",
+    )
 
 
-def _soffice_profile() -> Path:
-    """The LibreOffice user profile md2star converts under.
+def _split_input(tokens: Sequence[str]) -> tuple[str | None, list[str]]:
+    """Separate the input file from the flags bound for Pandoc.
 
-    LibreOffice keeps one profile per ``UserInstallation`` and locks it. A
-    second ``soffice`` told to use a profile that is already held does not
-    fail loudly — it **exits 0, writes no document and prints nothing**
-    (measured), which is the least debuggable outcome available. Since the
-    default profile is the one the user's own LibreOffice holds whenever it
-    is open, converting under it means every PDF depends on whether the user
-    happens to have the app running.
+    The rule is the simplest one that is also *faithful*: the first token that
+    does not look like an option is the input; everything else, in order, is
+    Pandoc's. It was chosen by checking what ``parse_known_args`` actually did
+    rather than by taste, and it agrees with argparse on every shape measured —
+    including the one they both get wrong. ``--metadata key:val in.md`` makes
+    ``key:val`` the input under both, because no parser can know that an
+    unknown option takes a value. (``--metadata=key:val`` is unambiguous and
+    works; so does putting the input first, which every example does.)
 
-    So we convert under our own, kept in the cache rather than created per
-    run: a fresh profile costs about 1.4s to bootstrap (measured, roughly
-    doubling a 1.5s conversion), and the GUI's live preview pays that on
-    every render. Two concurrent md2star runs can still meet on this one,
-    which is what the throwaway-profile retry in :func:`_convert_docx_to_pdf`
-    is for.
+    Parameters
+    ----------
+    tokens : sequence of str
+        Everything click could not account for, in command-line order.
+
+    Returns
+    -------
+    input_path : str or None
+        The input file, or ``None`` when every token looked like an option.
+    pandoc_args : list of str
+        The remaining tokens, order preserved, to append to the pandoc call.
     """
-    return cache_dir("soffice-profile")
-
-
-def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> int:
-    """Render *docx_path* to *pdf_path* via headless LibreOffice. Returns rc."""
-    soffice = _find_soffice()
-    if soffice is None:
-        raise MissingDependencyError(
-            "md2pdf: LibreOffice (`soffice`) not found",
-            hint=(
-                "Install it to enable PDF output:\n"
-                "  macOS:   brew install --cask libreoffice\n"
-                "  Ubuntu:  sudo apt install libreoffice\n"
-                "  Windows: winget install --id TheDocumentFoundation.LibreOffice\n"
-                "  other:   https://www.libreoffice.org/download/"
-            ),
-        )
-
-    # soffice writes a sibling file next to the input — we cannot control
-    # the exact output name, only its directory. We render into a tempdir
-    # and move the result to the user's requested path so the API stays
-    # "input → output" with no surprises.
-    with osh.temporary_folder(prefix="md2pdf-") as workdir:
-        # First attempt uses md2star's own persistent profile (see
-        # _soffice_profile); the second a throwaway one, which cannot be
-        # contended by definition. Contention does not announce itself the
-        # same way twice — measured, it is either "exit 0, no document, no
-        # message" or a DeploymentException on exit 1 — so the retry is keyed
-        # on the only thing that matters, whether a PDF exists.
-        produced = Path(workdir) / (docx_path.stem + ".pdf")
-        last_rc, last_stderr = 1, ""
-        for attempt, profile in enumerate((_soffice_profile(), Path(workdir) / "profile")):
-            cmd = [
-                soffice,
-                f"-env:UserInstallation={profile.as_uri()}",
-                "--headless",
-                "--convert-to",
-                "pdf",
-                "--outdir",
-                workdir,
-                str(docx_path),
-            ]
-            try:
-                proc = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    timeout=120,
-                    check=False,
-                )
-            except subprocess.TimeoutExpired:
-                # Not retried: a second 120s wait to reach the same verdict
-                # helps nobody.
-                logger.error("md2pdf: LibreOffice timed out after 120s.")
-                return 1
-            last_rc = proc.returncode
-            last_stderr = proc.stderr.decode("utf-8", errors="replace").strip()
-            if last_rc == 0 and produced.exists():
-                break
-            if attempt == 0:
-                # Debug, not warning: the retry normally wins, and a line about
-                # LibreOffice internals on a conversion that then succeeded is
-                # noise. It is here at all because this silence is what made
-                # the symptom unreadable before.
-                logger.debug(
-                    "md2pdf: LibreOffice produced no %s (exit %d); "
-                    "retrying in a throwaway profile.",
-                    produced.name,
-                    last_rc,
-                )
-
-        if not produced.exists():
-            if last_rc != 0:
-                logger.error(f"md2pdf: LibreOffice exited {last_rc}: {last_stderr}")
-                return last_rc
-            logger.error(
-                f"md2pdf: LibreOffice did not produce {produced.name}, "
-                f"even in a private profile. stderr: {last_stderr!r}"
-            )
-            return 1
-
-        osh.make_directory(str(pdf_path.parent))
-        shutil.move(str(produced), str(pdf_path))
-    return 0
+    for index, token in enumerate(tokens):
+        # A bare "-" is a filename-shaped token (stdin, conventionally), not an
+        # option, so it is a candidate input like any other word.
+        if not token.startswith("-") or token == "-":
+            return token, [*tokens[:index], *tokens[index + 1 :]]
+    return None, list(tokens)
 
 
 def _render_error(exc: Md2starError) -> None:
@@ -1004,9 +180,8 @@ def _render_error(exc: Md2starError) -> None:
         md2star: <headline error>
           <hint, indented and word-wrapped at the natural newlines>
 
-    Called by the top-level handler in each ``md2{docx,pptx,pdf}_main``
-    so users see actionable text instead of a traceback when the
-    failure mode is something we already anticipated (see
+    Called by :func:`_run_conversion` so users see actionable text instead of a
+    traceback when the failure mode is something we already anticipated (see
     :mod:`md2star.errors`).
     """
     # Headline goes at error level; each hint line is emitted separately so
@@ -1018,16 +193,15 @@ def _render_error(exc: Md2starError) -> None:
             logger.error(f"  {line}")
 
 
-def _run_format(fmt: str, argv: list[str] | None) -> int:
-    """Top-level wrapper around :func:`_convert` for the four console entries.
+def _run_conversion(fmt: str, opts: ConvertOptions, pandoc_args: Sequence[str]) -> int:
+    """Call the engine and turn its typed failures into exit codes.
 
-    Catches every :class:`Md2starError` subclass and renders it via
-    :func:`_render_error`, returning a non-zero exit code. Anything
-    that doesn't subclass :class:`Md2starError` is left to bubble up
-    as a Python traceback — that's a real bug we want users to file.
+    Catches every :class:`~md2star.errors.Md2starError` subclass and renders it
+    via :func:`_render_error`. Anything that does not subclass it is left to
+    bubble up as a Python traceback — that is a real bug we want users to file.
     """
     try:
-        return _convert(fmt, list(sys.argv[1:] if argv is None else argv))
+        return convert(fmt, opts, pandoc_args)
     except KeyboardInterrupt:
         # Ctrl-C during a long conversion (Pandoc, a Mermaid render, a
         # LibreOffice PDF pass) should read as a clean stop, not a scary
@@ -1047,147 +221,515 @@ def _run_format(fmt: str, argv: list[str] | None) -> int:
         return 1
 
 
-def md2docx_main(argv: list[str] | None = None) -> int:
-    """Console entry point: ``md2docx``."""
-    return _run_format("docx", argv)
+def _dispatch(command: click.Command, argv: Sequence[str] | None, prog_name: str) -> int:
+    """Run *command* and return an exit code instead of exiting the process.
 
-
-def md2pptx_main(argv: list[str] | None = None) -> int:
-    """Console entry point: ``md2pptx``."""
-    return _run_format("pptx", argv)
-
-
-def md2pdf_main(argv: list[str] | None = None) -> int:
-    """Console entry point: ``md2pdf``."""
-    return _run_format("pdf", argv)
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Top-level ``md2star`` entry point
-# ─────────────────────────────────────────────────────────────────────
-
-
-def main(argv: list[str] | None = None) -> int:
-    """Console entry point: ``md2star <subcommand>``.
-
-    Subcommands:
-
-    * ``docx`` / ``pptx`` / ``pdf`` — convert (same flags as the standalone
-      aliases ``md2docx`` / ``md2pptx`` / ``md2pdf``).
-    * ``audit`` — report overlaps / off-canvas shapes / unreadable type in
-      any ``.pptx`` (deterministic; no model, no network).
-    * ``gui`` — launch the local Overleaf-style Markdown → PDF editor.
-    * ``doctor`` — print an environment diagnostic.
-    * ``cache-dir`` — print the resolved cache directory path.
-    * ``clear-cache`` — wipe the cache directory.
-    """
-    argv = list(sys.argv[1:] if argv is None else argv)
-
-    # Install the logging handler with defaults so the dispatch-level paths
-    # below (unknown subcommand, etc.) have a stderr sink. The conversion
-    # subcommands re-invoke configure() with their parsed --verbose/--quiet;
-    # configure() is idempotent, so that just updates the level.
-    configure_logging()
-
-    # No args or -h → help; -V → version. Both are terminal, exit 0.
-    if not argv or argv[0] in ("-h", "--help"):
-        _print_top_level_help()
-        return 0
-    if argv[0] in ("-V", "--version"):
-        # Version is program output → stdout via print, not the logger.
-        print(f"md2star {__version__}")
-        return 0
-
-    # First token selects the subcommand; the rest is its own argv.
-    sub, rest = argv[0], argv[1:]
-
-    # Conversion subcommands delegate to the same entry points the standalone
-    # md2docx/md2pptx/md2pdf console scripts use — one code path, no drift.
-    if sub == "docx":
-        return md2docx_main(rest)
-    if sub == "pptx":
-        return md2pptx_main(rest)
-    if sub == "pdf":
-        return md2pdf_main(rest)
-    # Non-conversion subcommands import lazily so a plain ``md2docx`` run never
-    # pays the import cost of doctor/templates it won't use.
-    if sub == "doctor":
-        from .doctor import main as doctor_main
-
-        return doctor_main(rest)
-    if sub == "templates":
-        from .templates import main as templates_main
-
-        return templates_main(rest)
-    if sub == "audit":
-        # Standalone deck inspector. Works on any .pptx, not only ones this
-        # tool built, so it is useful on a deck a colleague sent you. Lazy
-        # import: it needs python-pptx, an opt-in extra.
-        try:
-            from .pptx_audit import main as audit_main
-        except ImportError as exc:
-            logger.error("md2star audit needs python-pptx: pip install 'md2star[pptx]' (%s)", exc)
-            return 2
-
-        return audit_main(rest)
-    if sub == "twin":
-        # Reverse direction: any document → an editable Markdown twin. Lazy
-        # import so a plain forward conversion never loads Kreuzberg/AI code.
-        from .twin_cli import main as twin_main
-
-        return twin_main(rest)
-    if sub == "gui":
-        # The GUI ships its ~4 MB vendored frontend (PDF.js, CodeMirror,
-        # Tailwind, fonts) inside md2star/data/gui/. Import is lazy so a
-        # plain md2docx run never pays for the http.server machinery.
-        from .gui_server import main as gui_main
-
-        return gui_main(rest)
-    # cache-dir / clear-cache both emit their result to stdout (script-friendly).
-    if sub == "cache-dir":
-        print(cache_dir())
-        return 0
-    if sub == "clear-cache":
-        freed = clear_cache()
-        print(f"md2star: cleared cache ({freed / 1024:.1f} KiB freed)")
-        return 0
-
-    logger.error(f"md2star: unknown subcommand {sub!r}")
-    # Help text (not a diagnostic) still goes straight to stderr via print.
-    _print_top_level_help(file=sys.stderr)
-    return 2
-
-
-def _print_top_level_help(file=sys.stdout) -> None:
-    """Print the top-level usage banner for the ``md2star`` dispatcher.
+    ``standalone_mode=False`` stops click from calling :func:`sys.exit` itself,
+    which is what lets every console entry point here be an ordinary function
+    returning an int — callable from a test, and from
+    ``[project.scripts]``, which wraps it in ``sys.exit(...)`` anyway.
 
     Parameters
     ----------
-    file : TextIO, optional
-        Stream the banner is written to. Defaults to ``sys.stdout``; the
-        error path passes ``sys.stderr`` so the help does not contaminate a
-        piped stdout payload.
+    command : click.Command
+        The group or command to run.
+    argv : sequence of str or None
+        Arguments, excluding the program name. ``None`` reads ``sys.argv``.
+    prog_name : str
+        How the command names itself in usage and error messages.
+
+    Returns
+    -------
+    int
+        0 on success, the command's own code otherwise, or click's exit code
+        (2) for a usage error.
     """
-    print(
-        f"md2star {__version__} — Markdown → DOCX/PPTX/PDF bridge\n\n"
-        "Usage:\n"
-        "  md2star docx <input.md> [options...]\n"
-        "  md2star pptx <input.md> [options...]\n"
-        "  md2star pdf  <input.md> [options...]\n"
-        "  md2star gui  [--port N] [--no-browser] [--bind ADDR]\n"
-        "  md2star twin <input.(pdf|docx|pptx|...)> [--out DIR] [--diagrams]\n"
-        "  md2star audit <deck.pptx> [--json] [--strict]\n"
-        "  md2star doctor [--json]\n"
-        "  md2star templates {list,path} [...]\n"
-        "  md2star cache-dir\n"
-        "  md2star clear-cache\n\n"
-        "Shorthand aliases:\n"
-        "  md2docx <input.md> [options...]\n"
-        "  md2pptx <input.md> [options...]\n"
-        "  md2pdf  <input.md> [options...]\n\n"
-        "Run `md2docx --help` (or md2pptx/md2pdf) for full per-format options.",
-        file=file,
+    try:
+        result = command.main(
+            args=list(sys.argv[1:] if argv is None else argv),
+            prog_name=prog_name,
+            standalone_mode=False,
+        )
+    except click.ClickException as exc:
+        # Render click's own formatted message (usage errors, bad option
+        # values), then hand back its code rather than raising through.
+        exc.show()
+        return exc.exit_code
+    except click.Abort:
+        # click converts KeyboardInterrupt/EOF into Abort. The conversion path
+        # catches Ctrl-C itself; this covers an interrupt during parsing.
+        return 130
+    # Commands signal failure with ``ctx.exit(rc)``, which `main` returns here;
+    # a command that simply finished returns None.
+    return int(result or 0)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# The three converters
+# ─────────────────────────────────────────────────────────────────────
+
+
+def _shared_params() -> list[click.Parameter]:
+    """The conversion options every format accepts, in ``--help`` order.
+
+    Returned as a fresh list per call because a :class:`click.Parameter` is
+    bound to the command that owns it; sharing one instance across the three
+    converters would make them share state.
+    """
+    return [
+        # `click.Path()` and not `writable=True`: the destination usually does
+        # not exist yet, and the engine owns the "input is also the output"
+        # refusal that a path check cannot express.
+        click.Option(["-o", "--output"], type=click.Path(), help="Output path."),
+        click.Option(["--author"], help="Document author (Pandoc metadata)."),
+        # `exists=True` here on purpose: a missing .bib otherwise surfaces as a
+        # citeproc error from inside pandoc, several screens from the typo.
+        click.Option(
+            ["--bib"],
+            type=click.Path(exists=True, dir_okay=False),
+            help="Bibliography file (BibTeX). Enables --citeproc automatically.",
+        ),
+        click.Option(
+            ["--bibliography-name"],
+            # None, not "Bibliography": the engine resolves the heading from the
+            # document's language, and a default here would hide that.
+            help=(
+                "Heading inserted before the bibliography. When omitted, "
+                "md2star uses the localized default for the document's language."
+            ),
+        ),
+        click.Option(["--lang"], help="Document language metadata (BCP 47, e.g. en-US)."),
+        click.Option(
+            ["--date"],
+            help=(
+                "Override the auto-generated date in the subtitle; used verbatim "
+                "(e.g. '21 juin 2026', '2026-Q2')."
+            ),
+        ),
+        click.Option(
+            ["--lint/--no-lint"],
+            default=False,
+            help=(
+                "Opt in to the local LLM linter (off by default). Also fills empty "
+                "image alt text with a vision-model description. Backend and model "
+                "come from md2star's llm.brief.yaml via best-engine-ai-helper."
+            ),
+        ),
+        # `multiple=True` is argparse's `action="append"`: click collects a
+        # tuple, which is what ConvertOptions.skip_phase is typed as.
+        click.Option(
+            ["--skip-phase"],
+            multiple=True,
+            metavar="NAME",
+            help=(
+                "Skip a preprocessing phase. Repeatable. Known phases: lint, "
+                "remote_images, html_tables, html_images, absolutize, image_assets, "
+                "language, line_pass, table_resize, table_normalize, image_widths, "
+                "pptx_isolation."
+            ),
+        ),
+        click.Option(
+            ["--reference-doc"],
+            type=click.Path(exists=True),
+            help="Override the auto-detected reference template.",
+        ),
+        click.Option(
+            ["--offline"],
+            is_flag=True,
+            help=(
+                "Forbid every network-touching phase (overrides --allow-remote-*). "
+                "Useful for air-gapped runs and to make the refusal explicit."
+            ),
+        ),
+        click.Option(
+            ["--no-remote-templates"],
+            is_flag=True,
+            help=(
+                "Opt OUT of the deraison.ai default template. Since v2.5.0 md2star "
+                "fetches https://deraison.ai/template.{docx,pptx} whenever no local "
+                "template is found, caching it under XDG."
+            ),
+        ),
+        click.Option(
+            # Back-compat no-op: remote templates are the default since v2.5.0,
+            # so the old opt-in flag has nothing left to enable. Accepted (and
+            # hidden, and never exposed to the callback) so existing scripts and
+            # CI that still pass it keep working instead of erroring out.
+            ["--allow-remote-templates"],
+            is_flag=True,
+            expose_value=False,
+            hidden=True,
+        ),
+        click.Option(
+            ["--allow-remote-images"],
+            is_flag=True,
+            help=(
+                "Opt in to downloading ![](https://...) images referenced in the "
+                "markdown. Off by default — the preprocessor leaves remote refs in "
+                "place and warns once on stderr."
+            ),
+        ),
+        # Two booleans rather than click's `count=True`: the logging layer has
+        # three levels (DEBUG / INFO / ERROR), so -vv would mean nothing. The
+        # pair is mutually exclusive, enforced in the callback.
+        click.Option(
+            ["-v", "--verbose"], is_flag=True, help="Show debug-level diagnostics on stderr."
+        ),
+        click.Option(
+            ["-q", "--quiet"], is_flag=True, help="Suppress info + warnings; errors only."
+        ),
+        # Last, so --help ends on the two flags nobody needs to read about.
+        _version_option(),
+    ]
+
+
+def _smart_layout_params() -> list[click.Parameter]:
+    """The pptx-only, template-intelligent options.
+
+    Kept off docx/pdf because they describe a path that bypasses Pandoc
+    entirely (see :func:`md2star.pipeline._convert_smart_layout`); offering
+    them where they cannot work would be a promise the tool breaks.
+    """
+    return [
+        click.Option(
+            ["--smart-layout"],
+            is_flag=True,
+            help=(
+                "Map each slide onto a real designer PowerPoint template's own named "
+                "layouts (AI layout selection, python-pptx assembly) instead of "
+                "Pandoc's ~7 generic ones. Requires --template; needs "
+                "`pip install 'md2star[pptx]'` and a resolvable LLM+VLM engine."
+            ),
+        ),
+        click.Option(
+            ["--template"],
+            # Deliberately not click.Path(exists=True): the engine raises its own
+            # translated "template not found" error, which says which path it
+            # looked at and that it wants the *designer's* file.
+            help="Designer .pptx template for --smart-layout (its own file, not md2star's).",
+        ),
+        click.Option(
+            ["--reference-slides"],
+            is_flag=True,
+            help=(
+                "--smart-layout only: clone the designer's own example slide for each "
+                "layout (their decorative shapes and typography, not just their "
+                "background) and replace its text with yours."
+            ),
+        ),
+        click.Option(
+            ["--no-visual-confirm"],
+            is_flag=True,
+            help=(
+                "--smart-layout only: skip the VLM visual tie-break stage "
+                "(cheaper, text-only layout selection)."
+            ),
+        ),
+        click.Option(
+            ["--eyeball-iterations"],
+            type=int,
+            default=0,
+            metavar="N",
+            help=(
+                "--smart-layout only: run the target-matching Ralph Eyeball Loop for "
+                "N bounded revision passes after assembly (0 = off; each pass "
+                "re-renders the deck and costs one VLM call per slide)."
+            ),
+        ),
+    ]
+
+
+def _format_command(fmt: str) -> click.Command:
+    """Build the converter command for *fmt*.
+
+    One command object serves two spellings — ``md2star docx`` and ``md2docx``
+    — so the flag set cannot drift between them. Parameters are passed as an
+    explicit list rather than stacked decorators because decorator order and
+    ``--help`` order are reverses of each other, which is how an option ends up
+    documented three screens from its neighbours.
+    """
+
+    @click.pass_context
+    def _callback(ctx: click.Context, tokens: tuple[str, ...], **values: object) -> None:
+        source, pandoc_args = _split_input(tokens)
+        if source is None:
+            # Nothing that could be a filename: argparse called this a usage
+            # error and so do we, with the name of what is missing.
+            raise click.UsageError("missing INPUT.md — the Markdown file to convert", ctx=ctx)
+        if values["verbose"] and values["quiet"]:
+            # argparse enforced this with a mutually-exclusive group; click has
+            # no equivalent, so the check is explicit and the code stays 2.
+            raise click.UsageError("--verbose and --quiet cannot be combined", ctx=ctx)
+        # Every remaining click value is named exactly like a ConvertOptions
+        # field, so the options reach the engine typed and whole rather than as
+        # an argv the engine has to parse a second time.
+        rc = _run_conversion(fmt, ConvertOptions(input=source, **values), pandoc_args)
+        if rc:
+            ctx.exit(rc)
+
+    # The variadic argument comes first so click fills it from the leftover
+    # args in command-line order — which is what `_split_input` then relies on.
+    params: list[click.Parameter] = [
+        click.Argument(
+            ["tokens"],
+            nargs=-1,
+            type=click.UNPROCESSED,
+            metavar="INPUT.md [PANDOC_ARGS]...",
+        ),
+        *_shared_params(),
+    ]
+    # Only pptx gets the template-intelligent flags. On docx/pdf they fall
+    # through to the passthrough instead, where pandoc rejects them — a
+    # refusal, rather than a flag that is accepted and quietly ignored.
+    if fmt == "pptx":
+        params.extend(_smart_layout_params())
+
+    return click.Command(
+        name=fmt,
+        callback=_callback,
+        params=params,
+        context_settings=_PASSTHROUGH_CONTEXT,
+        short_help=f"Markdown → {_FORMAT_HELP[fmt]}.",
+        help=f"Convert a Markdown file to {_FORMAT_HELP[fmt]} via md2star + Pandoc.",
+        epilog=_PASSTHROUGH_EPILOG,
     )
+
+
+#: The three converters, built once and shared by the group and the ``md2<fmt>``
+#: console scripts. Keyed by format so the entry points below stay one-liners.
+_CONVERTERS: dict[str, click.Command] = {
+    fmt: _format_command(fmt) for fmt in ("docx", "pptx", "pdf")
+}
+
+
+# ─────────────────────────────────────────────────────────────────────
+# The ``md2star`` group
+# ─────────────────────────────────────────────────────────────────────
+
+
+@click.group(cls=_OrderedGroup, context_settings=_CONTEXT)
+@click.version_option(__version__, "-V", "--version", message="md2star %(version)s")
+def cli() -> None:
+    """Markdown → DOCX / PPTX / PDF, and back again.
+
+    A Pandoc wrapper with curated templates, BibTeX citations, Mermaid
+    rendering, math and remote-image embedding — plus "twin", which reads a
+    finished document back into editable Markdown, and "audit", which measures
+    a deck for overlapping or unreadable text.
+
+    md2docx, md2pptx and md2pdf are installed as shorthands for the three
+    conversions; they are the same commands, with the same flags.
+    """
+    # Install the logging handler with defaults so any subcommand that reports
+    # before it has parsed -v/-q has a stderr sink. configure() is idempotent;
+    # the converters re-invoke it with the parsed verbosity.
+    configure_logging()
+
+
+# Registered rather than re-declared: `cli.commands["docx"]` and the object
+# behind `md2docx` are the same Command, which is what makes "a flag can only
+# be added once" structurally true instead of a convention.
+for _converter in _CONVERTERS.values():
+    cli.add_command(_converter)
+
+
+@cli.command(name="gui", context_settings=_CONTEXT)
+@click.option("--port", type=int, default=8765, help="Preferred port (auto-falls-back if in use).")
+@click.option("--no-browser", is_flag=True, help="Do not auto-open the browser (URL is printed).")
+@click.option(
+    "--bind",
+    default="127.0.0.1",
+    help="Bind address (localhost only by default; 0.0.0.0 exposes it to the LAN, unauthenticated).",
+)
+@click.pass_context
+def gui(ctx: click.Context, port: int, no_browser: bool, bind: str) -> None:
+    """Launch the local Markdown editor with a live PDF preview."""
+    # Lazy import: the GUI ships a ~4 MB vendored frontend and the http.server
+    # machinery, which a plain conversion must never pay for.
+    from .gui_server import serve
+
+    ctx.exit(serve(port=port, no_browser=no_browser, bind=bind))
+
+
+@cli.command(name="twin", context_settings=_CONTEXT)
+@click.argument("input_path", metavar="INPUT", type=click.Path())
+@click.option("--out", "out_dir", metavar="DIR", help="Output folder (default: the input's).")
+@click.option("--no-images", is_flag=True, help="Prose + tables only; drop scraped rasters.")
+@click.option(
+    "--diagrams",
+    is_flag=True,
+    help="Re-author figures via the local VLM eyeball loop — node-and-edge diagrams "
+    "as Mermaid, other vector figures as SVG.",
+)
+@click.option("--model", metavar="TAG", help="Vision model tag for --diagrams.")
+@click.option(
+    "--max-iterations", type=int, default=3, metavar="N", help="Eyeball-loop budget per diagram."
+)
+@click.option("-v", "--verbose", is_flag=True, help="Debug logging.")
+@click.option("-q", "--quiet", is_flag=True, help="Warnings and errors only.")
+@click.pass_context
+def twin(
+    ctx: click.Context,
+    input_path: str,
+    out_dir: str | None,
+    no_images: bool,
+    diagrams: bool,
+    model: str | None,
+    max_iterations: int,
+    verbose: bool,
+    quiet: bool,
+) -> None:
+    """Read a document back into an editable Markdown twin (prose + tables + images)."""
+    # Lazy import so a plain forward conversion never loads Kreuzberg / the AI
+    # reconstruction stack.
+    from .twin_cli import run as twin_run
+
+    ctx.exit(
+        twin_run(
+            input_path,
+            out_dir=out_dir,
+            no_images=no_images,
+            diagrams=diagrams,
+            model=model,
+            max_iterations=max_iterations,
+            verbose=verbose,
+            quiet=quiet,
+        )
+    )
+
+
+@cli.command(name="audit", context_settings=_CONTEXT)
+@click.argument("deck", metavar="DECK.pptx", type=click.Path())
+@click.option("--json", "as_json", is_flag=True, help="Machine-readable findings.")
+@click.option(
+    "--strict", is_flag=True, help="Also fail on `overrun`, which is otherwise an observation."
+)
+@click.pass_context
+def audit(ctx: click.Context, deck: str, as_json: bool, strict: bool) -> None:
+    """Report overlaps, off-canvas shapes and unreadable type in any .pptx.
+
+    Works on decks md2star did not build: everything it checks is read off the
+    OOXML. Deterministic — no model, no render, no network.
+    """
+    try:
+        # Lazy, and guarded: the auditor needs python-pptx, an opt-in extra.
+        from .pptx_audit import run as audit_run
+    except ImportError as exc:
+        logger.error("md2star audit needs python-pptx: pip install 'md2star[pptx]' (%s)", exc)
+        ctx.exit(2)
+    else:
+        ctx.exit(audit_run(deck, as_json=as_json, strict=strict))
+
+
+# The only translated help text in this module, and deliberately so: these two
+# strings were translated when `doctor` owned an argparse parser, and dropping
+# the `_()` call would have served a French reader English for no reason other
+# than a refactor. The rest of the CLI's help has always been English-only
+# (`md2star --help` is as much a machine interface as a human one — see
+# md2star/i18n.py on why the CLI answers to MD2STAR_LANG and nothing else).
+#
+# One consequence of a decorator: the lookup happens at import, so MD2STAR_LANG
+# has to be set before the process starts. For help text that is exactly how it
+# is read anyway; the diagnostics the engine raises are looked up when raised.
+@cli.command(
+    name="doctor",
+    context_settings=_CONTEXT,
+    help=_("Print a diagnostic summary of the environment md2star runs in."),
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help=_("Emit the report as JSON instead of human-readable text."),
+)
+@click.pass_context
+def doctor(ctx: click.Context, as_json: bool) -> None:
+    """Report the environment md2star runs in (Python, Pandoc, LibreOffice, Node)."""
+    from .doctor import run as run_doctor
+
+    ctx.exit(run_doctor(as_json=as_json))
+
+
+@cli.group(name="templates", cls=_OrderedGroup, context_settings=_CONTEXT)
+def templates() -> None:
+    """Inspect bundled / cached / per-project templates without converting."""
+    # Dispatch-only: the two subcommands below do the work.
+
+
+@templates.command(name="list", context_settings=_CONTEXT)
+@click.option(
+    "--dir",
+    "directory",
+    type=click.Path(),
+    help="Treat this directory as the per-project root (default: the cwd).",
+)
+@click.pass_context
+def templates_list(ctx: click.Context, directory: str | None) -> None:
+    """Show every resolution candidate (per-project / cached / bundled)."""
+    from .templates import cmd_list
+
+    ctx.exit(cmd_list(directory))
+
+
+# `required=False` on the positional: without an input file the command
+# resolves against the current directory, which is the common case ("which
+# template would a conversion here pick up?").
+@templates.command(name="path", context_settings=_CONTEXT)
+@click.option(
+    "--fmt",
+    type=click.Choice(["docx", "pptx"]),
+    default="docx",
+    show_default=True,
+    help="Output format whose template to resolve.",
+)
+@click.argument("source", metavar="[INPUT.md]", type=click.Path(), required=False)
+@click.pass_context
+def templates_path(ctx: click.Context, fmt: str, source: str | None) -> None:
+    """Print the absolute path of the active template for a given format."""
+    from .templates import cmd_path
+
+    ctx.exit(cmd_path(fmt, source))
+
+
+@cli.command(name="cache-dir", context_settings=_CONTEXT)
+def cache_dir_command() -> None:
+    """Print the resolved cache directory path."""
+    # stdout, not the logger: this is the value a script captures.
+    click.echo(str(cache_dir()))
+
+
+@cli.command(name="clear-cache", context_settings=_CONTEXT)
+def clear_cache_command() -> None:
+    """Wipe the cache directory (templates, resized rasters, mermaid renders)."""
+    # The freed figure is the point of the message: a cache wipe that reports
+    # nothing leaves the user unsure whether anything was there.
+    freed = clear_cache()
+    click.echo(f"md2star: cleared cache ({freed / 1024:.1f} KiB freed)")
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Console entry points
+# ─────────────────────────────────────────────────────────────────────
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Console entry point: ``md2star <command> [...]``."""
+    return _dispatch(cli, argv, "md2star")
+
+
+def md2docx_main(argv: Sequence[str] | None = None) -> int:
+    """Console entry point: ``md2docx <input.md> [options...]``."""
+    return _dispatch(_CONVERTERS["docx"], argv, "md2docx")
+
+
+def md2pptx_main(argv: Sequence[str] | None = None) -> int:
+    """Console entry point: ``md2pptx <input.md> [options...]``."""
+    return _dispatch(_CONVERTERS["pptx"], argv, "md2pptx")
+
+
+def md2pdf_main(argv: Sequence[str] | None = None) -> int:
+    """Console entry point: ``md2pdf <input.md> [options...]``."""
+    return _dispatch(_CONVERTERS["pdf"], argv, "md2pdf")
 
 
 if __name__ == "__main__":

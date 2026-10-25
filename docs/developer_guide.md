@@ -31,7 +31,7 @@ graph TD;
 
 ## 🐍 1. Python Preprocessing Engine
 
-**Entry point:** [`md2star/cli.py`](../md2star/cli.py): the single Python module that registers the `md2docx`, `md2pptx`, `md2pdf`, and `md2star` console scripts. A second front-end, [`md2star/click_cli.py`](../md2star/click_cli.py) (`md2star-x docx|pptx|pdf|gui|doctor`), is a thin click adapter that reconstructs the flag list and delegates to the same `md2star.cli._convert`, so the two surfaces can never drift.
+**Entry point:** [`md2star/cli.py`](../md2star/cli.py): the one click command line, registering the `md2star`, `md2docx`, `md2pptx` and `md2pdf` console scripts. The three shorthands are bound to the *same* click command objects as `md2star docx|pptx|pdf`, so a flag cannot exist on one spelling and not the other. The conversion engine lives next door in [`md2star/pipeline.py`](../md2star/pipeline.py) and takes a typed `ConvertOptions`; the CLI, the GUI server and the FastAPI app all build one, so none of them needs to know a flag spelling to call the engine.
 
 **Implementation:** [`md2star/preprocessing/`](../md2star/preprocessing/) (9 modules; run `wc -l md2star/preprocessing/*.py` for an up-to-date total)
 
@@ -174,7 +174,7 @@ make test
 Beyond the preprocessor unit tests, the suite also guards the newer
 surfaces and behavioural invariants:
 
-- **Surfaces**: `tests/test_click_cli.py` (the `md2star-x` click
+- **Surfaces**: `tests/test_cli_surface.py` (the click command line,
   front-end), `tests/test_api.py` / `tests/test_mcp.py` (the FastAPI +
   FastAPI-MCP servers, skipped cleanly when the `api`/`mcp` deps are
   absent), and `tests/test_skill.py` (the agent skill).
@@ -200,8 +200,8 @@ surfaces and behavioural invariants:
 md2star/
 ├── md2star/                          # Importable Python package
 │   ├── __init__.py                   # Re-exports preprocess_markdown, __version__
-│   ├── cli.py                        # md2docx / md2pptx / md2pdf / md2star console scripts (argparse)
-│   ├── click_cli.py                  # md2star-x docx|pptx|pdf|gui|doctor (click front-end → cli._convert)
+│   ├── cli.py                        # the one command line (click): md2star / md2docx / md2pptx / md2pdf
+│   ├── pipeline.py                   # the conversion engine (ConvertOptions → pandoc → postprocess)
 │   ├── api.py                        # FastAPI HTTP surface (md2star-api; [api] extra): /gui, /health, /doctor, /convert
 │   ├── gui.py                        # Minimal single-page /gui bench served by api.py (self-contained HTML)
 │   ├── mcp.py                        # FastAPI-MCP server (md2star-mcp; [mcp] extra)
@@ -243,7 +243,7 @@ md2star/
 │   ├── test_lua_filter.py            # End-to-end Lua filter tests via pandoc
 │   ├── test_postprocess.py           # inject_table_styles round-trips
 │   ├── test_gui_security.py         # `/fs/*` path-confinement tests for the GUI server
-│   ├── test_click_cli.py           # md2star-x click front-end
+│   ├── test_cli_surface.py         # the click command line, end to end
 │   ├── test_api.py / test_mcp.py    # FastAPI + FastAPI-MCP surfaces (skip without deps)
 │   ├── test_idempotence.py         # md → docx → md fixed point
 │   ├── test_roundtrip_ocr.py       # md → docx → pdf → text identity (slow: LibreOffice + kreuzberg)

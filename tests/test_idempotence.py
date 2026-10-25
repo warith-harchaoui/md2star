@@ -69,7 +69,7 @@ Intro paragraph with **bold**, *italic*, and `code`.
 
 def _convert(fmt: str, tmp_path: Path, tag: str) -> Path:
     """Convert :data:`_SRC` to *fmt* with a pinned date. Returns the output path."""
-    from md2star.cli import _convert as convert
+    from md2star.cli import main as cli_main
 
     # One source file, two distinct outputs (tag a / b) so the two runs cannot
     # accidentally share state through the filesystem.
@@ -77,7 +77,7 @@ def _convert(fmt: str, tmp_path: Path, tag: str) -> Path:
     if not src.exists():
         src.write_text(_SRC, encoding="utf-8")
     out = tmp_path / f"{tag}.{fmt}"
-    rc = convert(fmt, [str(src), "-o", str(out), "--offline", "--date", _FIXED_DATE])
+    rc = cli_main([fmt, str(src), "-o", str(out), "--offline", "--date", _FIXED_DATE])
     assert rc == 0, f"md2{fmt} failed (rc={rc})"
     return out
 

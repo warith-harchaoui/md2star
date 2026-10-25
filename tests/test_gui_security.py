@@ -286,8 +286,8 @@ def test_a_newline_cannot_split_the_render_response(live_server, monkeypatch) ->
 
     # A converter that succeeds while warning in several lines, which is the
     # "rendered OK, with warnings" case the header exists to carry.
-    def fake_convert(fmt: str, argv: list[str]) -> int:
-        out = Path(argv[argv.index("-o") + 1])
+    def fake_convert(fmt, opts) -> int:  # noqa: ANN001 - ConvertOptions
+        out = Path(opts.output)
         out.write_bytes(b"%PDF-1.4 real output")
         # Shaped exactly like a splitting payload: a plausible warning, then a
         # forged header, then the blank line that would end the header block,
@@ -304,11 +304,11 @@ def test_a_newline_cannot_split_the_render_response(live_server, monkeypatch) ->
         )
         return 0
 
-    # Patched at its source: the handler does `from .cli import _convert`
-    # inside the request, so the name it resolves is md2star.cli's.
-    import md2star.cli
+    # Patched at its source: the handler does `from .pipeline import convert`
+    # inside the request, so the name it resolves is md2star.pipeline's.
+    import md2star.pipeline
 
-    monkeypatch.setattr(md2star.cli, "_convert", fake_convert)
+    monkeypatch.setattr(md2star.pipeline, "convert", fake_convert)
 
     body = json.dumps({"markdown": "# hi\n", "format": "pdf"})
     sock = socket.create_connection(("127.0.0.1", port), timeout=30)

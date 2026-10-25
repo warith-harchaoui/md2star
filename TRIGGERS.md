@@ -27,9 +27,8 @@ generate websites or run a LaTeX-native workflow.
 | Check a deck for layout defects | N/A | `md2star audit deck.pptx [--json] [--strict]` | `POST /audit` |
 | Environment diagnostic | N/A | `md2star doctor [--json]` | `GET /doctor` |
 
-Every conversion is also reachable through the click CLI (`md2star-x
-docx|pptx|pdf|gui|doctor`, same delegation), the FastAPI HTTP surface
-(`md2star-api`, with a minimal browser bench at `GET /gui`), and the MCP server
+Every conversion is also reachable through the FastAPI HTTP surface
+(`md2star-api`, with a minimal browser bench at `GET /gui`) and the MCP server
 (`md2star-mcp`). See [`skills/md2star/references/surfaces.md`](skills/md2star/references/surfaces.md).
 
 ## Natural-language phrasings that should fire
@@ -38,8 +37,8 @@ docx|pptx|pdf|gui|doctor`, same delegation), the FastAPI HTTP surface
   PowerPoint / deck / slides from this markdown", "markdown to PDF", "export my
   README / notes / paper as DOCX/PPTX/PDF".
 - **Command mentions**: `md2docx`, `md2pptx`, `md2pdf`, `md2star
-  docx|pptx|pdf|gui|doctor`, `md2star-x`, `md2star-api`, `md2star-mcp`, or "the
-  md2star tool" / "how do I install/run md2star".
+  docx|pptx|pdf|gui|twin|audit|doctor|templates`, `md2star-api`,
+  `md2star-mcp`, or "the md2star tool" / "how do I install/run md2star".
 - **Branding / templates**: "use our corporate .docx/.pptx template", "brand
   this with our template", "apply a reference-doc", "our house-style deck".
 - **Scientific / structured content**: "resolve `[@key]` against my .bib",

@@ -7,10 +7,11 @@ raster back out as PNGs, and (with ``--diagrams``) re-authors node-and-edge
 figures as Mermaid via the target-matching eyeball loop. The result is a
 ``<stem>.md`` plus an ``assets/`` folder you can edit and re-render.
 
-Thin argparse adapter over :func:`md2star.reverse.to_markdown_twin` and
+Thin adapter over :func:`md2star.reverse.to_markdown_twin` and
 :func:`md2star.reverse_diagrams.make_diagram_handler`; kept out of
-:mod:`md2star.cli` so the reverse feature imports lazily and the dispatcher
-stays small.
+:mod:`md2star.cli` so the reverse feature imports lazily and the ``md2star
+twin`` command stays a one-liner. The flags are parsed by click, there, once —
+this module receives them typed.
 
 
 Author
@@ -20,8 +21,6 @@ Author
 
 from __future__ import annotations
 
-import argparse
-import sys
 from pathlib import Path
 
 from .errors import Md2starError
@@ -32,76 +31,66 @@ from .logging import get_logger
 logger = get_logger(__name__)
 
 
-def _build_parser() -> argparse.ArgumentParser:
-    """Construct the ``md2star twin`` argument parser."""
-    parser = argparse.ArgumentParser(
-        prog="md2star twin",
-        description="Read a document back into an editable Markdown twin "
-        "(prose + tables + scraped images; optional Mermaid diagrams).",
-    )
-    # The single positional: any PDF, or a format LibreOffice can print to PDF.
-    parser.add_argument("input", help="Document to recover (PDF, or convertible to one).")
-    # Output folder rather than a file: the twin is a .md *plus* an assets/ dir,
-    # so callers point at a directory and we own the two names inside it.
-    parser.add_argument(
-        "--out",
-        metavar="DIR",
-        default=None,
-        help="Output folder for <stem>.md + assets/ (default: the input's folder).",
-    )
-    # Escape hatch to the classic text-only recovery (no rasters written).
-    parser.add_argument(
-        "--no-images",
-        action="store_true",
-        help="Recover prose + tables only; drop scraped rasters.",
-    )
-    # The one flag that pulls in the AI stack; off by default so the twin stays
-    # deterministic and dependency-light unless the user asks for reconstruction.
-    parser.add_argument(
-        "--diagrams",
-        action="store_true",
-        help="Re-author figures via the local VLM eyeball loop — node-and-edge "
-        "diagrams as Mermaid, other vector figures as SVG (needs a local model "
-        "resolvable via best-engine-ai-helper).",
-    )
-    # Model override; when absent the resolved engine (best-engine) chooses per host.
-    parser.add_argument(
-        "--model",
-        metavar="TAG",
-        default=None,
-        help="Vision model tag for --diagrams (default: the suite picker's choice).",
-    )
-    # Cap on render→compare→revise cycles so a stubborn diagram can't spin forever.
-    parser.add_argument(
-        "--max-iterations",
-        type=int,
-        default=3,
-        metavar="N",
-        help="Eyeball-loop budget per diagram (default: 3).",
-    )
-    # Standard verbosity pair, wired through the shared logging configuration.
-    parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging.")
-    parser.add_argument("-q", "--quiet", action="store_true", help="Warnings and errors only.")
-    return parser
+def run(
+    input_path: str,
+    *,
+    out_dir: str | None = None,
+    no_images: bool = False,
+    diagrams: bool = False,
+    model: str | None = None,
+    max_iterations: int = 3,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> int:
+    """Recover *input_path* as an editable Markdown twin. Returns an exit code.
 
+    Parameters
+    ----------
+    input_path : str
+        Document to recover: a PDF, or anything LibreOffice can print to one.
+    out_dir : str or None, optional
+        Where ``<stem>.md`` + ``assets/`` are written. An output *folder*
+        rather than a file, because the twin is two things. ``None`` puts them
+        next to the input.
+    no_images : bool, optional
+        Recover prose + tables only, dropping the scraped rasters.
+    diagrams : bool, optional
+        Re-author figures through the local VLM eyeball loop — node-and-edge
+        diagrams as Mermaid, other vector figures as SVG. The one option that
+        pulls in the AI stack, hence off by default.
+    model : str or None, optional
+        Vision model tag for *diagrams*. ``None`` lets best-engine-ai-helper
+        pick per host.
+    max_iterations : int, optional
+        Cap on render→compare→revise cycles, so a stubborn diagram cannot spin
+        forever.
+    verbose, quiet : bool, optional
+        Logging threshold, wired through the shared configuration.
 
-def main(argv: list[str] | None = None) -> int:
-    """Console entry point for ``md2star twin``. Returns a process exit code."""
-    args = _build_parser().parse_args(sys.argv[1:] if argv is None else argv)
-    configure_logging(verbose=args.verbose, quiet=args.quiet)
+    Returns
+    -------
+    int
+        ``0`` and the twin's path on stdout; ``2`` for a missing input, ``127``
+        for a missing system tool, ``1`` for any other recovery failure.
+    """
+    # First statement, before any step can emit a diagnostic, so -v/-q apply
+    # to the whole recovery rather than to whatever happens after this line.
+    configure_logging(verbose=verbose, quiet=quiet)
 
-    src = Path(args.input)
+    # Not resolved: a relative input keeps the name the user typed in the
+    # "report.md written next to report.pdf" message below.
+    src = Path(input_path)
     # Default the output next to the input so a bare ``md2star twin report.pdf``
     # drops ``report.md`` + ``assets/`` right where the source lives.
-    out_dir = Path(args.out) if args.out else (src.parent if src.parent != Path("") else Path("."))
+    out = Path(out_dir) if out_dir else (src.parent if src.parent != Path("") else Path("."))
 
     # Only build the AI handler when --diagrams is requested; without it the twin
     # is fully deterministic and needs neither Ollama nor best-engine.
     image_handler = None
-    if args.diagrams:
+    if diagrams:
         from .reverse_diagrams import diagrams_available, make_diagram_handler
 
-        if not diagrams_available(args.model):
+        if not diagrams_available(model):
             # Don't fail the whole run — warn and continue with plain PNGs, since
             # the deterministic twin is still valuable without reconstruction.
             logger.warning(
@@ -110,17 +99,17 @@ def main(argv: list[str] | None = None) -> int:
                 "keeping scraped images as PNGs."
             )
         else:
-            image_handler = make_diagram_handler(
-                model=args.model, max_iterations=args.max_iterations
-            )
+            image_handler = make_diagram_handler(model=model, max_iterations=max_iterations)
 
+    # Imported here rather than at module scope: `reverse` pulls in Kreuzberg
+    # (a Rust core plus OCR models), and `md2star twin --help` must not.
     try:
         from .reverse import to_markdown_twin
 
         md_path = to_markdown_twin(
             src,
-            out_dir,
-            extract_images=not args.no_images,
+            out,
+            extract_images=not no_images,
             image_handler=image_handler,
         )
     except FileNotFoundError as exc:
@@ -140,7 +129,3 @@ def main(argv: list[str] | None = None) -> int:
         # Program output → stdout so the path is pipeable; logs went to stderr.
         print(md_path)
         return 0
-
-
-if __name__ == "__main__":  # pragma: no cover - module executed via md2star twin
-    sys.exit(main())

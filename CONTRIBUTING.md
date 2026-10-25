@@ -37,13 +37,16 @@ gives you the runtime set only (`-e .`).
 ## Project layout
 
 - `md2star/`: the importable Python package.
-  - `cli.py`: the single source of truth for `md2docx` / `md2pptx` /
-    `md2pdf` / `md2star`. There used to be a bash wrapper, a PowerShell
-    wrapper, and a `.cmd` wrapper. Don't bring them back.
-  - `click_cli.py`: the `md2star-x docx|pptx|pdf|gui|doctor` click
-    front-end. It is a *thin adapter*: it delegates to
-    `cli._convert`, so behaviour is defined once. Add a flag in
-    `cli.py` first, then wire it through here; never fork the logic.
+  - `cli.py`: the one command line, in click. It registers `md2star`
+    plus the `md2docx` / `md2pptx` / `md2pdf` shorthands, which are bound
+    to the *same* command objects as `md2star docx|pptx|pdf` — so a flag
+    added once exists on every spelling. There used to be a bash wrapper,
+    a PowerShell wrapper, a `.cmd` wrapper, and a second (click) CLI
+    beside an argparse one. Don't bring any of them back.
+  - `pipeline.py`: the conversion engine, behind a typed `ConvertOptions`.
+    It takes parsed values, never an argv — the CLI, the GUI server and
+    the FastAPI app each build one, so none of them needs to know a flag
+    spelling to call its own package.
   - `api.py` / `mcp.py`: the FastAPI HTTP surface (`md2star-api`,
     `[api]` extra) and the FastAPI-MCP server (`md2star-mcp`, `[mcp]`
     extra). Both wrap the same conversion pipeline.
@@ -73,7 +76,7 @@ gives you the runtime set only (`-e .`).
     LibreOffice + kreuzberg); the CI `ocr-roundtrip` job installs the toolchain
     and runs it for real (and fails if it skips).
 
-  Other files cover the CLI surfaces (`test_click_cli.py`,
+  Other files cover the CLI surfaces (`test_cli_surface.py`,
   `test_api.py`, `test_mcp.py`), the agent skill (`test_skill.py`),
   idempotence (`test_idempotence.py`), doctor, templates, and
   bibliography localization. `test_ai_eval.py` (marker `ai_eval`) is a
@@ -111,10 +114,10 @@ Before opening a PR:
       checked it in via Git LFS. The regenerable demos live there as
       Markdown only; their `.docx` / `.pptx` outputs are produced by
       `tests/examples/run.sh` and intentionally not committed.
-- [ ] If you added user-facing flags, wire them through both the
-      argparse `cli.py` and the click `click_cli.py` front-ends, and
-      update both `README.md` and `LISEZMOI.md` (and `CHANGELOG.md`'s
-      `## [Unreleased]` section).
+- [ ] If you added user-facing flags, declare them in `cli.py` and add
+      the matching field to `pipeline.ConvertOptions`, then update both
+      `README.md` and `LISEZMOI.md` (and `CHANGELOG.md`'s
+      `## [Unreleased]` section). There is one parser; do not add a second.
 - [ ] If you changed a capability the agent skill advertises, update
       `skills/md2star/SKILL.md`'s `description` (and
       `references/triggers.md`) and re-run `python scripts/check_triggers.py`

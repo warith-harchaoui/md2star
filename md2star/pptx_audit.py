@@ -627,43 +627,36 @@ def log_findings(findings: list[Finding]) -> None:
 DEFECT_KINDS = frozenset(KINDS) - {"overrun"}
 
 
-def main(argv: list[str] | None = None) -> int:
+def run(deck_path: str, *, as_json: bool = False, strict: bool = False) -> int:
     """``md2star audit <deck.pptx>`` — measure a deck and report what is wrong.
 
     Works on **any** presentation, not only the ones md2star built: everything
     it checks is read off the OOXML, so a deck somebody made in PowerPoint is
     just as auditable. No model, no render, no network.
 
+    The flags arrive parsed: since 3.10.0 this package has exactly one command
+    line, built with click in :mod:`md2star.cli`, so nothing here re-parses an
+    argv.
+
     Parameters
     ----------
-    argv : list of str, optional
-        Argument list; defaults to ``sys.argv[1:]`` as usual.
+    deck_path : str
+        The ``.pptx`` to inspect. Never modified.
+    as_json : bool, optional
+        Emit the findings as JSON instead of one line each plus a summary.
+    strict : bool, optional
+        Also fail on ``overrun``, which is otherwise an observation.
 
     Returns
     -------
     int
         ``0`` when nothing but observations were found, ``1`` when a defect
-        was (see :data:`DEFECT_KINDS`, and ``--strict``), ``2`` on a usage or
+        was (see :data:`DEFECT_KINDS`, and *strict*), ``2`` on a usage or
         read error.
     """
-    import argparse
     import json
 
-    parser = argparse.ArgumentParser(
-        prog="md2star audit",
-        description="Report overlaps, off-canvas shapes, unreadable type and "
-        "overfull boxes in a .pptx. Deterministic: no model, no network.",
-    )
-    parser.add_argument("deck", help="the .pptx to inspect (never modified)")
-    parser.add_argument("--json", action="store_true", help="machine-readable findings")
-    parser.add_argument(
-        "--strict",
-        action="store_true",
-        help="also fail on `overrun`, which is otherwise an observation",
-    )
-    args = parser.parse_args(argv)
-
-    deck = Path(args.deck).expanduser()
+    deck = Path(deck_path).expanduser()
     # Checked before opening: python-pptx reports a missing file as
     # "Package not found", which reads like a corrupt deck rather than a typo.
     if not deck.is_file():
@@ -679,7 +672,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     slides = len(Presentation(str(deck)).slides)
-    if args.json:
+    if as_json:
         # Null-free: `measured_pt` / `fits_pt` only exist on an overrun, and a
         # consumer should see a key when it means something rather than a
         # column of nulls on every other kind.
@@ -690,5 +683,5 @@ def main(argv: list[str] | None = None) -> int:
             print(finding)
         print(summarise(findings, slides=slides))
 
-    failing = DEFECT_KINDS | ({"overrun"} if args.strict else set())
+    failing = DEFECT_KINDS | ({"overrun"} if strict else set())
     return 1 if any(f.kind in failing for f in findings) else 0

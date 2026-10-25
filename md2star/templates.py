@@ -3,8 +3,8 @@
 Module summary
 --------------
 A diagnostic CLI verb that mirrors the resolution order of
-``md2star.cli._resolve_reference_doc`` without actually converting
-anything. Two sub-verbs:
+``md2star.pipeline._resolve_reference_doc`` without actually
+converting anything. Two sub-verbs:
 
 * ``md2star templates list``: prints a table of every template
   resolution candidate (per-project / cached / bundled) and
@@ -37,8 +37,6 @@ Author
 
 from __future__ import annotations
 
-import argparse
-import sys
 from pathlib import Path
 
 from .cache import cache_dir
@@ -55,9 +53,9 @@ logger = get_logger(__name__)
 def _bundled_template_path(fmt: str) -> Path:
     """Return the absolute path to the bundled ``template.<fmt>``.
 
-    Duplicates :func:`md2star.cli._bundled_template` so this module
-    does not have to import from :mod:`md2star.cli` (which would
-    pull in argparse + every preprocessor phase just to print a
+    Duplicates :func:`md2star.pipeline._bundled_template` so this
+    module does not have to import from :mod:`md2star.pipeline`
+    (which would pull in every preprocessor phase just to print a
     table).
     """
     from importlib import resources
@@ -73,7 +71,7 @@ def _bundled_template_path(fmt: str) -> Path:
 def _candidates(input_dir: Path, fmt: str) -> list[tuple[str, Path]]:
     """Return ``[(label, candidate_path), ...]`` in resolution order.
 
-    Mirrors the resolution chain in :func:`md2star.cli._resolve_reference_doc`
+    Mirrors the resolution chain in :func:`md2star.pipeline._resolve_reference_doc`
     so the user-visible "which template wins" answer stays in sync
     with the actual conversion path.
     """
@@ -108,16 +106,27 @@ def _first_existing(candidates: list[tuple[str, Path]]) -> tuple[str, Path] | No
 # ─────────────────────────────────────────────────────────────────────
 
 
-def cmd_list(args: argparse.Namespace) -> int:
+def cmd_list(directory: str | None = None) -> int:
     """Print a per-format resolution table to stdout.
 
     Walks the same candidate chain as the conversion path, marks
     each existing file with ``✓``, marks the first existing one
     as the active winner with ``→``. No conversion, no network.
+
+    Parameters
+    ----------
+    directory : str or None, optional
+        The per-project root, i.e. the directory that would hold
+        ``template.docx``. ``None`` means the current directory.
+
+    Returns
+    -------
+    int
+        Always ``0``: a resolution table cannot fail, only be empty.
     """
     # Resolve relative to --dir if given, else the current directory — the same
     # anchor the real conversion uses for per-project templates.
-    input_dir = Path(args.dir).expanduser().resolve() if args.dir else Path.cwd()
+    input_dir = Path(directory).expanduser().resolve() if directory else Path.cwd()
 
     # This is program OUTPUT (a report the user reads), so it goes to stdout via
     # print, not the logging surface.
@@ -145,21 +154,35 @@ def cmd_list(args: argparse.Namespace) -> int:
 # ─────────────────────────────────────────────────────────────────────
 
 
-def cmd_path(args: argparse.Namespace) -> int:
-    """Print the absolute path of the active template for ``fmt``.
+def cmd_path(fmt: str = "docx", source: str | None = None) -> int:
+    """Print the absolute path of the active template for *fmt*.
 
     Useful for shell scripts that want to operate on the template
     md2star is currently using (e.g. opening it in Word for
-    branding). Exits with code 2 + a stderr message if no template
-    exists at any of the candidate locations (an install bug).
-    """
-    input_dir = Path(args.input).expanduser().resolve().parent if args.input else Path.cwd()
+    branding).
 
-    winner = _first_existing(_candidates(input_dir, args.fmt))
+    Parameters
+    ----------
+    fmt : {"docx", "pptx"}, optional
+        Which format's template to resolve.
+    source : str or None, optional
+        An input Markdown file; its containing directory becomes the
+        per-project root. ``None`` uses the current directory.
+
+    Returns
+    -------
+    int
+        ``0`` with the path on stdout, or ``2`` + a stderr diagnostic
+        when no template exists at any candidate location (which is
+        an install bug, since one is bundled).
+    """
+    input_dir = Path(source).expanduser().resolve().parent if source else Path.cwd()
+
+    winner = _first_existing(_candidates(input_dir, fmt))
     if winner is None:
         # No template anywhere is an install bug — diagnostic to stderr.
         logger.error(
-            f"md2star: no template.{args.fmt} found at any candidate path "
+            f"md2star: no template.{fmt} found at any candidate path "
             f"(per-project / cached / bundled). Reinstall md2star."
         )
         return 2
@@ -168,68 +191,3 @@ def cmd_path(args: argparse.Namespace) -> int:
     # stays on stdout via print — not the logging surface.
     print(winner[1])
     return 0
-
-
-# ─────────────────────────────────────────────────────────────────────
-# Entry point — wired into `md2star.cli.main` as the `templates`
-# subcommand dispatcher.
-# ─────────────────────────────────────────────────────────────────────
-
-
-def main(argv: list[str] | None = None) -> int:
-    """Console entry point: ``md2star templates {list,path}``."""
-    parser = argparse.ArgumentParser(
-        prog="md2star templates",
-        description=(
-            "Inspect bundled / cached / per-project templates without "
-            "running a conversion. Mirrors the resolution priority "
-            "used by md2docx / md2pptx / md2pdf."
-        ),
-    )
-    subparsers = parser.add_subparsers(dest="action", required=True)
-
-    p_list = subparsers.add_parser(
-        "list",
-        help="Show every resolution candidate (per-project / cached / bundled).",
-    )
-    p_list.add_argument(
-        "--dir",
-        help=(
-            "Treat this directory as the per-project root (i.e. the "
-            "directory that would contain `template.docx`). Defaults "
-            "to the current working directory."
-        ),
-    )
-
-    p_path = subparsers.add_parser(
-        "path",
-        help="Print the absolute path of the active template for a given format.",
-    )
-    p_path.add_argument(
-        "--fmt",
-        choices=("docx", "pptx"),
-        default="docx",
-        help="Output format whose template to resolve (default: docx).",
-    )
-    p_path.add_argument(
-        "input",
-        nargs="?",
-        help=(
-            "Optional input markdown file — its containing directory "
-            "becomes the per-project root. Without it, the current "
-            "working directory is used."
-        ),
-    )
-
-    args = parser.parse_args(argv)
-
-    if args.action == "list":
-        return cmd_list(args)
-    if args.action == "path":
-        return cmd_path(args)
-    parser.error(f"unknown action: {args.action!r}")
-    return 2  # pragma: no cover — argparse.error never returns
-
-
-if __name__ == "__main__":
-    sys.exit(main())

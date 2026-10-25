@@ -108,13 +108,14 @@ versions and three OSes. "It works on my machine" becomes "it works from
 `pipx install md2star`." For a small async team or one person across several
 devices, that portability *is* the value.
 
-**One pipeline, many front-ends.** The same `_convert` code path is reachable
-from four surfaces: the argparse CLIs (`md2docx`/`md2pptx`/`md2pdf`), the
-click CLI (`md2star-x`), a FastAPI server (`md2star-api`, plus a browser
-bench at `/gui` and a full Overleaf-style editor at `md2star gui`), and an MCP
-server (`md2star-mcp`) so an agent can call it as a tool. Raw Pandoc gives you
-one CLI; wiring an HTTP/MCP/GUI surface over it consistently, so they can't
-drift, is again glue you'd own yourself.
+**One pipeline, many surfaces.** The same conversion code path is reachable
+from the command line (`md2star`, plus the `md2docx` / `md2pptx` / `md2pdf`
+shorthands), a FastAPI server (`md2star-api`, plus a browser bench at `/gui`
+and a full Overleaf-style editor at `md2star gui`), and an MCP server
+(`md2star-mcp`) so an agent can call it as a tool. Each of them hands the
+engine the same typed options object, so none of them can know a flag the
+others do not. Raw Pandoc gives you one CLI; wiring an HTTP/MCP/GUI surface
+over it consistently, so they can't drift, is again glue you'd own yourself.
 
 ## Where Pandoc is the right answer (say so)
 
