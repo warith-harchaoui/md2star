@@ -48,7 +48,6 @@ Author
 
 from __future__ import annotations
 
-import argparse
 import json
 import re
 import statistics
@@ -57,6 +56,8 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import click
 
 # The bench drives md2star's real stages, never a reimplementation of them:
 # what it measures has to be what the product would actually get back.
@@ -470,29 +471,68 @@ def report(cases: list[Case], scores: list[Score]) -> None:
     )
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--template", type=Path, default=DEFAULT_TEMPLATE)
-    parser.add_argument(
-        "--models",
-        default="gemma3:12b,qwen3-vl:4b",
-        help="comma-separated Ollama tags to bench (default: %(default)s)",
-    )
-    parser.add_argument("--modes", default="strict,lenient", help="strict, lenient, or both")
-    parser.add_argument("--json", type=Path, help="write the full results here")
-    parser.add_argument("--keep", type=Path, help="keep the built deck and renders in this dir")
-    args = parser.parse_args(argv)
+# ``-h`` beside ``--help``, as everywhere else in md2star's command lines.
+_CONTEXT: dict[str, object] = {"help_option_names": ["-h", "--help"]}
 
-    if not args.template.exists():
-        print(f"template not found: {args.template}", file=sys.stderr)
+
+@click.command("bench_vlm_judge", context_settings=_CONTEXT)
+# `type=click.Path(path_type=Path)` only, with no `exists=True`: the argparse
+# version validated nothing and reported the missing template itself, with
+# exit code 2 and its own wording. Leaving that check in the body keeps the
+# message and the code exactly as they were.
+@click.option("--template", type=click.Path(path_type=Path), default=DEFAULT_TEMPLATE)
+@click.option(
+    "--models",
+    default="gemma3:12b,qwen3-vl:4b",
+    show_default=True,
+    help="comma-separated Ollama tags to bench",
+)
+@click.option("--modes", default="strict,lenient", help="strict, lenient, or both")
+# Named `json_out` because `json` is the imported module in this scope; the
+# flag itself stays `--json`, which is what the docstring's usage example and
+# the design document both spell.
+@click.option(
+    "--json", "json_out", type=click.Path(path_type=Path), help="write the full results here"
+)
+@click.option(
+    "--keep", type=click.Path(path_type=Path), help="keep the built deck and renders in this dir"
+)
+def cli(template: Path, models: str, modes: str, json_out: Path | None, keep: Path | None) -> int:
+    """Bench the eyeball loop's vision judge: strict-JSON vs. lenient parsing.
+
+    \f
+
+    Everything past the form feed is for readers of the source: click
+    truncates --help there, so the numpydoc block below never reaches a user.
+
+    Parameters
+    ----------
+    template : Path
+        The .pptx the corpus is built on.
+    models : str
+        Comma-separated Ollama tags to bench.
+    modes : str
+        Comma-separated parse modes: ``strict``, ``lenient``, or both.
+    json_out : Path or None
+        Where to write the full machine-readable results, if anywhere.
+    keep : Path or None
+        Keep the built deck and its renders in this directory.
+
+    Returns
+    -------
+    int
+        ``0`` on success, ``2`` when the template does not exist.
+    """
+    if not template.exists():
+        print(f"template not found: {template}", file=sys.stderr)
         return 2
 
     with tempfile.TemporaryDirectory() as tmp:
-        workdir = args.keep or Path(tmp)
+        workdir = keep or Path(tmp)
         workdir.mkdir(parents=True, exist_ok=True)
-        print(f"building corpus on {args.template.name} / {BENCH_LAYOUT} (page {BENCH_PAGE})…")
-        cases, target = build_corpus(args.template, workdir)
-        if args.keep:
+        print(f"building corpus on {template.name} / {BENCH_LAYOUT} (page {BENCH_PAGE})…")
+        cases, target = build_corpus(template, workdir)
+        if keep:
             # Written only on request: looking at the pairs is how a reader
             # checks the bench measured what it says it measured.
             (workdir / "target.png").write_bytes(target)
@@ -500,8 +540,8 @@ def main(argv: list[str] | None = None) -> int:
                 (workdir / f"cand_{case.name}.png").write_bytes(case.candidate)
 
         scores, raw_log = [], []
-        for model in [m.strip() for m in args.models.split(",") if m.strip()]:
-            for mode in [m.strip() for m in args.modes.split(",") if m.strip()]:
+        for model in [m.strip() for m in models.split(",") if m.strip()]:
+            for mode in [m.strip() for m in modes.split(",") if m.strip()]:
                 print(f"\n  ── {model} / {mode} ──", flush=True)
                 replies = run_arm(model, mode, cases, target)
                 scores.append(score_arm(model, mode, cases, replies))
@@ -519,11 +559,11 @@ def main(argv: list[str] | None = None) -> int:
                     for r in replies
                 ]
         report(cases, scores)
-        if args.json:
-            args.json.write_text(
+        if json_out:
+            json_out.write_text(
                 json.dumps(
                     {
-                        "template": str(args.template),
+                        "template": str(template),
                         "layout": BENCH_LAYOUT,
                         "page": BENCH_PAGE,
                         "cases": [
@@ -537,8 +577,32 @@ def main(argv: list[str] | None = None) -> int:
                 ),
                 encoding="utf-8",
             )
-            print(f"\nwrote {args.json}")
+            print(f"\nwrote {json_out}")
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the command line and return its exit code instead of exiting.
+
+    ``standalone_mode=False`` keeps the ``main(argv) -> int`` contract the
+    ``__main__`` guard below relies on, and with it the distinction between
+    ``0`` and the ``2`` a missing template reports.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        Command-line arguments; defaults to ``sys.argv[1:]``.
+
+    Returns
+    -------
+    int
+        :func:`cli`'s code, or click's own (2) for a usage error.
+    """
+    try:
+        return int(cli.main(args=argv, prog_name="bench_vlm_judge", standalone_mode=False) or 0)
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
 
 
 if __name__ == "__main__":

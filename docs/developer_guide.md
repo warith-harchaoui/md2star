@@ -285,7 +285,7 @@ Markdown→PDF editor with live PDF preview (PDF.js).
 ### Minimal GUI (`minimal-gui/`)
 
 Separate from the bundled editor, `minimal-gui/server.py` is a
-single-file, zero-dependency stdlib preview server that exposes
+single-file preview server — pure stdlib HTTP, no web framework — that exposes
 `md → PDF` on one `/render` endpoint: a hackable, embeddable starting
 point when the full `md2star gui` is overkill. Run it straight from the
 repo with `python3 minimal-gui/server.py`. (This directory was renamed

@@ -27,6 +27,10 @@ repository does not track. Re-read the poles below whenever a criterion is
 added or removed: the names are only honest as long as they still describe
 what loads on each axis (the YAML the tool writes lists those loadings).
 
+The command line is click-built, like every other in the suite. That costs
+nothing here: ``click>=8.1,<9`` is a declared dependency of ``standpoint``
+itself, so the interpreter above always has it.
+
 Author
 ------
 [Warith HARCHAOUI](https://linkedin.com/in/warith-harchaoui/)
@@ -34,9 +38,10 @@ Author
 
 from __future__ import annotations
 
-import argparse
 import os
 import sys
+
+import click
 
 #: One entry per committed figure: the CSV it reads, the stem it writes, and
 #: the four pole labels in standpoint's own order (left, right, bottom, top).
@@ -134,18 +139,44 @@ def build(stem: str, spec: dict, outdir: str, *, keep_svg: bool) -> list[str]:
     return kept
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Rebuild every figure named on the command line (default: all of them)."""
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    # No `choices=` with `nargs="*"`: argparse validates the default list
-    # against them too, and a list is never one of its own elements.
-    parser.add_argument(
-        "figures", nargs="*", help=f"which to rebuild (default: all of {{{', '.join(FIGURES)}}})"
-    )
-    parser.add_argument("--outdir", default="assets", help="where to write (default: assets/)")
-    parser.add_argument("--keep-svg", action="store_true", help="keep the SVG companions too")
-    args = parser.parse_args(argv)
+# ``-h`` beside ``--help``, as everywhere else in md2star's command lines.
+_CONTEXT: dict[str, object] = {"help_option_names": ["-h", "--help"]}
 
+
+@click.command("positioning", context_settings=_CONTEXT)
+# No `type=click.Choice(...)`: the figure names are validated below so the
+# error can name the known ones *and* every offender at once, the way the
+# argparse version did.
+@click.argument("figures", nargs=-1)
+@click.option("--outdir", default="assets", help="where to write (default: assets/)")
+@click.option("--keep-svg", is_flag=True, help="keep the SVG companions too")
+def cli(figures: tuple[str, ...], outdir: str, keep_svg: bool) -> int:
+    """Rebuild the LANDSCAPE / PAYSAGE positioning maps from their CSV tables.
+
+    FIGURES names which maps to rebuild; with none given, all of them.
+
+    \f
+
+    Everything past the form feed is for readers of the source: click
+    truncates --help there, and the numpydoc block below is not help text.
+    The FIGURES line above stands in for an argparse `help=` on the
+    positional: click has no per-argument help, so the only place to say
+    what it accepts is the command's own description.
+
+    Parameters
+    ----------
+    figures : tuple of str
+        Which :data:`FIGURES` entries to rebuild; empty means all of them.
+    outdir : str
+        Directory to write into.
+    keep_svg : bool
+        Keep the interactive SVG companions the repository does not track.
+
+    Returns
+    -------
+    int
+        ``0`` on success, ``127`` when standpoint is not importable here.
+    """
     try:
         import standpoint  # noqa: F401
     except ImportError:
@@ -159,14 +190,41 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 127
 
-    unknown = [name for name in args.figures if name not in FIGURES]
+    unknown = [name for name in figures if name not in FIGURES]
     if unknown:
-        parser.error(f"unknown figure(s): {', '.join(unknown)} (known: {', '.join(FIGURES)})")
+        # `Context.fail` is click's `parser.error`: the usage line, the message,
+        # exit code 2.
+        click.get_current_context().fail(
+            f"unknown figure(s): {', '.join(unknown)} (known: {', '.join(FIGURES)})"
+        )
 
-    for stem in args.figures or list(FIGURES):
-        for path in build(stem, FIGURES[stem], args.outdir, keep_svg=args.keep_svg):
+    for stem in figures or list(FIGURES):
+        for path in build(stem, FIGURES[stem], outdir, keep_svg=keep_svg):
             print(f"wrote {path}")
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the command line and return its exit code instead of exiting.
+
+    ``standalone_mode=False`` keeps the ``main(argv) -> int`` contract the
+    ``__main__`` guard below (and any caller importing this script) relies on.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        Command-line arguments; defaults to ``sys.argv[1:]``.
+
+    Returns
+    -------
+    int
+        :func:`cli`'s code, or click's own (2) for a usage error.
+    """
+    try:
+        return int(cli.main(args=argv, prog_name="positioning.py", standalone_mode=False) or 0)
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
 
 
 if __name__ == "__main__":

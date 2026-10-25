@@ -50,7 +50,7 @@ services that only need drop-a-file / download-the-result.
 
 ## 5. Minimal GUI — `minimal-gui/server.py`
 
-A single-file, zero-dependency stdlib preview server (`minimal-gui/`) that
+A single-file preview server (`minimal-gui/`), pure stdlib HTTP with no web framework, that
 exposes `md → PDF` on one `/render` endpoint. Run `python3 minimal-gui/server.py`.
 Use as a hackable, embeddable minimal preview when the full GUI is overkill.
 

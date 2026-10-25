@@ -21,6 +21,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   identity in `tests/test_cli_surface.py`, so a flag added once exists on
   every spelling.
 
+- **The repository's own scripts moved to click as well**, so no second
+  parsing library is left anywhere in the tree:
+  `scripts/compile_catalogs.py`, `scripts/audit_comments.py`,
+  `scripts/bench_vlm_judge.py`, `scripts/positioning.py` and
+  `minimal-gui/server.py`. Every flag keeps its exact spelling, `-h` now works
+  beside `--help` on all five, and each keeps its `main(argv) -> int` contract
+  through click's `standalone_mode=False` — `tests/test_i18n.py` asserts
+  `compile_catalogs.main(["--check", "--root", ...]) == 0`, which a command
+  line that exited the process itself could not answer. None of these files
+  ships in the wheel (`[tool.hatch.build.targets.wheel]` packages only
+  `md2star/`), so an installed md2star is untouched by this.
+
+  `minimal-gui/server.py` was described in three places as
+  "zero-dependency". It never was: it has imported `os_helper` at module
+  scope since it was written, and it shells out to `md2docx`. The docs now say
+  what is true of it instead — the HTTP layer is pure stdlib and there is no
+  web framework — rather than a promise the file's own docstring already
+  disclaimed.
+
 - **The conversion engine moved to `md2star/pipeline.py`** and takes a typed
   `ConvertOptions` dataclass plus the Pandoc passthrough list, instead of an
   argv it re-parses. Three in-tree callers (the CLI, `gui_server.py`'s

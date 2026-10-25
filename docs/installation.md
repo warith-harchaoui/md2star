@@ -154,9 +154,10 @@ md2star gui             # launch the offline localhost web editor (Ctrl-C to sto
 md2docx --help          # per-format flags
 ```
 
-The single-file, zero-dependency **minimal GUI** (a hackable stdlib
-preview server that exposes `md → PDF` on one endpoint) runs straight
-from the repo without installing anything extra:
+The single-file **minimal GUI** (a hackable preview server whose HTTP
+layer is pure stdlib — no web framework — exposing `md → PDF` on one
+endpoint) runs straight from the repo, on the md2star install you
+already have:
 
 ```bash
 python3 minimal-gui/server.py   # then open the printed http://127.0.0.1 URL

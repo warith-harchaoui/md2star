@@ -30,9 +30,13 @@ Dependencies
 The HTTP layer is pure standard library (:mod:`http.server`,
 :mod:`subprocess`, :mod:`tempfile`, :mod:`json`, :mod:`pathlib`). Logging,
 warnings and OS detection go through :mod:`os_helper` — md2star's sibling in
-the same suite — so this demo stays consistent with the packaged tool. Since
+the same suite — and the command line is :mod:`click`, the one md2star itself
+is built on (``md2star/cli.py``), so this demo stays consistent with the
+packaged tool rather than offering a second dialect of the same flags. Since
 it already shells out to ``md2star`` / ``md2docx``, having the suite installed
-(which pulls in ``os_helper``) is a given.
+is a given, and both of those are core dependencies of it — the server adds
+no install step of its own. What is deliberately absent is a *web* framework:
+no FastAPI, no uvicorn, no templating engine.
 
 Usage
 -----
@@ -63,7 +67,6 @@ Author
 
 from __future__ import annotations
 
-import argparse
 import atexit
 import http.server
 import json
@@ -77,6 +80,7 @@ from http import HTTPStatus
 from pathlib import Path
 from typing import Any
 
+import click
 import os_helper as osh
 
 # ── Module-level state ────────────────────────────────────────────────
@@ -373,38 +377,55 @@ class OverleafHandler(http.server.BaseHTTPRequestHandler):
 # ── CLI ──────────────────────────────────────────────────────────────
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point."""
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(
-        prog="md2star-minimal-gui-server",
-        description=(
-            "Single-page Overleaf-style editor for md2star: "
-            "Markdown on the left, live PDF on the right, "
-            "powered by md2docx + headless LibreOffice."
-        ),
-    )
-    parser.add_argument(
-        "--bind",
-        default="127.0.0.1",
-        help="Address to bind (default: 127.0.0.1 — loopback only).",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=8765,
-        help="Port to bind (default: 8765).",
-    )
-    parser.add_argument(
-        "-q",
-        "--quiet",
-        action="store_true",
-        help="Suppress access logging.",
-    )
-    args: argparse.Namespace = parser.parse_args(argv)
+# ``-h`` beside ``--help``, the way md2star's own command line spells it.
+_CONTEXT: dict[str, object] = {"help_option_names": ["-h", "--help"]}
 
+
+@click.command("md2star-minimal-gui-server", context_settings=_CONTEXT)
+@click.option(
+    "--bind",
+    default="127.0.0.1",
+    help="Address to bind (default: 127.0.0.1 — loopback only).",
+)
+@click.option(
+    "--port",
+    type=int,
+    default=8765,
+    help="Port to bind (default: 8765).",
+)
+@click.option(
+    "-q",
+    "--quiet",
+    is_flag=True,
+    help="Suppress access logging.",
+)
+def cli(bind: str, port: int, quiet: bool) -> int:
+    """Single-page Overleaf-style editor for md2star: Markdown on the left,
+    live PDF on the right, powered by md2docx + headless LibreOffice.
+
+    \f
+
+    Everything past the form feed is for readers of the source: click
+    truncates --help there, so the numpydoc block below is never shown.
+
+    Parameters
+    ----------
+    bind : str
+        Address to bind. Anything but ``127.0.0.1`` prints the exposure
+        banner below before serving.
+    port : int
+        Port to bind.
+    quiet : bool
+        Drop the log level to WARNING, silencing the access log.
+
+    Returns
+    -------
+    int
+        ``0`` — the server runs until Ctrl-C.
+    """
     # os_helper owns logging setup for the whole suite; --quiet drops to WARNING.
     osh.init_logging(
-        level=logging.WARNING if args.quiet else logging.INFO,
+        level=logging.WARNING if quiet else logging.INFO,
         stdout=False,
         date_format="%H:%M:%S",
     )
@@ -422,13 +443,13 @@ def main(argv: list[str] | None = None) -> int:
     # any markdown a client sends — the same footgun md2star's packaged GUI
     # guards. Print a loud, unmissable banner (no prompt, so scripted runs are
     # not blocked) naming the exact risk, mirroring md2star/gui_server.py.
-    if args.bind != "127.0.0.1":
+    if bind != "127.0.0.1":
         bar = "═" * 64
         osh.warning(
             "\n"
             + bar
             + "\n  This preview server is bound to a NON-LOOPBACK address."
-            + f"\n     URL: http://{args.bind}:{args.port}/"
+            + f"\n     URL: http://{bind}:{port}/"
             + "\n  It has NO AUTHENTICATION and runs md2docx against any markdown"
             + "\n     a client sends — anyone who can reach this port can drive"
             + "\n     LibreOffice on this machine."
@@ -439,10 +460,10 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     server: http.server.ThreadingHTTPServer = http.server.ThreadingHTTPServer(
-        (args.bind, args.port),
+        (bind, port),
         OverleafHandler,
     )
-    url: str = f"http://{args.bind}:{args.port}/"
+    url: str = f"http://{bind}:{port}/"
     osh.info(
         "md2star minimal GUI — serving on %s (static: %s, work: %s). Ctrl-C to stop.",
         url,
@@ -457,6 +478,31 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         server.server_close()
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the command line and return its exit code instead of exiting.
+
+    ``standalone_mode=False`` keeps the ``main(argv) -> int`` contract the
+    ``__main__`` guard below relies on.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        Command-line arguments; defaults to ``sys.argv[1:]``.
+
+    Returns
+    -------
+    int
+        :func:`cli`'s code, or click's own (2) for a usage error.
+    """
+    try:
+        return int(
+            cli.main(args=argv, prog_name="md2star-minimal-gui-server", standalone_mode=False) or 0
+        )
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
 
 
 if __name__ == "__main__":

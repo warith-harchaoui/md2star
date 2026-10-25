@@ -29,11 +29,12 @@ Author
 
 from __future__ import annotations
 
-import argparse
 import ast
 import io
 import tokenize
 from pathlib import Path
+
+import click
 
 # Rule-4 thresholds, expressed as comment_lines / code_lines. 0.25 is the
 # "target" (~1 comment per 4 code lines); 0.15 is the hard floor below which a
@@ -153,13 +154,41 @@ def _iter_py_files(paths: list[str]) -> list[Path]:
     return sorted(set(out))
 
 
-def main(argv: list[str] | None = None) -> int:
-    """CLI entry point: print the density table and gate on the floor.
+# ``-h`` beside ``--help``, as everywhere else in md2star's command lines.
+_CONTEXT: dict[str, object] = {"help_option_names": ["-h", "--help"]}
+
+
+@click.command("audit_comments", context_settings=_CONTEXT)
+@click.argument("paths", nargs=-1)
+@click.option("--floor", type=float, default=FLOOR, help="Hard floor ratio.")
+@click.option("--target", type=float, default=TARGET, help="Advisory target ratio.")
+@click.option(
+    "--advisory",
+    is_flag=True,
+    help="Report only; always exit 0 (use while ratcheting a codebase up).",
+)
+def cli(paths: tuple[str, ...], floor: float, target: float, advisory: bool) -> int:
+    """md2star comment-density audit (rule 4).
+
+    PATHS are the files or directories to audit; with none given, md2star/.
+
+    \f
+
+    Everything past the form feed is for readers of the source: click
+    truncates --help there. The PATHS line above stands in for an argparse
+    `help=` on the positional — click has no per-argument help, so the
+    command description is the only place left to say what it accepts.
 
     Parameters
     ----------
-    argv : list[str] | None
-        Argument vector (defaults to ``sys.argv[1:]``).
+    paths : tuple of str
+        Files or directories to audit; empty means ``md2star``.
+    floor : float
+        Hard floor ratio; a non-glue file below it fails the audit.
+    target : float
+        Advisory target ratio; below it a file is reported, never failed.
+    advisory : bool
+        Report only, always exit 0.
 
     Returns
     -------
@@ -167,18 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         ``0`` when every non-glue file meets the floor (or in ``--advisory``
         mode); ``1`` when at least one non-glue file is below the floor.
     """
-    parser = argparse.ArgumentParser(description="md2star comment-density audit (rule 4).")
-    parser.add_argument("paths", nargs="*", default=["md2star"], help="Files/dirs to audit.")
-    parser.add_argument("--floor", type=float, default=FLOOR, help="Hard floor ratio.")
-    parser.add_argument("--target", type=float, default=TARGET, help="Advisory target ratio.")
-    parser.add_argument(
-        "--advisory",
-        action="store_true",
-        help="Report only; always exit 0 (use while ratcheting a codebase up).",
-    )
-    args = parser.parse_args(argv)
-
-    rows = [analyze(p) for p in _iter_py_files(args.paths or ["md2star"])]
+    rows = [analyze(p) for p in _iter_py_files(list(paths) or ["md2star"])]
     # Sort worst-first so the biggest offenders are easy to spot at the top.
     rows.sort(key=lambda r: r["density"])  # type: ignore[arg-type,return-value]
 
@@ -188,12 +206,12 @@ def main(argv: list[str] | None = None) -> int:
     for r in rows:
         density = float(r["density"])
         # Glue files below the floor are allowed (rule 4) — flag but don't fail.
-        if r["glue"] and density < args.floor:
+        if r["glue"] and density < floor:
             status = "glue-exempt"
-        elif density < args.floor:
+        elif density < floor:
             status = "FLOOR-FAIL"
             below_floor.append(r)
-        elif density < args.target:
+        elif density < target:
             status = "below-target"
         else:
             status = "ok"
@@ -205,10 +223,34 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{'TOTAL':44} {tot_code:>5} {tot_cmt:>4} {tot_cmt / tot_code * 100:>5.1f}%")
 
     # Gate: fail only on floor violations, and only outside advisory mode.
-    if below_floor and not args.advisory:
-        print(f"\n{len(below_floor)} file(s) below the {args.floor:.0%} floor — see rule 4.")
+    if below_floor and not advisory:
+        print(f"\n{len(below_floor)} file(s) below the {floor:.0%} floor — see rule 4.")
         return 1
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the command line and return its exit code instead of exiting.
+
+    ``standalone_mode=False`` keeps the ``main(argv) -> int`` contract: this
+    script gates a CI job through the ``__main__`` guard below, and a caller
+    importing it gets a code rather than a :class:`SystemExit`.
+
+    Parameters
+    ----------
+    argv : list[str] | None
+        Argument vector (defaults to ``sys.argv[1:]``).
+
+    Returns
+    -------
+    int
+        :func:`cli`'s code, or click's own (2) for a usage error.
+    """
+    try:
+        return int(cli.main(args=argv, prog_name="audit_comments", standalone_mode=False) or 0)
+    except click.ClickException as exc:
+        exc.show()
+        return exc.exit_code
 
 
 if __name__ == "__main__":

@@ -30,24 +30,49 @@ Author
 
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
+import click
 import os_helper as osh
 
 #: Re-exported so anything that imported them from here keeps working.
 build_mo = osh.build_mo
 parse_po = osh.parse_po
 
+# ``-h`` beside ``--help``: md2star's own command line answers to both
+# (md2star/cli.py), and a helper script that only knows the long spelling is a
+# script people type twice.
+_CONTEXT: dict[str, object] = {"help_option_names": ["-h", "--help"]}
 
-def main(argv: list[str] | None = None) -> int:
-    """Compile (or check) every catalogue under ``--root``.
+
+@click.command("compile_catalogs", context_settings=_CONTEXT)
+@click.option(
+    "--check",
+    is_flag=True,
+    help="do not write; exit 1 if any .mo differs from its .po",
+)
+@click.option(
+    "--root",
+    default="md2star/data/locales",
+    help="directory holding <lang>/LC_MESSAGES/*.po",
+)
+def cli(check: bool, root: str) -> int:
+    """Compile (or check) every catalogue under --root.
+
+    \f
+
+    Everything past the form feed is for readers of the source: click
+    truncates --help there. Without it the numpydoc block below would be
+    reflowed into the user's help output, "Parameters ----------" and all.
 
     Parameters
     ----------
-    argv : list of str, optional
-        Command-line arguments; defaults to ``sys.argv[1:]``.
+    check : bool
+        Recompile in memory and compare instead of writing, so a translation
+        edited without recompiling cannot reach a release looking live.
+    root : str
+        Directory holding ``<lang>/LC_MESSAGES/*.po``.
 
     Returns
     -------
@@ -57,27 +82,14 @@ def main(argv: list[str] | None = None) -> int:
         ``.po`` at all — a silent success there would let a packaging mistake
         look like a finished build.
     """
-    parser = argparse.ArgumentParser(prog="compile_catalogs")
-    parser.add_argument(
-        "--check",
-        action="store_true",
-        help="do not write; exit 1 if any .mo differs from its .po",
-    )
-    parser.add_argument(
-        "--root",
-        default="md2star/data/locales",
-        help="directory holding <lang>/LC_MESSAGES/*.po",
-    )
-    args = parser.parse_args(argv)
-
-    root = Path(args.root)
-    if not sorted(root.glob("*/LC_MESSAGES/*.po")):
-        print(f"compile_catalogs: no .po under {root}", file=sys.stderr)
+    root_dir = Path(root)
+    if not sorted(root_dir.glob("*/LC_MESSAGES/*.po")):
+        print(f"compile_catalogs: no .po under {root_dir}", file=sys.stderr)
         return 1
 
-    touched = osh.compile_catalogs(root, check=args.check)
+    touched = osh.compile_catalogs(root_dir, check=check)
 
-    if args.check:
+    if check:
         if touched:
             for path in touched:
                 print(f"stale: {path}", file=sys.stderr)
@@ -93,6 +105,33 @@ def main(argv: list[str] | None = None) -> int:
     for path in touched:
         print(f"wrote {path} ({len(osh.parse_po(path.with_suffix('.po')))} entries)")
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run the command line and return its exit code instead of exiting.
+
+    ``standalone_mode=False`` is what keeps this an ordinary function returning
+    an int: ``tests/test_i18n.py`` asserts ``main(["--check", "--root", ...])
+    == 0``, which a click command that called :func:`sys.exit` itself could
+    not answer.
+
+    Parameters
+    ----------
+    argv : list of str, optional
+        Command-line arguments; defaults to ``sys.argv[1:]``.
+
+    Returns
+    -------
+    int
+        The code :func:`cli` returned, or click's own (2) for a usage error.
+    """
+    try:
+        return int(cli.main(args=argv, prog_name="compile_catalogs", standalone_mode=False) or 0)
+    except click.ClickException as exc:
+        # Render click's own formatted message, then hand back its code rather
+        # than letting the exception escape to a traceback.
+        exc.show()
+        return exc.exit_code
 
 
 if __name__ == "__main__":
