@@ -25,13 +25,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   parsing library is left anywhere in the tree:
   `scripts/compile_catalogs.py`, `scripts/audit_comments.py`,
   `scripts/bench_vlm_judge.py`, `scripts/positioning.py` and
-  `minimal-gui/server.py`. Every flag keeps its exact spelling, `-h` now works
-  beside `--help` on all five, and each keeps its `main(argv) -> int` contract
+  `minimal-gui/server.py`. Every flag keeps its exact spelling; `-h` keeps
+  working beside `--help`, which argparse supplied for free and click does
+  not, so each command declares
+  `context_settings={"help_option_names": ["-h", "--help"]}` — a regression
+  prevented, not a gap filled. Each keeps its `main(argv) -> int` contract
   through click's `standalone_mode=False` — `tests/test_i18n.py` asserts
   `compile_catalogs.main(["--check", "--root", ...]) == 0`, which a command
   line that exited the process itself could not answer. None of these files
   ships in the wheel (`[tool.hatch.build.targets.wheel]` packages only
-  `md2star/`), so an installed md2star is untouched by this.
+  `md2star/`, verified by building one), so an installed md2star is untouched
+  by this.
 
   `minimal-gui/server.py` was described in three places as
   "zero-dependency". It never was: it has imported `os_helper` at module
