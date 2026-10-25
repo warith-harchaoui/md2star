@@ -49,6 +49,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # click only: the script is a click command now, like every other in
+      # the suite. This job deliberately installs nothing else — it reads
+      # source, it does not import md2star.
+      - run: python -m pip install --quiet "click>=8.1,<9"
       - run: python scripts/audit_comments.py md2star
 
   # ──────────────────────────────────────────────────────────────────
