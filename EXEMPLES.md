@@ -1,18 +1,104 @@
 # md2star : exemples et aide-mémoire de syntaxe ⭐️
 
+🇫🇷 Français · [🇬🇧 EXAMPLES.md](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md)
+
 Bienvenue dans l'aide-mémoire de syntaxe de `md2star` ! Parce que `md2star` étend Pandoc pur en corrigeant des défauts de mise en page agaçants (en particulier autour des listes à puces et des blocs `mermaid`), vous pouvez mettre en forme vos documents dynamiquement sans casser vos flux de travail.
 
-Les exemples pré-générés se trouvent dans le dossier [`tests/examples/`](tests/examples) :
-- 📄 **Document Word :** [`comprehensive_document.md`](tests/examples/comprehensive_document.md) ➡️ [`comprehensive_document.docx`](tests/examples/comprehensive_document.docx)
-- 📊 **Diaporama PowerPoint :** [`comprehensive_presentation.md`](tests/examples/comprehensive_presentation.md) ➡️ [`comprehensive_presentation.pptx`](tests/examples/comprehensive_presentation.pptx)
-- 🇫🇷 **Document français :** [`guide_complet_document_fr.md`](tests/examples/guide_complet_document_fr.md) ➡️ [`guide_complet_document_fr.docx`](tests/examples/guide_complet_document_fr.docx)
-- 🎨 **Diapositives de marque :** [`branded_slides.md`](tests/examples/branded_slides.md) + [`Presentation1.pptx`](tests/examples/Presentation1.pptx) ➡️ [`branded_slides.pptx`](tests/examples/branded_slides.pptx)
-- 🔖 **Notes de bas de page :** [`footnotes_document.md`](tests/examples/footnotes_document.md) ➡️ [`footnotes_document.docx`](tests/examples/footnotes_document.docx)
+Les extraits des sections 1 à 11 ont été exécutés le 27/10/2026 avec **md2star
+3.10.0 et Pandoc 3.6.1**, hors ligne, puis chaque sortie citée ci-dessous est
+celle qui est revenue. La section 12 fait exception — elle réclame le modèle
+d'un designer ainsi qu'un LLM puis un VLM locaux — ce qu'elle annonce dès son
+début, au lieu de déguiser une exécution non mesurée en transcription.
 
-Pour compiler tous les exemples d'un coup :
+Les sources des exemples vivent dans
+[`tests/examples/`](https://github.com/warith-harchaoui/md2star/tree/main/tests/examples).
+Les `.docx` / `.pptx` rendus ne sont **pas** dans le dépôt — ce sont des
+artefacts de compilation que `.gitignore` écarte — donc générez-les vous-même :
+
 ```bash
-cd tests/examples && ./run.sh
+cd tests/examples && ./run.sh      # DOCX + PPTX pour chaque source ci-dessous
 ```
+
+| Source | Ce qu'elle démontre |
+|---|---|
+| `comprehensive_document.md` | toute la surface de syntaxe en un document |
+| `comprehensive_presentation.md` | la même chose en diapositives, avec un partage `::: columns` |
+| `guide_complet_document_fr.md` | un document français : langue détectée, date localisée |
+| `branded_slides.md` + `Presentation1.pptx` | un `.pptx` maison servant de modèle de référence |
+| `footnotes_document.md` | les notes de bas de page, en DOCX puis en PPTX |
+| `table_zoo.md` | tableaux larges et déséquilibrés (hors `run.sh` : `md2docx table_zoo.md`) |
+
+## Table des matières
+
+- [Mise en place](#mise-en-place)
+- [1. Titre et sous-titres](#1-titre-et-sous-titres)
+- [2. Diagrammes Mermaid](#2-diagrammes-mermaid)
+- [3. Des listes toujours bien formées](#3-des-listes-toujours-bien-formées)
+- [4. Diapositives à plusieurs colonnes (PPTX uniquement)](#4-diapositives-à-plusieurs-colonnes-pptx-uniquement)
+- [5. Mathématiques LaTeX](#5-mathématiques-latex)
+- [6. Bibliographies pour documents d'entreprise](#6-bibliographies-pour-documents-dentreprise)
+- [7. Modèles de marque (PPTX)](#7-modèles-de-marque-pptx)
+- [8. Détection de langue et localisation des dates](#8-détection-de-langue-et-localisation-des-dates)
+- [9. Sauts de page (DOCX uniquement)](#9-sauts-de-page-docx-uniquement)
+- [10. Notes de bas de page](#10-notes-de-bas-de-page)
+- [11. Le sens inverse : le jumeau Markdown](#11-le-sens-inverse--le-jumeau-markdown)
+- [12. PPTX intelligent vis-à-vis du modèle](#12-pptx-intelligent-vis-à-vis-du-modèle)
+- [Ligne de commande](#ligne-de-commande)
+- [Dépannage](#dépannage)
+
+## Mise en place
+
+```bash
+pipx install md2star        # les quatre CLI + la GUI, dans leur propre venv
+brew install pandoc         # la seule dépendance dure (apt : pandoc, winget : JohnMacFarlane.Pandoc)
+md2star doctor              # ce qui est installé, ce qui manque, ce qui marche quand même
+```
+
+`md2star doctor` est la commande à lancer avant toute autre : elle affiche les
+versions de Python, de md2star puis de Pandoc, ainsi que chaque dépendance
+optionnelle avec la raison de la vouloir. Trois fonctionnalités réclament une
+chose de plus sur le PATH — la sortie PDF veut LibreOffice (`soffice`), Mermaid
+veut Node.js
+puis les passes IA optionnelles (`--lint`, `twin --diagrams`, `--smart-layout`)
+veulent un exécuteur de modèle local. Deux commandes vivent derrière des
+extras : `pip install 'md2star[pptx]'` pour `md2star audit` et `md2pptx
+--smart-layout`, `pip install 'md2star[ocr]'` pour `md2star twin`.
+
+Chaque extrait shell ci-dessous suppose un fichier Markdown dans le dossier
+courant, rien d'autre. `--offline` apparaît partout où l'exécution aurait
+sinon le droit d'aller chercher le modèle par défaut sur `deraison.ai` ;
+retirez-le quand vous voulez ce modèle.
+
+Les extraits Python supposent ces imports :
+
+```python
+from pathlib import Path
+
+from md2star import preprocess_markdown  # la passe de correction du Markdown, seule
+from md2star.pipeline import ConvertOptions, convert  # toute la conversion, en un appel
+from md2star.pptx_audit import audit, summarise  # l'auditeur de diaporama (extra [pptx])
+```
+
+`convert` est le point d'entrée public : la CLI, le serveur GUI puis l'API HTTP
+atteignent tous le moteur par lui, avec la même dataclass gelée
+`ConvertOptions`. Chaque champ porte la valeur par défaut annoncée par la CLI,
+si bien qu'un appel court est un appel complet :
+
+```python
+rc = convert(
+    "docx",
+    ConvertOptions(input="doc.md", output="api-out.docx", offline=True, author="Ada Lovelace"),
+)
+print("rc =", rc)
+```
+
+```text
+Wrote: …/api-out.docx
+rc = 0
+```
+
+Un retour non nul est le code de sortie de Pandoc lui-même (ou de LibreOffice,
+pour `pdf`), rendu au lieu d'être avalé.
 
 ---
 
@@ -21,13 +107,31 @@ cd tests/examples && ./run.sh
 `md2star` extrait automatiquement le premier `# Titre` et l'utilise comme métadonnée **Titre** du document. Avec `--author`, la chaîne d'auteur, accolée à la date localisée, construit le **Sous-titre**.
 
 ```bash
-md2docx document.md --author "Someone Great"
+md2docx doc.md --author "Someone Great" --offline
 ```
 
-La date est localisée automatiquement selon la langue détectée :
-- 🇫🇷 Français → `dimanche 10 mai 2026`
-- 🇪🇸 Espagnol → `domingo, 10 de mayo de 2026`
-- 🇩🇪 Allemand → `Sonntag, 10. Mai 2026`
+Lancée sur un document anglais d'un paragraphe intitulé `# Quarterly report`,
+la commande place exactement trois chaînes en tête du DOCX : le titre, l'auteur
+puis la date.
+
+```text
+['Quarterly report', 'Someone Great', 'Tuesday, October 27, 2026']
+```
+
+La date suit la langue **détectée** ; le filtre Lua met volontairement sa
+première lettre en capitale, pour qu'un jour de la semaine français ou russe se
+lise comme un titre plutôt que comme de la prose. Le même document d'un
+paragraphe, en quatre langues, converti le 27/10/2026 :
+
+| Langue détectée | Date du sous-titre |
+|---|---|
+| anglais (`en-US`) | `Tuesday, October 27, 2026` |
+| français (`fr-FR`) | `Mardi 27 octobre 2026` |
+| espagnol (`es-ES`) | `Martes, 27 de octubre de 2026` |
+| allemand (`de-DE`) | `Dienstag, 27. Oktober 2026` |
+
+Passez `--date` pour tout remplacer par une chaîne reprise telle quelle
+(`--date '2026-T2'`).
 
 ---
 
@@ -45,8 +149,20 @@ graph LR;
 ` ` `
 ```
 
+Converti avec `md2docx mer.md --offline`, ce graphe de trois nœuds prend une
+petite seconde de plus que le reste de la conversion puis arrive dans le DOCX
+comme une vraie partie image :
+
+```text
+['word/media/rId20.png']
+```
+
 > [!TIP]
-> Le rendu Mermaid nécessite Node.js (≥16) sur votre PATH. Le CLI s'installe automatiquement via `npx` au premier usage.
+> Le rendu Mermaid nécessite Node.js (≥16) sur votre PATH. `md2star` appelle
+> `npx -y @mermaid-js/mermaid-cli` : le CLI est donc récupéré une fois au
+> premier usage (seule étape réseau) puis un `mmdc` global est réutilisé quand
+> vous en avez un. Le rendu lui-même est local : la source du diagramme ne
+> quitte jamais la machine.
 
 ---
 
@@ -55,29 +171,83 @@ graph LR;
 On colle souvent une liste à puces directement à un paragraphe, sans ligne vide : Pandoc, alors, force un rendu en bloc en ligne et casse la sortie. Le moteur AST Python de `md2star` insère l'espacement correct pour que les listes à puces s'affichent toujours proprement.
 
 ```markdown
+# Offre
+
 Notre entreprise propose :
 - Un habillage DOCX sans accroc
 - Une structuration fine des grilles PPTX
 - Des évaluations mathématiques
 ```
 
-*(Cela produit toujours des puces Microsoft correctement espacées.)*
+On peut observer la correction sans rien convertir, car le préprocesseur est
+une simple fonction :
+
+```python
+print(preprocess_markdown(Path("liste.md").read_text(), base_dir="."))
+```
+
+```text
+---
+lang: fr-FR
+date_format: "%A %e %B %Y"
+---
+
+# Offre
+
+Notre entreprise propose :
+
+- Un habillage DOCX sans accroc
+
+- Une structuration fine des grilles PPTX
+
+- Des évaluations mathématiques
+```
+
+Deux choses se sont produites : la ligne vide dont Pandoc a besoin avant la
+liste a été insérée puis la langue détectée a été injectée en en-tête YAML
+(voir la section 8). Le DOCX obtenu porte trois vrais éléments de liste — trois
+propriétés de numérotation `w:numPr` — au lieu d'un paragraphe collé.
 
 ---
 
 ## 4. Diapositives à plusieurs colonnes (PPTX uniquement)
 
-Divisez vos diapositives en deux moitiés grâce aux spans `{.column}` :
+Coupez une diapositive en deux moitiés avec la syntaxe de **div balisés** de
+Pandoc : un div `columns` qui contient un div `column` par moitié.
 
 ```markdown
-# Section Slide Architecture
+## Two halves
 
+::: columns
+:::: column
 This is my left paragraph.
+::::
 
-{.column}
-
-This is my right paragraph, structurally independent on the right side of the slide.
+:::: column
+This is my right paragraph.
+::::
+:::
 ```
+
+`md2pptx cols.md --offline` place les deux moitiés sur une seule diapositive,
+sur la disposition `Two Content` de Pandoc, avec le titre en en-tête :
+
+```text
+ppt/slides/slide3.xml  slideLayout4.xml (Two Content)
+  ['Two halves', 'This is my left paragraph.', 'This is my right paragraph.']
+```
+
+Deux détails mesurés méritent d'être retenus :
+
+- Le div doit être le contenu de la diapositive, **directement** après le
+  titre. Un paragraphe inséré entre les deux pousse les colonnes sur une
+  diapositive à part : Pandoc ouvre une nouvelle diapositive au div plutôt que
+  de mélanger les deux formes.
+- Une ligne `{.column}` seule n'est **pas** une syntaxe de colonnes. Pandoc n'a
+  pas ce span : il traverse donc en texte littéral puis PowerPoint affiche
+  `{.column}` au milieu de la diapositive. Le fichier
+  `tests/examples/comprehensive_presentation.md` portait cette forme ; il porte
+  désormais celle ci-dessus.
 
 ---
 
@@ -92,6 +262,11 @@ $$
 e^{i \times \pi}+1 = 0
 $$
 ```
+
+Le DOCX obtenu porte l'équation comme objet équation natif de Word (un nœud
+`m:oMath` dans un `m:oMathPara`) et ne contient **aucun** élément `w:drawing` :
+rien n'a été discrètement rastérisé en image, la formule reste donc éditable
+dans l'éditeur d'équations de Word.
 
 ---
 
@@ -108,7 +283,28 @@ Standard AI scaling laws have been deeply structured inside causality research m
 md2pptx presentation.md --bib references.bib --bibliography-name "References"
 ```
 
-L'option `--bibliography-name` insère automatiquement, en fin de document, un titre suivi de la liste des citations compilées.
+L'option `--bibliography-name` insère en fin de document un titre, suivi de la
+liste des citations compilées. Omettez-la et md2star reprend le titre localisé
+par défaut pour la langue du document (`Références` en français, etc.) : voilà pourquoi la valeur par défaut de l'option est `None` plutôt que
+`« Bibliographie »`.
+
+Lancé contre l'`assets/references.bib` de ce dépôt, le texte du DOCX revient
+ainsi :
+
+```text
+['Scaling laws', 'Tuesday, October 27, 2026',
+ 'Standard AI scaling laws have been deeply structured inside causality',
+ 'research metrics', '(Pearl 2009)', '.',
+ 'References',
+ 'Pearl, Judea. 2009.', 'Causality: Models, Reasoning, and Inference, 2nd Edition',
+ '.', 'https://bayes.cs.ucla.edu/BOOK-2K/', '.']
+```
+
+La clé `[@causality-pearl]` est devenue `(Pearl 2009)` dans la prose puis
+l'entrée a été mise en forme dans la section `References` ajoutée. Un chemin
+`.bib` inexistant est refusé par la CLI avant même l'appel à Pandoc, car une
+faute de frappe surgirait sinon sous forme d'erreur citeproc à plusieurs écrans
+de là.
 
 ---
 
@@ -119,6 +315,11 @@ Utilisez n'importe quel `.pptx` comme modèle de référence pour habiller vos d
 ```bash
 md2pptx slides.md --reference-doc Presentation1.pptx
 ```
+
+Mesuré sur le `tests/examples/branded_slides.md` de ce dépôt avec son
+`Presentation1.pptx` : six diapositives, bâties sur le masque **du modèle** et
+non sur celui de Pandoc, avec le texte du Markdown dans les emplacements du
+modèle.
 
 Pour les modèles d'entreprise aux noms de mise en page non standard, utilisez
 l'outil compagnon [md2star-adapt](https://github.com/warith-harchaoui/md2star-adapt)
@@ -184,6 +385,10 @@ The page break fires for any standalone `---`, not only between
 md2docx pagebreaks.md
 ```
 
+Mesuré sur le document de deux pages ci-dessus, `word/document.xml` revient
+avec exactement un `<w:br w:type="page"/>` : un `---` écrit, un saut de page
+dur, aucun saut parasite.
+
 > [!TIP]
 > Le `---` doit être seul sur sa **propre ligne**, entouré de lignes vides
 > au-dessus et en dessous : c'est la syntaxe standard du filet horizontal
@@ -231,13 +436,26 @@ The result reproduces across seeds.^[Ten seeds, variance under 1%.]
 md2docx report.md
 ```
 
+Le DOCX porte bien une partie `word/footnotes.xml` et les trois notes y
+atterrissent, y compris celle en ligne `^[…]` :
+
+```text
+has word/footnotes.xml: True
+['Measured on the internal benchmark suite, 2026-Q2 run.',
+ 'See the red-team appendix for the full protocol.',
+ 'Ten seeds, variance under 1%.']
+```
+
 > [!TIP]
-> Les notes de bas de page fonctionnent aussi bien en DOCX qu'en PPTX. Le
-> DOCX obtient de vraies notes en bas de page ; le PPTX regroupe les notes
-> de chaque diapositive dans un petit bloc de texte **« Notes »** ajouté au
-> corps de cette diapositive (façon note de fin, sur la diapositive
-> elle-même, pas dans le panneau des notes de l'orateur). L'appariement
-> appel-texte est préservé dans les deux cas.
+> Les notes fonctionnent aussi bien en DOCX qu'en PPTX, mais elles n'atterrissent
+> pas au même endroit. Le DOCX obtient de vraies notes en bas de page. Le PPTX
+> n'a pas cette notion : Pandoc regroupe donc **toutes les notes du diaporama
+> sur une dernière diapositive intitulée « Notes »**, numérotées à l'échelle de
+> la présentation entière — ni par diapositive, ni dans le panneau de
+> l'orateur. Un diaporama de deux diapositives portant une note chacune rend
+> donc trois diapositives, la dernière affichant `1. …` puis `2. …`. Pour un
+> script d'orateur par diapositive, utilisez plutôt un bloc `::: notes`
+> (section 12).
 
 ## 11. Le sens inverse : le jumeau Markdown
 
@@ -342,6 +560,16 @@ candidates (et non seulement à leurs légendes), puis un assembleur
 diapositive par diapositive. Nécessite l'extra `[pptx]`
 (`pip install 'md2star[pptx]'`) et un moteur LLM+VLM local résolu (la
 même pile `best_engine_ai_helper` que `--lint` / `twin --diagrams`).
+
+> [!NOTE]
+> C'est la seule section qui n'a **pas** été remesurée pour ce fichier : le
+> chemin réclame le `.pptx` d'un designer ainsi qu'un LLM+VLM résolu. Les
+> transcriptions ci-dessous sont les formes que md2star affiche — chacune
+> vérifiée face aux chaînes de format de `md2star/pipeline.py`,
+> `md2star/pptx_assemble.py` puis `md2star/pptx_audit.py` — avec des numéros de
+> diapositive et des noms de disposition donnés à titre d'illustration, pas une
+> exécution capturée. L'audit en fin de section, lui, a bien été mesuré : il ne
+> réclame aucun modèle.
 
 ```bash
 md2pptx presentation.md --template ./marque/Modele-Entreprise.pptx --smart-layout
@@ -532,12 +760,23 @@ vraie taille de la diapositive. Disponible aussi comme appel de
 bibliothèque :
 
 ```python
-from pathlib import Path
-from md2star.pptx_audit import audit, summarise
-
 findings = audit(Path("presentation.pptx"))
-print(summarise(findings, slides=14))
+print(summarise(findings, slides=5))
+for finding in findings:
+    print(finding)
 ```
+
+Pointé sur un diaporama de cinq diapositives que md2star venait de produire par
+le chemin Pandoc ordinaire, il a trouvé quelque chose de réel :
+
+```text
+layout audit: 1 finding on 1 slide (1 ghost-placeholder)
+slide 1: ghost-placeholder [Subtitle 2] — unfilled placeholder
+```
+
+La CLI affiche les deux mêmes lignes puis sort en `1`, car un emplacement
+fantôme est un défaut et non une observation. `audit` réclame l'extra
+`[pptx]` ; il ne réclame rien d'autre : ni modèle, ni rendu, ni réseau.
 
 `--smart-layout` contourne entièrement Pandoc pour cette exécution —
 `--template` y joue le rôle que tient normalement un reference-doc
@@ -546,3 +785,132 @@ Pandoc. Le chemin ordinaire `md2pptx presentation.md` (sans
 Voir `docs/design/pptx-template-intelligence.md` pour la conception
 complète (format du catalogue, prompts de sélection de disposition, forme
 de la boucle eyeball).
+
+## Ligne de commande
+
+md2star n'a qu'**une** ligne de commande, bâtie avec click. `md2docx`,
+`md2pptx` puis `md2pdf` sont des raccourcis, pas des alias : ils se résolvent
+vers les mêmes objets de commande que `md2star docx|pptx|pdf`, si bien qu'une
+option ne peut pas exister sur une écriture et manquer sur l'autre.
+
+```text
+Usage: md2star [OPTIONS] COMMAND [ARGS]...
+
+  Markdown → DOCX / PPTX / PDF, and back again.
+
+  A Pandoc wrapper with curated templates, BibTeX citations, Mermaid
+  rendering, math and remote-image embedding — plus "twin", which reads a
+  finished document back into editable Markdown, and "audit", which measures a
+  deck for overlapping or unreadable text.
+
+  md2docx, md2pptx and md2pdf are installed as shorthands for the three
+  conversions; they are the same commands, with the same flags.
+
+Options:
+  -V, --version  Show the version and exit.
+  -h, --help     Show this message and exit.
+
+Commands:
+  docx         Markdown → Microsoft Word (.docx).
+  pptx         Markdown → Microsoft PowerPoint (.pptx).
+  pdf          Markdown → Portable Document Format (.pdf, via headless
+               LibreOffice).
+  gui          Launch the local Markdown editor with a live PDF preview.
+  twin         Read a document back into an editable Markdown twin (prose...
+  audit        Report overlaps, off-canvas shapes and unreadable type in...
+  doctor       Print a diagnostic summary of the environment md2star runs...
+  templates    Inspect bundled / cached / per-project templates without...
+  cache-dir    Print the resolved cache directory path.
+  clear-cache  Wipe the cache directory (templates, resized rasters,...
+```
+
+Tout ce que md2star ne reconnaît pas est transmis à Pandoc **tel quel et en
+dernier**, si bien que les options propres à Pandoc continuent de fonctionner
+puis l'emportent en cas de désaccord :
+
+```bash
+md2docx report.md --toc --number-sections    # --toc et --number-sections sont à Pandoc
+md2pptx report.md --offline --slide-level=2  # --slide-level aussi
+```
+
+Les deux ont bien atteint Pandoc : le DOCX est revenu avec un vrai champ `TOC`
+de Word puis des titres numérotés —
+
+```text
+['Report', 'Table of Contents', 'Tuesday, October 27, 2026',
+ '1', 'Section one', 'Text.', '2', 'Section two']
+```
+
+L'aller-retour complet, en quatre commandes et sans réseau :
+
+```bash
+md2docx doc.md --author "Ada Lovelace" --offline   # Markdown → DOCX
+md2pdf  doc.md --offline                           # Markdown → PDF (LibreOffice)
+md2star twin doc.pdf --no-images --out ./recovered/
+cat recovered/doc.md
+```
+
+```text
+Wrote: …/doc.docx
+Wrote: …/doc.pdf
+md2star: reading doc.pdf back to a Markdown twin via Kreuzberg
+md2star: wrote twin doc.md (0 image(s))
+recovered/doc.md
+# Quarterly report
+
+## Tuesday, October 27, 2026
+
+The opening paragraph.
+```
+
+Le titre est revenu en titre, le sous-titre généré en sous-titre, la prose en
+prose : une source éditable et re-rendable, pas un vidage de texte.
+
+## Dépannage
+
+Quatre échecs expliquent presque tous les mauvais premiers essais. Chaque
+message ci-dessous est celui que md2star affiche réellement, ici avec
+`MD2STAR_LANG=fr` : la CLI traduit ses diagnostics, même si quelques lignes
+d'indice attendent encore leur traduction.
+
+**Pandoc n'est pas installé.** La seule dépendance dure, celle que l'erreur
+nomme immédiatement :
+
+```text
+md2star: pandoc est introuvable dans le PATH
+  Install it from https://pandoc.org/installing.html (macOS: `brew install pandoc`,
+  Ubuntu: `sudo apt install pandoc`, Windows: `winget install --id JohnMacFarlane.Pandoc`).
+  Then re-run; `md2star doctor` confirms the install.
+```
+
+**La sortie est aussi l'entrée.** `md2docx doc.md -o doc.md` écrirait un DOCX
+par-dessus sa propre source : c'est donc refusé.
+
+```text
+md2star: md2docx : …/doc.md est à la fois l'entrée et la sortie
+  Écrire le fichier converti par-dessus sa propre source détruirait le document.
+  Donnez un --output différent, ou retirez --output pour écrire à côté de la
+  source avec la bonne extension.
+```
+
+**Une option réclame sa compagne.** `--smart-layout` n'a pas de sens sans le
+modèle du designer : il le dit au lieu de se rabattre en silence.
+
+```text
+md2star: md2pptx --smart-layout : --template <gabarit.pptx> est obligatoire
+  Faites pointer --template vers le PPTX du graphiste, pas vers le gabarit livré
+  avec md2star.
+```
+
+**Une commande est derrière un extra.** `md2star audit` puis `md2pptx
+--smart-layout` réclament `pip install 'md2star[pptx]'` ; `md2star twin`
+réclame `pip install 'md2star[ocr]'`. `md2star doctor` les signale en
+`MISSING` avec la ligne d'installation, puis sort quand même en `0` : un extra
+optionnel manquant n'est pas une installation cassée.
+
+Deux autres points utiles : `md2pdf` réclame LibreOffice (`soffice`), car le
+PDF est rendu depuis le DOCX, puis une image `![](https://…)` est laissée en
+place avec un avertissement tant que vous ne passez pas
+`--allow-remote-images`. `--offline` interdit d'un coup toute phase touchant au
+réseau, y compris la récupération du modèle par défaut : c'est le plus court
+chemin vers une exécution reproductible.

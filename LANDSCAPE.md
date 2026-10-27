@@ -227,3 +227,65 @@ Where `md2star` deliberately doesn't top the table:
 - If you think a rating is wrong, open an issue with the tool, the
   column, the current and proposed rating, and a concrete reason (a
   feature link, a benchmark, a representative document).
+
+## Sources and as-of date
+
+**Sources recorded 2026-10-27, against md2star v3.10.0.** The md2star column
+was re-read off this repository at that version. The competitor columns come
+from the mid-2026 reading noted at the top of this document, graded from each
+project's own published documentation — so read them as "as of mid-2026", and
+open an issue when a project has moved.
+
+The two halves of the table are sourced differently, and the difference is
+worth stating plainly:
+
+- **md2star's own row** is read off the code, not off the README. Every claim
+  in it has a command behind it: `md2star doctor` for what is actually
+  installed, `md2docx --bib` for Citations, `md2docx` on a `mermaid` fence for
+  Diagrams, `md2star twin` for Reverse-MD, `md2star audit` for Self-check, and
+  `md2pptx --smart-layout --template` for Template-fit — the one row that needs
+  a resolvable local LLM+VLM before it can be exercised at all. The Editable
+  mark is the file itself: real text in real placeholders, which is what the
+  audit walks.
+- **Every other row** is graded from that project's own published
+  documentation, read the way a prospective user reads it: default
+  configuration, documented behaviour, no private builds. Where the
+  documentation is silent, the cell scores ⭐ rather than a guess.
+
+Primary sources, by row:
+
+- **Pandoc**, **Pandoc + templates** — [the Pandoc manual](https://pandoc.org/MANUAL.html):
+  `--reference-doc`, `--citeproc`, and the PPTX writer's named layouts.
+- **Quarto** — [the Quarto guide](https://quarto.org/docs/guide/).
+- **Typst** — [the Typst documentation](https://typst.app/docs/).
+- **md2pptx** — [MartinPacker/md2pptx](https://github.com/MartinPacker/md2pptx)
+  and its user guide, which is also where its authoring vocabulary is listed.
+- **Marp** — [marp.app](https://marp.app/) · **Slidev** — [sli.dev](https://sli.dev/)
+  · **reveal.js** — [revealjs.com](https://revealjs.com/).
+- **MkDocs** — [mkdocs.org](https://www.mkdocs.org/) · **Docusaurus** —
+  [docusaurus.io](https://docusaurus.io/).
+- **LibreOffice** — [libreoffice.org](https://www.libreoffice.org/).
+- **Overleaf** — [overleaf.com](https://www.overleaf.com/).
+- **Obsidian export** — [obsidian.md](https://obsidian.md/) and its community
+  plugin directory; the row grades the plugin ecosystem, not the core app.
+- **Gamma / Copilot** — [gamma.app](https://gamma.app/) and
+  [Copilot in PowerPoint](https://support.microsoft.com/en-us/powerpoint/welcome-to-copilot-in-powerpoint).
+- **Presenton** — [presenton/presenton](https://github.com/presenton/presenton):
+  Apache-2.0, self-hosted via Docker, with Ollama / LM Studio among its
+  supported backends — which is what earns its Offline and Local-LLM stars.
+- **PPTAgent** — [EMNLP 2025](https://aclanthology.org/2025.emnlp-main.728/)
+  and [icip-cas/PPTAgent](https://github.com/icip-cas/PPTAgent).
+- **Word / Google Docs** — [Microsoft Word](https://www.microsoft.com/microsoft-365/word)
+  and [Google Docs](https://workspace.google.com/products/docs/).
+
+The **Editable** column is not our own invention: its levels are the
+Presentation Editability Index (L0–L5) of
+[SlidesGen-Bench](https://arxiv.org/abs/2601.09487), cited in the column
+legend above.
+
+What is deliberately absent: no timing figures, no benchmark scores, no
+version numbers pinned on other people's software. A star here is a dated
+judgement about fit to one niche, which is honest in a way an undated
+measurement would not be. When a rating has gone stale — and in this space
+some will — the [Methodology](#methodology) section says what a useful
+correction looks like.

@@ -29,17 +29,19 @@ You can quickly dump visual parameters safely into the PPTX slide array.
 
 ***
 
-# Dynamic Layouts 
+# Dynamic Layouts
 
-Our framework allows columned mappings to cleanly generate structural alignments in MS Office dynamically.
-
+::: columns
+:::: column
 This is the *left* column. It can contain paragraph analysis detailing structural constraints locally without breaking the boundaries.
+::::
 
-{.column}
-
+:::: column
 This is the *right* column. Directly coupled natively.
 
 ![](https://picsum.photos/400/400)
+::::
+:::
 
 ***
 

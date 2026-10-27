@@ -4,6 +4,44 @@ All notable changes to **md2star** are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Documentation
+
+- **The six reader-facing documents are on the suite spine** (CODING.md rules
+  16-18). `README.md` / `LISEZMOI.md` now reach `Installation` before
+  `Quick start` / `Prise en main rapide` — the French heading was
+  `Démarrage rapide`, which is not the suite's spelling — and the stale
+  "currently v3.1.3" line is gone. `LANDSCAPE.md` / `PAYSAGE.md` gained
+  `Sources and as-of date` / `Sources et date de relevé`: one primary source
+  per row, the date the sources were recorded, plus a plain statement that the
+  md2star column is read off the code while the competitor columns are read off
+  their own documentation. `EXAMPLES.md` / `EXEMPLES.md` gained
+  `Table of Contents`, `Setup`, `Command line` and `Troubleshooting`, the
+  language-switch links they never had, and measured output in place of
+  plausible output.
+
+### Fixed
+
+- **`{.column}` was never column syntax.** `EXAMPLES.md` and `EXEMPLES.md`
+  documented a bare `{.column}` line as a slide splitter, and
+  `tests/examples/comprehensive_presentation.md` used it. Pandoc has no such
+  span: it travels through to the slide as the literal text `{.column}`, which
+  is what a reader pasting the example got. All three now use Pandoc's fenced
+  `::: columns` / `:::: column` divs, which land both halves on the
+  `Two Content` layout — and the examples note that the div has to follow the
+  heading directly, because a paragraph in between pushes the columns onto a
+  slide of their own.
+- **Footnotes in PPTX do not land per slide.** The documented behaviour was a
+  "Notes" block appended to each slide's body. Measured, Pandoc collects every
+  note in the deck onto one final slide titled "Notes", numbered across the
+  whole presentation. Both examples files now say that, and point at
+  `::: notes` for a real per-slide presenter script.
+- **Five dead links in the examples files.** They pointed at
+  `tests/examples/*.docx` / `*.pptx` build output, which `.gitignore` keeps out
+  of the repository. The sources are listed instead, with the `./run.sh` line
+  that renders them.
+
 ## [3.10.0] - 2026-10-25
 
 ### Changed

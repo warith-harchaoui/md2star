@@ -24,7 +24,7 @@ Markdown, sans jamais rouvrir Word pour rattraper la mise en page.
 
 md2star a fait ses preuves : disponible sur PyPI, intégration continue au
 vert à chaque envoi, versions taguées selon le versionnage sémantique
-(actuellement v3.1.3, la deuxième version la plus élevée de la suite
+(actuellement v3.10.0, l'un des plus longs historiques de versions de la suite
 [AI Helpers](https://github.com/warith-harchaoui/ai-helpers)). Il s'appuie
 sur deux paquets sœurs de cette même suite : `os-helper` (primitives
 partagées de système de fichiers et de journalisation) et
@@ -126,7 +126,100 @@ fonctionne encore sans aucun modèle installé.
 La comparaison ligne à ligne, notée honnêtement y compris là où md2star perd,
 est dans **[PAYSAGE.md](https://github.com/warith-harchaoui/md2star/blob/main/PAYSAGE.md)**.
 
-## Démarrage rapide
+## Installation
+
+`md2star` est un paquet Python distribué sur PyPI. L'installation via
+[pipx](https://pipx.pypa.io/) est recommandée : elle isole le paquet
+dans son propre venv et met les quatre CLI (`md2star`, `md2docx`,
+`md2pptx`, `md2pdf`) sur votre PATH. Pandoc est la seule dépendance
+système obligatoire ; LibreOffice n'est requis que pour `md2pdf`,
+Node.js que pour Mermaid, Ollama que pour `--lint`.
+
+- macOS 🍎 : `brew install pandoc pipx`
+  (installez `brew` grâce à [brew.sh](https://brew.sh/)) ou lancez le
+  bootstrap idempotent en une commande `bash scripts/brew.sh --with-pdf`
+
+  ```bash
+  pipx ensurepath          # une fois : ajoute ~/.local/bin au PATH
+  pipx install md2star
+
+  # Optionnel : la sortie PDF nécessite LibreOffice
+  brew install --cask libreoffice
+  # Optionnel : les diagrammes Mermaid nécessitent Node.js
+  brew install node
+  # Optionnel : --lint et le texte alt IA nécessitent un runtime de modèle local (Ollama aujourd'hui)
+  brew install ollama
+  ```
+
+- Ubuntu 🐧 : `sudo apt-get install pandoc pipx`
+
+  ```bash
+  pipx ensurepath
+  pipx install md2star
+
+  # Dépendances optionnelles
+  sudo apt-get install libreoffice nodejs
+  curl -fsSL https://ollama.com/install.sh | sh   # ollama
+  ```
+
+- Windows 🪟 : `winget install --id JohnMacFarlane.Pandoc`
+
+  ```powershell
+  python -m pip install --user pipx
+  python -m pipx ensurepath
+  pipx install md2star
+
+  # Dépendances optionnelles
+  winget install --id TheDocumentFoundation.LibreOffice
+  winget install --id OpenJS.NodeJS
+  winget install --id Ollama.Ollama
+  ```
+
+### Installation depuis les sources (développement)
+
+```bash
+git clone https://github.com/warith-harchaoui/md2star.git
+cd md2star
+make install            # vérifie les dépendances, lance `pipx install .`
+```
+
+Deux fichiers de dépendances pip vivent à la racine pour une
+installation sans `make` (`pyproject.toml` reste la source de vérité :
+ces fichiers installent le paquet en éditable et héritent donc de ses
+épinglages de version) :
+
+- `requirements.txt` : **runtime**, installe `-e .` (soit
+  `langdetect` et `Pillow`), le strict nécessaire pour lancer
+  `md2docx`, `md2pptx` et `md2pdf`.
+- `requirements-dev.txt` : **dev et test**, installe `-e .[dev]`
+  (pytest, ruff, pytest-cov, pypdf, les dépendances API/MCP et
+  `kreuzberg` pour l'aller-retour OCR).
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt        # runtime seul
+pip install -r requirements-dev.txt    # + outils de test et de lint
+```
+
+### Mise à jour
+
+| Plateforme | Commande |
+|------------|----------|
+| Toute (installation PyPI) | `pipx upgrade md2star` |
+| macOS / Linux depuis les sources | `make update` |
+| Windows depuis les sources | `powershell -ExecutionPolicy Bypass -File scripts\update.ps1` |
+
+### Développement local
+
+```bash
+make dev                # crée .venv/ avec `pip install -e .[dev]`
+source .venv/bin/activate
+python -m pytest tests/ -v
+```
+
+---
+
+## Prise en main rapide
 
 ```bash
 pipx install md2star          # une seule ligne : les quatre CLI + la GUI
@@ -319,99 +412,6 @@ principal : rien de plus à installer.
   [md2star-adapt](https://github.com/warith-harchaoui/md2star-adapt),
   qui construit un document de référence compatible à partir du template et
   de son export PDF.
-
----
-
-## Installation
-
-`md2star` est un paquet Python distribué sur PyPI. L'installation via
-[pipx](https://pipx.pypa.io/) est recommandée : elle isole le paquet
-dans son propre venv et met les quatre CLI (`md2star`, `md2docx`,
-`md2pptx`, `md2pdf`) sur votre PATH. Pandoc est la seule dépendance
-système obligatoire ; LibreOffice n'est requis que pour `md2pdf`,
-Node.js que pour Mermaid, Ollama que pour `--lint`.
-
-- macOS 🍎 : `brew install pandoc pipx`
-  (installez `brew` grâce à [brew.sh](https://brew.sh/)) ou lancez le
-  bootstrap idempotent en une commande `bash scripts/brew.sh --with-pdf`
-
-  ```bash
-  pipx ensurepath          # une fois : ajoute ~/.local/bin au PATH
-  pipx install md2star
-
-  # Optionnel : la sortie PDF nécessite LibreOffice
-  brew install --cask libreoffice
-  # Optionnel : les diagrammes Mermaid nécessitent Node.js
-  brew install node
-  # Optionnel : --lint et le texte alt IA nécessitent un runtime de modèle local (Ollama aujourd'hui)
-  brew install ollama
-  ```
-
-- Ubuntu 🐧 : `sudo apt-get install pandoc pipx`
-
-  ```bash
-  pipx ensurepath
-  pipx install md2star
-
-  # Dépendances optionnelles
-  sudo apt-get install libreoffice nodejs
-  curl -fsSL https://ollama.com/install.sh | sh   # ollama
-  ```
-
-- Windows 🪟 : `winget install --id JohnMacFarlane.Pandoc`
-
-  ```powershell
-  python -m pip install --user pipx
-  python -m pipx ensurepath
-  pipx install md2star
-
-  # Dépendances optionnelles
-  winget install --id TheDocumentFoundation.LibreOffice
-  winget install --id OpenJS.NodeJS
-  winget install --id Ollama.Ollama
-  ```
-
-### Installation depuis les sources (développement)
-
-```bash
-git clone https://github.com/warith-harchaoui/md2star.git
-cd md2star
-make install            # vérifie les dépendances, lance `pipx install .`
-```
-
-Deux fichiers de dépendances pip vivent à la racine pour une
-installation sans `make` (`pyproject.toml` reste la source de vérité :
-ces fichiers installent le paquet en éditable et héritent donc de ses
-épinglages de version) :
-
-- `requirements.txt` : **runtime**, installe `-e .` (soit
-  `langdetect` et `Pillow`), le strict nécessaire pour lancer
-  `md2docx`, `md2pptx` et `md2pdf`.
-- `requirements-dev.txt` : **dev et test**, installe `-e .[dev]`
-  (pytest, ruff, pytest-cov, pypdf, les dépendances API/MCP et
-  `kreuzberg` pour l'aller-retour OCR).
-
-```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt        # runtime seul
-pip install -r requirements-dev.txt    # + outils de test et de lint
-```
-
-### Mise à jour
-
-| Plateforme | Commande |
-|------------|----------|
-| Toute (installation PyPI) | `pipx upgrade md2star` |
-| macOS / Linux depuis les sources | `make update` |
-| Windows depuis les sources | `powershell -ExecutionPolicy Bypass -File scripts\update.ps1` |
-
-### Développement local
-
-```bash
-make dev                # crée .venv/ avec `pip install -e .[dev]`
-source .venv/bin/activate
-python -m pytest tests/ -v
-```
 
 ---
 

@@ -1,18 +1,103 @@
 # md2star: Examples & Syntax Reference ⭐️
 
+[🇫🇷 EXEMPLES.md](https://github.com/warith-harchaoui/md2star/blob/main/EXEMPLES.md) · 🇬🇧 English
+
 Welcome to the `md2star` syntax reference! Because `md2star` extends pure Pandoc by fixing annoying layout issues (especially surrounding bullet lists and `mermaid` blocks), you can format documents dynamically without breaking workflows.
 
-Check out our pre-rendered examples inside the [`tests/examples/`](tests/examples) folder:
-- 📄 **Word Document:** [`comprehensive_document.md`](tests/examples/comprehensive_document.md) ➡️ [`comprehensive_document.docx`](tests/examples/comprehensive_document.docx)
-- 📊 **PowerPoint Deck:** [`comprehensive_presentation.md`](tests/examples/comprehensive_presentation.md) ➡️ [`comprehensive_presentation.pptx`](tests/examples/comprehensive_presentation.pptx)
-- 🇫🇷 **French Document:** [`guide_complet_document_fr.md`](tests/examples/guide_complet_document_fr.md) ➡️ [`guide_complet_document_fr.docx`](tests/examples/guide_complet_document_fr.docx)
-- 🎨 **Branded Slides:** [`branded_slides.md`](tests/examples/branded_slides.md) + [`Presentation1.pptx`](tests/examples/Presentation1.pptx) ➡️ [`branded_slides.pptx`](tests/examples/branded_slides.pptx)
-- 🔖 **Footnotes:** [`footnotes_document.md`](tests/examples/footnotes_document.md) ➡️ [`footnotes_document.docx`](tests/examples/footnotes_document.docx)
+The snippets in sections 1 to 11 were run against **md2star 3.10.0 and Pandoc
+3.6.1** on 2026-10-27, offline, and every output quoted below is what came
+back. Section 12 is the exception — it needs a designer's template plus a local
+LLM and VLM — and it says so where it starts, rather than dressing an
+unmeasured run up as a transcript.
 
-To compile all examples at once:
+The sources behind the examples live in
+[`tests/examples/`](https://github.com/warith-harchaoui/md2star/tree/main/tests/examples).
+The rendered `.docx` / `.pptx` are **not** in the repository — they are build
+output, and `.gitignore` keeps them out — so render them yourself:
+
 ```bash
-cd tests/examples && ./run.sh
+cd tests/examples && ./run.sh      # DOCX + PPTX for every source below
 ```
+
+| Source | What it demonstrates |
+|---|---|
+| `comprehensive_document.md` | the whole syntax surface in one document |
+| `comprehensive_presentation.md` | the same as slides, including a `::: columns` split |
+| `guide_complet_document_fr.md` | a French document: detected language, localized date |
+| `branded_slides.md` + `Presentation1.pptx` | a custom `.pptx` used as a reference template |
+| `footnotes_document.md` | footnotes, in DOCX and in PPTX |
+| `table_zoo.md` | wide and skewed tables (not in `run.sh`: `md2docx table_zoo.md`) |
+
+## Table of Contents
+
+- [Setup](#setup)
+- [1. Title and Subtitles](#1-title-and-subtitles)
+- [2. Mermaid Diagrams](#2-mermaid-diagrams)
+- [3. Flawless List Formatting](#3-flawless-list-formatting)
+- [4. Multi-Column Slides (PPTX Only)](#4-multi-column-slides-pptx-only)
+- [5. LaTeX Mathematics](#5-latex-mathematics)
+- [6. Corporate Bibliographies](#6-corporate-bibliographies)
+- [7. Branded Templates (PPTX)](#7-branded-templates-pptx)
+- [8. Language Detection & Date Localization](#8-language-detection--date-localization)
+- [9. Page Breaks (DOCX only)](#9-page-breaks-docx-only)
+- [10. Footnotes](#10-footnotes)
+- [11. Reverse direction: the Markdown twin](#11-reverse-direction-the-markdown-twin)
+- [12. Template-Intelligent PPTX](#12-template-intelligent-pptx)
+- [Command line](#command-line)
+- [Troubleshooting](#troubleshooting)
+
+## Setup
+
+```bash
+pipx install md2star        # the four CLIs + the GUI, in their own venv
+brew install pandoc         # the one hard dependency (apt: pandoc, winget: JohnMacFarlane.Pandoc)
+md2star doctor              # what is installed, what is missing, what still works
+```
+
+`md2star doctor` is the one command to run before anything else: it prints the
+Python, md2star and Pandoc versions, then each optional dependency with the
+reason you would want it. Three features need one more thing on the PATH — PDF
+output needs LibreOffice (`soffice`), Mermaid needs Node.js, and the opt-in AI
+passes (`--lint`, `twin --diagrams`, `--smart-layout`) need a local model
+runtime. Two commands live behind extras: `pip install 'md2star[pptx]'` for
+`md2star audit` and `md2pptx --smart-layout`, `pip install 'md2star[ocr]'` for
+`md2star twin`.
+
+Every shell snippet below assumes a Markdown file in the current directory and
+nothing else. `--offline` appears wherever a run would otherwise be allowed to
+fetch the default template from `deraison.ai`; drop it when you want that
+template.
+
+The Python snippets assume these imports:
+
+```python
+from pathlib import Path
+
+from md2star import preprocess_markdown  # the Markdown-fixing pass, alone
+from md2star.pipeline import ConvertOptions, convert  # the whole conversion, as one call
+from md2star.pptx_audit import audit, summarise  # the deck checker ([pptx] extra)
+```
+
+`convert` is the public entry point: the CLI, the GUI server and the HTTP API
+all reach the engine through it, with the same frozen `ConvertOptions`
+dataclass. Every field has the same default the CLI advertises, so a short call
+is a complete one:
+
+```python
+rc = convert(
+    "docx",
+    ConvertOptions(input="doc.md", output="api-out.docx", offline=True, author="Ada Lovelace"),
+)
+print("rc =", rc)
+```
+
+```text
+Wrote: …/api-out.docx
+rc = 0
+```
+
+A non-zero return is Pandoc's own exit code (or LibreOffice's, for `pdf`),
+handed back rather than swallowed.
 
 ---
 
@@ -21,13 +106,30 @@ cd tests/examples && ./run.sh
 `md2star` automatically extracts the first `# Heading` and uses it as the document **Title** metadata. If you use `--author`, the author string alongside the localized date constructs the **Subtitle**.
 
 ```bash
-md2docx document.md --author "Someone Great"
+md2docx doc.md --author "Someone Great" --offline
 ```
 
-The date is automatically localized based on the detected language:
-- 🇫🇷 French → `dimanche 10 mai 2026`
-- 🇪🇸 Spanish → `domingo, 10 de mayo de 2026`
-- 🇩🇪 German → `Sonntag, 10. Mai 2026`
+Run on a one-paragraph English document titled `# Quarterly report`, that puts
+exactly three strings at the top of the DOCX — title, author, date:
+
+```text
+['Quarterly report', 'Someone Great', 'Tuesday, October 27, 2026']
+```
+
+The date follows the **detected** language, and the Lua filter capitalizes its
+first character on purpose, so a French or Russian weekday reads as a title
+rather than as prose. The same one-paragraph document in four languages,
+converted on 2026-10-27:
+
+| Detected language | Subtitle date |
+|---|---|
+| English (`en-US`) | `Tuesday, October 27, 2026` |
+| French (`fr-FR`) | `Mardi 27 octobre 2026` |
+| Spanish (`es-ES`) | `Martes, 27 de octubre de 2026` |
+| German (`de-DE`) | `Dienstag, 27. Oktober 2026` |
+
+Pass `--date` to override the whole thing with a string used verbatim
+(`--date '2026-Q2'`).
 
 ---
 
@@ -45,8 +147,18 @@ graph LR;
 ` ` `
 ```
 
+Converted with `md2docx mer.md --offline`, that three-node graph takes about
+three seconds end to end and arrives in the DOCX as a real image part:
+
+```text
+['word/media/rId20.png']
+```
+
 > [!TIP]
-> Mermaid rendering requires Node.js (≥16) on your PATH. The CLI is auto-installed via `npx` on first use.
+> Mermaid rendering requires Node.js (≥16) on your PATH. `md2star` calls
+> `npx -y @mermaid-js/mermaid-cli`, so the CLI is fetched once on first use (the
+> only network step) and a global `mmdc` is used when you have one. Rendering
+> itself is local: the diagram source never leaves the machine.
 
 ---
 
@@ -55,29 +167,81 @@ graph LR;
 Markdown writers often glue unordered lists directly to paragraphs, which breaks Pandoc output by forcing inline blocks. `md2star`'s Python AST engine automatically inserts the correct spacing so bullet lists always render cleanly.
 
 ```markdown
+# Offer
+
 Our company provides:
 - Seamless DOCX wrapping
 - Deep PPTX grid-structuring
 - Mathematics evaluations
 ```
 
-*(This will always generate properly spaced Microsoft bullet items.)*
+You can watch the fix happen without converting anything, because the
+preprocessor is a plain function:
+
+```python
+print(preprocess_markdown(Path("list.md").read_text(), base_dir="."))
+```
+
+```text
+---
+lang: en-US
+date_format: "%A, %B %e, %Y"
+---
+
+# Offer
+
+Our company provides:
+
+- Seamless DOCX wrapping
+
+- Deep PPTX grid-structuring
+
+- Mathematics evaluations
+```
+
+Two things happened: the blank line Pandoc needs before the list was inserted,
+and the detected language was injected as front matter (see section 8). The
+resulting DOCX carries three real list items — three `w:numPr` numbering
+properties — instead of one run-together paragraph.
 
 ---
 
 ## 4. Multi-Column Slides (PPTX Only)
 
-Divide your presentation slides into layout halves using `{.column}` spans:
+Split a slide into halves with Pandoc's **fenced-div** column syntax: a
+`columns` div holding one `column` div per half.
 
 ```markdown
-# Section Slide Architecture
+## Two halves
 
+::: columns
+:::: column
 This is my left paragraph.
+::::
 
-{.column}
-
-This is my right paragraph, structurally independent on the right side of the slide.
+:::: column
+This is my right paragraph.
+::::
+:::
 ```
+
+`md2pptx cols.md --offline` puts both halves on one slide, on Pandoc's own
+`Two Content` layout, with the heading as its title:
+
+```text
+ppt/slides/slide3.xml  slideLayout4.xml (Two Content)
+  ['Two halves', 'This is my left paragraph.', 'This is my right paragraph.']
+```
+
+Two measured details are worth keeping:
+
+- The div has to be the slide's content, **directly** after the heading. A
+  paragraph between the two pushes the columns onto a slide of their own —
+  Pandoc starts a new slide at the div rather than mixing the two shapes.
+- A bare `{.column}` line is **not** column syntax. Pandoc has no such span, so
+  it travels through as literal text and PowerPoint shows you `{.column}` in the
+  middle of the slide. `tests/examples/comprehensive_presentation.md` used to
+  carry that form; it now carries the one above.
 
 ---
 
@@ -92,6 +256,11 @@ $$
 e^{i \times \pi}+1 = 0
 $$
 ```
+
+The DOCX that comes back holds the equation as a native Word equation object
+(an `m:oMath` node inside `m:oMathPara`) and contains **zero** `w:drawing`
+elements: nothing was quietly rasterised into a picture, so the formula is
+still editable in Word's equation editor.
 
 ---
 
@@ -108,7 +277,27 @@ Standard AI scaling laws have been deeply structured inside causality research m
 md2pptx presentation.md --bib references.bib --bibliography-name "References"
 ```
 
-The `--bibliography-name` flag injects an automatic heading at the end of your document containing the compiled citation list.
+The `--bibliography-name` flag injects a heading at the end of the document,
+before the compiled citation list. Omit it and md2star uses the localized
+default for the document's own language (`Références` for French, and so on) —
+which is why the flag's default is `None` rather than `"Bibliography"`.
+
+Run against this repository's own `assets/references.bib`, the text of the
+DOCX comes back as:
+
+```text
+['Scaling laws', 'Tuesday, October 27, 2026',
+ 'Standard AI scaling laws have been deeply structured inside causality',
+ 'research metrics', '(Pearl 2009)', '.',
+ 'References',
+ 'Pearl, Judea. 2009.', 'Causality: Models, Reasoning, and Inference, 2nd Edition',
+ '.', 'https://bayes.cs.ucla.edu/BOOK-2K/', '.']
+```
+
+The `[@causality-pearl]` key became `(Pearl 2009)` in the prose, and the entry
+itself was formatted into the appended `References` section. A missing `.bib`
+path is refused by the CLI before Pandoc runs, because a typo would otherwise
+surface as a citeproc error several screens away.
 
 ---
 
@@ -119,6 +308,10 @@ Use any custom `.pptx` as a reference template to brand your slides. If the temp
 ```bash
 md2pptx slides.md --reference-doc Presentation1.pptx
 ```
+
+Measured on this repository's own `tests/examples/branded_slides.md` with the
+bundled `Presentation1.pptx`: six slides, built on the **template's** master
+rather than Pandoc's, with the Markdown's text in the template's placeholders.
 
 For corporate templates with non-standard layout names, use the
 [md2star-adapt](https://github.com/warith-harchaoui/md2star-adapt) sibling
@@ -184,6 +377,10 @@ The page break fires for any standalone `---`, not only between
 md2docx pagebreaks.md
 ```
 
+Measured on the two-page document above, `word/document.xml` comes back with
+exactly one `<w:br w:type="page"/>` — one authored `---`, one hard page break,
+no stray ones.
+
 > [!TIP]
 > The `---` must be on its **own line**, with blank lines above
 > and below; that's the standard Pandoc horizontal-rule syntax.
@@ -229,12 +426,24 @@ The result reproduces across seeds.^[Ten seeds, variance under 1%.]
 md2docx report.md
 ```
 
+The DOCX really does carry a `word/footnotes.xml` part, and all three notes —
+including the inline `^[…]` one — land in it:
+
+```text
+has word/footnotes.xml: True
+['Measured on the internal benchmark suite, 2026-Q2 run.',
+ 'See the red-team appendix for the full protocol.',
+ 'Ten seeds, variance under 1%.']
+```
+
 > [!TIP]
-> Footnotes work in DOCX and PPTX alike. DOCX gets true bottom-of-page
-> footnotes; PPTX collects each slide's notes into a small **"Notes"**
-> text block appended to that slide's body (endnote-style, on the
-> slide itself, not the speaker-notes pane). The marker-and-text
-> pairing is preserved either way.
+> Footnotes work in DOCX and PPTX alike, but they land differently. DOCX gets
+> true bottom-of-page footnotes. PPTX has no such thing, so Pandoc collects
+> **every note in the deck onto one final slide titled "Notes"**, numbered
+> across the whole presentation — not per slide, and not in the speaker-notes
+> pane. A two-slide deck with one note each therefore renders as three slides,
+> the last one reading `1. …` / `2. …`. For a per-slide presenter script, use
+> a `::: notes` block instead (section 12).
 
 ## 11. Reverse direction: the Markdown twin
 
@@ -333,6 +542,15 @@ thumbnails (not just their captions), and a `python-pptx` assembler builds
 the deck directly on the chosen layout per slide. Needs the `[pptx]`
 extra (`pip install 'md2star[pptx]'`) and a resolved local LLM+VLM engine
 (the same `best_engine_ai_helper` stack `--lint`/`twin --diagrams` use).
+
+> [!NOTE]
+> This is the one section that was **not** re-measured for this file: the path
+> needs a designer's own `.pptx` and a resolvable LLM+VLM. The transcripts
+> below are the shapes md2star prints — each checked against the format strings
+> in `md2star/pipeline.py`, `md2star/pptx_assemble.py` and
+> `md2star/pptx_audit.py` — with illustrative slide numbers and layout names,
+> not a captured run. The audit at the end of the section *was* measured,
+> because it needs no model at all.
 
 ```bash
 md2pptx talk.md --template ./brand/Company-Template.pptx --smart-layout
@@ -507,15 +725,150 @@ consequence is quiet, and the finding tells you what size the slide really
 is. Available as a library call too:
 
 ```python
-from pathlib import Path
-from md2star.pptx_audit import audit, summarise
-
-findings = audit(Path("talk.pptx"))
-print(summarise(findings, slides=14))
+findings = audit(Path("deck.pptx"))
+print(summarise(findings, slides=5))
+for finding in findings:
+    print(finding)
 ```
+
+Pointed at a five-slide deck md2star had just produced through the ordinary
+Pandoc path, it found something real:
+
+```text
+layout audit: 1 finding on 1 slide (1 ghost-placeholder)
+slide 1: ghost-placeholder [Subtitle 2] — unfilled placeholder
+```
+
+The CLI prints the same two lines and exits `1`, because a ghost placeholder is
+a defect rather than an observation. `audit` needs the `[pptx]` extra; it needs
+nothing else — no model, no render, no network.
 
 `--smart-layout` bypasses Pandoc entirely for that run — `--template`
 plays the role a Pandoc reference-doc normally plays. The ordinary
 `md2pptx talk.md` (no `--smart-layout`) path is unaffected and stays the
 default. See `docs/design/pptx-template-intelligence.md` for the full
 design (catalog format, layout-selection prompts, the eyeball-loop shape).
+
+## Command line
+
+md2star has exactly **one** command line, built with click. `md2docx`,
+`md2pptx` and `md2pdf` are shorthands, not aliases: they resolve to the same
+command objects as `md2star docx|pptx|pdf`, so a flag cannot exist on one
+spelling and be missing from the other.
+
+```text
+Usage: md2star [OPTIONS] COMMAND [ARGS]...
+
+  Markdown → DOCX / PPTX / PDF, and back again.
+
+  A Pandoc wrapper with curated templates, BibTeX citations, Mermaid
+  rendering, math and remote-image embedding — plus "twin", which reads a
+  finished document back into editable Markdown, and "audit", which measures a
+  deck for overlapping or unreadable text.
+
+  md2docx, md2pptx and md2pdf are installed as shorthands for the three
+  conversions; they are the same commands, with the same flags.
+
+Options:
+  -V, --version  Show the version and exit.
+  -h, --help     Show this message and exit.
+
+Commands:
+  docx         Markdown → Microsoft Word (.docx).
+  pptx         Markdown → Microsoft PowerPoint (.pptx).
+  pdf          Markdown → Portable Document Format (.pdf, via headless
+               LibreOffice).
+  gui          Launch the local Markdown editor with a live PDF preview.
+  twin         Read a document back into an editable Markdown twin (prose...
+  audit        Report overlaps, off-canvas shapes and unreadable type in...
+  doctor       Print a diagnostic summary of the environment md2star runs...
+  templates    Inspect bundled / cached / per-project templates without...
+  cache-dir    Print the resolved cache directory path.
+  clear-cache  Wipe the cache directory (templates, resized rasters,...
+```
+
+Anything md2star does not recognise is forwarded to Pandoc **verbatim and
+last**, so Pandoc's own flags keep working and win where they disagree:
+
+```bash
+md2docx report.md --toc --number-sections    # --toc and --number-sections are Pandoc's
+md2pptx report.md --offline --slide-level=2  # so is --slide-level
+```
+
+Both reached Pandoc: the DOCX came back carrying a real Word `TOC` field and
+numbered headings —
+
+```text
+['Report', 'Table of Contents', 'Tuesday, October 27, 2026',
+ '1', 'Section one', 'Text.', '2', 'Section two']
+```
+
+The round trip, in four commands and no network:
+
+```bash
+md2docx doc.md --author "Ada Lovelace" --offline   # Markdown → DOCX
+md2pdf  doc.md --offline                           # Markdown → PDF (LibreOffice)
+md2star twin doc.pdf --no-images --out ./recovered/
+cat recovered/doc.md
+```
+
+```text
+Wrote: …/doc.docx
+Wrote: …/doc.pdf
+md2star: reading doc.pdf back to a Markdown twin via Kreuzberg
+md2star: wrote twin doc.md (0 image(s))
+recovered/doc.md
+# Quarterly report
+
+## Tuesday, October 27, 2026
+
+The opening paragraph.
+```
+
+The title came back as a heading, the generated subtitle as a sub-heading, the
+prose as prose: a source you can edit and re-render, not a text dump.
+
+## Troubleshooting
+
+Four failures account for nearly every bad first run. Each message below is the
+one md2star actually prints.
+
+**Pandoc is not installed.** The only hard dependency, and the one the error
+names on sight:
+
+```text
+md2star: pandoc not found on PATH
+  Install it from https://pandoc.org/installing.html (macOS: `brew install pandoc`,
+  Ubuntu: `sudo apt install pandoc`, Windows: `winget install --id JohnMacFarlane.Pandoc`).
+  Then re-run; `md2star doctor` confirms the install.
+```
+
+**The output path is the input path.** `md2docx doc.md -o doc.md` would write a
+DOCX over its own source, so it is refused instead:
+
+```text
+md2star: md2docx: …/doc.md is both the input and the output
+  Writing the converted file over its own source would destroy the document.
+  Pass a different --output, or drop --output to write next to the source with
+  the right extension.
+```
+
+**A flag needs a companion.** `--smart-layout` is meaningless without the
+designer's template, and says so rather than falling back silently:
+
+```text
+md2star: md2pptx --smart-layout: --template <designer.pptx> is required
+  Point --template at the designer's own PPTX, not md2star's bundled template.
+```
+
+**A command is behind an extra.** `md2star audit` and `md2pptx
+--smart-layout` need `pip install 'md2star[pptx]'`; `md2star twin` needs
+`pip install 'md2star[ocr]'`. `md2star doctor` lists both as `MISSING` with the
+install line, and still exits `0` — a missing optional extra is not a broken
+installation.
+
+Two more worth knowing: `md2pdf` needs LibreOffice (`soffice`) because the PDF
+is rendered from the DOCX, and a `![](https://…)` image is left in place with a
+warning unless you pass `--allow-remote-images`. `--offline` forbids every
+network-touching phase outright, including the default-template fetch, which is
+the fastest way to make a run reproducible.

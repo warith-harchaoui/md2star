@@ -236,3 +236,66 @@ Là où `md2star` ne domine délibérément pas le tableau :
 - Si une note vous semble fausse, ouvrez une issue avec l'outil, la
   colonne, la note actuelle et proposée et une raison concrète (lien
   vers une fonctionnalité, un benchmark, un document représentatif).
+
+## Sources et date de relevé
+
+**Sources relevées le 27/10/2026, face à md2star v3.10.0.** La colonne md2star
+a été relue dans ce dépôt à cette version. Les colonnes concurrentes viennent
+de la lecture de la mi-2026 signalée en tête de ce document, notées d'après la
+documentation publiée de chaque projet : lisez-les donc comme « à la mi-2026 »
+puis ouvrez une issue dès qu'un projet a bougé.
+
+Les deux moitiés du tableau ne sont pas sourcées de la même façon et la
+différence mérite d'être dite :
+
+- **La ligne de md2star** se lit dans le code, pas dans le README. Chaque
+  affirmation a une commande derrière elle : `md2star doctor` pour ce qui est
+  réellement installé, `md2docx --bib` pour Citations, `md2docx` sur un bloc
+  `mermaid` pour Diagrams, `md2star twin` pour Reverse-MD, `md2star audit` pour
+  Self-check puis `md2pptx --smart-layout --template` pour Template-fit — la
+  seule ligne qui exige un LLM+VLM local résolu avant même de pouvoir être
+  exercée. La note Editable, c'est le fichier lui-même : du vrai texte dans de
+  vrais emplacements, ce que l'audit parcourt.
+- **Toutes les autres lignes** sont notées d'après la documentation publiée du
+  projet, lue comme la lit un utilisateur potentiel : configuration par défaut,
+  comportement documenté, aucune version privée. Quand la documentation reste
+  muette, la cellule vaut ⭐ plutôt qu'une supposition.
+
+Sources primaires, ligne par ligne :
+
+- **Pandoc**, **Pandoc + templates** — [le manuel Pandoc](https://pandoc.org/MANUAL.html) :
+  `--reference-doc`, `--citeproc` puis les mises en page nommées du writer PPTX.
+- **Quarto** — [le guide Quarto](https://quarto.org/docs/guide/).
+- **Typst** — [la documentation Typst](https://typst.app/docs/).
+- **md2pptx** — [MartinPacker/md2pptx](https://github.com/MartinPacker/md2pptx)
+  et son guide utilisateur, où figure aussi son vocabulaire d'écriture.
+- **Marp** — [marp.app](https://marp.app/) · **Slidev** — [sli.dev](https://sli.dev/)
+  · **reveal.js** — [revealjs.com](https://revealjs.com/).
+- **MkDocs** — [mkdocs.org](https://www.mkdocs.org/) · **Docusaurus** —
+  [docusaurus.io](https://docusaurus.io/).
+- **LibreOffice** — [libreoffice.org](https://www.libreoffice.org/).
+- **Overleaf** — [overleaf.com](https://www.overleaf.com/).
+- **Obsidian export** — [obsidian.md](https://obsidian.md/) et son annuaire de
+  plugins communautaires ; la ligne note l'écosystème de plugins, pas
+  l'application seule.
+- **Gamma / Copilot** — [gamma.app](https://gamma.app/) et
+  [Copilot dans PowerPoint](https://support.microsoft.com/en-us/powerpoint/welcome-to-copilot-in-powerpoint).
+- **Presenton** — [presenton/presenton](https://github.com/presenton/presenton) :
+  Apache-2.0, auto-hébergé via Docker, avec Ollama / LM Studio parmi ses
+  backends pris en charge — d'où ses étoiles Offline et Local-LLM.
+- **PPTAgent** — [EMNLP 2025](https://aclanthology.org/2025.emnlp-main.728/)
+  et [icip-cas/PPTAgent](https://github.com/icip-cas/PPTAgent).
+- **Word / Google Docs** — [Microsoft Word](https://www.microsoft.com/microsoft-365/word)
+  et [Google Docs](https://workspace.google.com/products/docs/).
+
+La colonne **Editable** n'est pas de notre invention : ses niveaux sont ceux du
+Presentation Editability Index (L0–L5) de
+[SlidesGen-Bench](https://arxiv.org/abs/2601.09487), cité dans la légende des
+colonnes ci-dessus.
+
+Ce qui manque volontairement : aucun chiffre de durée, aucun score de
+benchmark, aucun numéro de version épinglé sur le logiciel d'autrui. Une étoile
+est ici un jugement daté sur l'adéquation à un créneau, ce qui est honnête là
+où une mesure sans date ne le serait pas. Quand une note a vieilli — et dans ce
+domaine certaines vieilliront — la section [Méthodologie](#méthodologie) dit à
+quoi ressemble une correction utile.
