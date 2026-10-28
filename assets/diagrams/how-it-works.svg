@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1334 432" width="1334" height="432" role="img" aria-labelledby="m2s-title m2s-desc" font-family="Roboto, 'Helvetica Neue', Arial, sans-serif">
+  <title id="m2s-title">How md2star works: Markdown in, a branded DOCX, PPTX or PDF out — and the trip back</title>
+  <desc id="m2s-desc">A left-to-right plate. In: Markdown, optionally with a BibTeX file, Mermaid fences, math and remote images. The work, in three numbered stages: the parts Pandoc cannot handle alone are resolved first, Mermaid diagrams rendered to images, citations resolved against your bibliography, remote images fetched and embedded; Pandoc then converts, driven by a branded reference template so the output looks like your documents rather than Pandoc's defaults; and the result is linted, catching the overlapping text and dropped placeholders a generated deck collects. Out: a DOCX, a PPTX or a PDF. The caption records the reverse trip: a finished document read back into an editable Markdown twin.</desc>
+  <style>
+    .panel      { fill: #ffffff; stroke: #d6d6d6; stroke-width: 1.5; }
+    .panel-label{ fill: #6b6b6b; font-size: 13px; font-weight: 600; letter-spacing: .08em; }
+    .io         { fill: #F8F8F8; stroke: #9a9a9a; stroke-width: 1.5; }
+    .stage      { fill: #FFF4E0; stroke: #FF9500; stroke-width: 1.5; }
+    .core       { fill: #007AFF; stroke: #0062CC; stroke-width: 1.5; }
+    .surface    { fill: #EAF3FF; stroke: #007AFF; stroke-width: 1.5; }
+    .n-title    { font-size: 15px; font-weight: 600; fill: #111111; }
+    .n-sub      { font-size: 12px; fill: #5a5a5a; }
+    .on-dark    { fill: #ffffff; font-size: 15px; font-weight: 600; }
+    .on-dark-sub{ fill: #d8e8ff; font-size: 12px; }
+    .flow       { fill: none; stroke: #9a9a9a; stroke-width: 2; }
+    .tie        { fill: none; stroke: #007AFF; stroke-width: 1.5; }
+    .caption    { font-size: 12.5px; fill: #5a5a5a; font-style: italic; }
+    .step       { font-size: 11px; font-weight: 700; fill: #B26A00;
+                  font-family: 'Roboto Mono', ui-monospace, monospace; }
+    .surf-label { font-size: 13px; font-weight: 600; fill: #0062CC; }
+
+    @media (prefers-color-scheme: dark) {
+      .panel      { fill: #1b1b1d; stroke: #3a3a3d; }
+      .panel-label{ fill: #a0a0a6; }
+      .io         { fill: #2a2a2e; stroke: #6f6f76; }
+      .stage      { fill: #3a2d12; stroke: #FF9500; }
+      .surface    { fill: #10243d; stroke: #4da2ff; }
+      .n-title    { fill: #f2f2f4; }
+      .n-sub      { fill: #b4b4ba; }
+      .flow       { stroke: #7a7a82; }
+      .tie        { stroke: #4da2ff; }
+      .caption    { fill: #a0a0a6; }
+      .step       { fill: #FFCC00; }
+      .surf-label { fill: #4da2ff; }
+    }
+  </style>
+  <defs><marker id="ah-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9a9a9a"/></marker></defs>
+  <text class="panel-label" x="28" y="40">IN</text>
+  <rect class="io" x="28" y="87" width="192" height="78" rx="10"/>
+  <text class="n-title" x="124" y="120" text-anchor="middle">Markdown</text>
+  <text class="n-sub" x="124" y="139" text-anchor="middle">plus .bib, Mermaid, math</text>
+  <path class="flow" d="M226 126 H242" marker-end="url(#ah-arrow)"/>
+  <rect class="panel" x="246" y="54" width="804" height="144" rx="12"/>
+  <text class="panel-label" x="266" y="76">WHAT IT DOES</text>
+  <rect class="stage" x="266" y="94" width="251" height="78" rx="10"/>
+  <text class="n-title" x="391" y="127" text-anchor="middle">resolve what Pandoc can't</text>
+  <text class="n-sub" x="391" y="146" text-anchor="middle">Mermaid, citations, remote images</text>
+  <text class="step" x="277" y="110">1</text>
+  <path class="flow" d="M520 133 H536" marker-end="url(#ah-arrow)"/>
+  <rect class="stage" x="542" y="94" width="231" height="78" rx="10"/>
+  <text class="n-title" x="658" y="127" text-anchor="middle">convert</text>
+  <text class="n-sub" x="658" y="146" text-anchor="middle">Pandoc + your branded template</text>
+  <text class="step" x="553" y="110">2</text>
+  <path class="flow" d="M777 133 H793" marker-end="url(#ah-arrow)"/>
+  <rect class="stage" x="799" y="94" width="230" height="78" rx="10"/>
+  <text class="n-title" x="914" y="127" text-anchor="middle">lint the result</text>
+  <text class="n-sub" x="914" y="146" text-anchor="middle">overlaps, dropped placeholders</text>
+  <text class="step" x="810" y="110">3</text>
+  <path class="flow" d="M1055 126 H1071" marker-end="url(#ah-arrow)"/>
+  <text class="panel-label" x="1075" y="40">OUT</text>
+  <rect class="io" x="1075" y="87" width="231" height="78" rx="10"/>
+  <text class="n-title" x="1191" y="120" text-anchor="middle">DOCX, PPTX or PDF</text>
+  <text class="n-sub" x="1191" y="139" text-anchor="middle">in your template, not Pandoc's</text>
+  <rect class="core" x="452" y="232" width="431" height="54" rx="10"/>
+  <text class="on-dark" x="667" y="253" text-anchor="middle">one library, called the same way everywhere</text>
+  <text class="on-dark-sub" x="667" y="272" text-anchor="middle">os-helper underneath for logging and file management</text>
+  <path class="tie" d="M667 286 V314 H403 V332"/>
+  <path class="tie" d="M667 314 H931 V332"/>
+  <path class="tie" d="M403 314 V332"/>
+  <rect class="surface" x="328" y="332" width="150" height="46" rx="9"/>
+  <text class="surf-label" x="403" y="360" text-anchor="middle">Python API</text>
+  <path class="tie" d="M579 314 V332"/>
+  <rect class="surface" x="504" y="332" width="150" height="46" rx="9"/>
+  <text class="surf-label" x="579" y="360" text-anchor="middle">CLI (click)</text>
+  <path class="tie" d="M755 314 V332"/>
+  <rect class="surface" x="680" y="332" width="150" height="46" rx="9"/>
+  <text class="surf-label" x="755" y="360" text-anchor="middle">FastAPI + MCP</text>
+  <path class="tie" d="M931 314 V332"/>
+  <rect class="surface" x="856" y="332" width="150" height="46" rx="9"/>
+  <text class="surf-label" x="931" y="360" text-anchor="middle">agent skill</text>
+  <text class="caption" x="667" y="412" text-anchor="middle">It also runs backwards: `md2star twin` reads a finished PDF, DOCX or PPTX back into an editable Markdown twin.</text>
+</svg>

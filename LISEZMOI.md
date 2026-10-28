@@ -126,6 +126,10 @@ fonctionne encore sans aucun modèle installé.
 La comparaison ligne à ligne, notée honnêtement y compris là où md2star perd,
 est dans **[PAYSAGE.md](https://github.com/warith-harchaoui/md2star/blob/main/PAYSAGE.md)**.
 
+## Comment ça marche
+
+![Comment md2star fonctionne : du Markdown en entrée, un DOCX, PPTX ou PDF à votre charte en sortie — et le trajet retour](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/diagrams/comment-ca-marche.png)
+
 ## Installation
 
 `md2star` est un paquet Python distribué sur PyPI. L'installation via

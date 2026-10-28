@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1413 432" width="1413" height="432" role="img" aria-labelledby="m2s-title m2s-desc" font-family="Roboto, 'Helvetica Neue', Arial, sans-serif">
+  <title id="m2s-title">Comment md2star fonctionne : du Markdown en entrée, un DOCX, PPTX ou PDF à votre charte en sortie — et le trajet retour</title>
+  <desc id="m2s-desc">Une plaque de gauche à droite. Entrée : du Markdown, éventuellement avec un fichier BibTeX, des blocs Mermaid, des mathématiques puis des images distantes. Le travail, en trois étapes numérotées : ce que Pandoc ne sait pas faire seul est résolu d'abord, les diagrammes Mermaid rendus en images, les citations résolues contre votre bibliographie, les images distantes récupérées puis intégrées ; Pandoc convertit ensuite, piloté par un modèle de référence à votre charte pour que le résultat ressemble à vos documents plutôt qu'aux défauts de Pandoc ; le résultat est enfin passé au peigne fin. Sortie : un DOCX, un PPTX ou un PDF.</desc>
+  <style>
+    .panel      { fill: #ffffff; stroke: #d6d6d6; stroke-width: 1.5; }
+    .panel-label{ fill: #6b6b6b; font-size: 13px; font-weight: 600; letter-spacing: .08em; }
+    .io         { fill: #F8F8F8; stroke: #9a9a9a; stroke-width: 1.5; }
+    .stage      { fill: #FFF4E0; stroke: #FF9500; stroke-width: 1.5; }
+    .core       { fill: #007AFF; stroke: #0062CC; stroke-width: 1.5; }
+    .surface    { fill: #EAF3FF; stroke: #007AFF; stroke-width: 1.5; }
+    .n-title    { font-size: 15px; font-weight: 600; fill: #111111; }
+    .n-sub      { font-size: 12px; fill: #5a5a5a; }
+    .on-dark    { fill: #ffffff; font-size: 15px; font-weight: 600; }
+    .on-dark-sub{ fill: #d8e8ff; font-size: 12px; }
+    .flow       { fill: none; stroke: #9a9a9a; stroke-width: 2; }
+    .tie        { fill: none; stroke: #007AFF; stroke-width: 1.5; }
+    .caption    { font-size: 12.5px; fill: #5a5a5a; font-style: italic; }
+    .step       { font-size: 11px; font-weight: 700; fill: #B26A00;
+                  font-family: 'Roboto Mono', ui-monospace, monospace; }
+    .surf-label { font-size: 13px; font-weight: 600; fill: #0062CC; }
+
+    @media (prefers-color-scheme: dark) {
+      .panel      { fill: #1b1b1d; stroke: #3a3a3d; }
+      .panel-label{ fill: #a0a0a6; }
+      .io         { fill: #2a2a2e; stroke: #6f6f76; }
+      .stage      { fill: #3a2d12; stroke: #FF9500; }
+      .surface    { fill: #10243d; stroke: #4da2ff; }
+      .n-title    { fill: #f2f2f4; }
+      .n-sub      { fill: #b4b4ba; }
+      .flow       { stroke: #7a7a82; }
+      .tie        { stroke: #4da2ff; }
+      .caption    { fill: #a0a0a6; }
+      .step       { fill: #FFCC00; }
+      .surf-label { fill: #4da2ff; }
+    }
+  </style>
+  <defs><marker id="ah-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#9a9a9a"/></marker></defs>
+  <text class="panel-label" x="28" y="40">ENTRÉE</text>
+  <rect class="io" x="28" y="87" width="198" height="78" rx="10"/>
+  <text class="n-title" x="127" y="120" text-anchor="middle">du Markdown</text>
+  <text class="n-sub" x="127" y="139" text-anchor="middle">plus .bib, Mermaid, maths</text>
+  <path class="flow" d="M232 126 H248" marker-end="url(#ah-arrow)"/>
+  <rect class="panel" x="252" y="54" width="843" height="144" rx="12"/>
+  <text class="panel-label" x="272" y="76">CE QU'ELLE FAIT</text>
+  <rect class="stage" x="272" y="94" width="270" height="78" rx="10"/>
+  <text class="n-title" x="407" y="127" text-anchor="middle">résoudre hors Pandoc</text>
+  <text class="n-sub" x="407" y="146" text-anchor="middle">Mermaid, citations, images distantes</text>
+  <text class="step" x="283" y="110">1</text>
+  <path class="flow" d="M546 133 H562" marker-end="url(#ah-arrow)"/>
+  <rect class="stage" x="568" y="94" width="237" height="78" rx="10"/>
+  <text class="n-title" x="687" y="127" text-anchor="middle">convertir</text>
+  <text class="n-sub" x="687" y="146" text-anchor="middle">Pandoc + votre modèle de charte</text>
+  <text class="step" x="579" y="110">2</text>
+  <path class="flow" d="M810 133 H826" marker-end="url(#ah-arrow)"/>
+  <rect class="stage" x="832" y="94" width="243" height="78" rx="10"/>
+  <text class="n-title" x="953" y="127" text-anchor="middle">contrôler le résultat</text>
+  <text class="n-sub" x="953" y="146" text-anchor="middle">chevauchements, marques oubliées</text>
+  <text class="step" x="843" y="110">3</text>
+  <path class="flow" d="M1101 126 H1117" marker-end="url(#ah-arrow)"/>
+  <text class="panel-label" x="1121" y="40">SORTIE</text>
+  <rect class="io" x="1121" y="87" width="264" height="78" rx="10"/>
+  <text class="n-title" x="1253" y="120" text-anchor="middle">DOCX, PPTX ou PDF</text>
+  <text class="n-sub" x="1253" y="139" text-anchor="middle">à votre charte, pas celle de Pandoc</text>
+  <rect class="core" x="496" y="232" width="420" height="54" rx="10"/>
+  <text class="on-dark" x="706" y="253" text-anchor="middle">une bibliothèque, appelée pareil partout</text>
+  <text class="on-dark-sub" x="706" y="272" text-anchor="middle">os-helper dessous pour la journalisation et les fichiers</text>
+  <path class="tie" d="M706 286 V314 H442 V332"/>
+  <path class="tie" d="M706 314 H970 V332"/>
+  <path class="tie" d="M442 314 V332"/>
+  <rect class="surface" x="367" y="332" width="150" height="46" rx="9"/>
+  <text class="surf-label" x="442" y="360" text-anchor="middle">API Python</text>
+  <path class="tie" d="M618 314 V332"/>
+  <rect class="surface" x="543" y="332" width="150" height="46" rx="9"/>
+  <text class="surf-label" x="618" y="360" text-anchor="middle">CLI (click)</text>
+  <path class="tie" d="M794 314 V332"/>
+  <rect class="surface" x="719" y="332" width="150" height="46" rx="9"/>
+  <text class="surf-label" x="794" y="360" text-anchor="middle">FastAPI + MCP</text>
+  <path class="tie" d="M970 314 V332"/>
+  <rect class="surface" x="895" y="332" width="150" height="46" rx="9"/>
+  <text class="surf-label" x="970" y="360" text-anchor="middle">skill d'agent</text>
+  <text class="caption" x="706" y="412" text-anchor="middle">Il marche aussi à l'envers : `md2star twin` relit un PDF, un DOCX ou un PPTX fini vers un jumeau Markdown éditable.</text>
+</svg>

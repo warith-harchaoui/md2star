@@ -116,6 +116,10 @@ cannot prefer a worse slide, and it still works with no model installed at all.
 The row-by-row comparison, scored honestly including where md2star loses, is
 in **[LANDSCAPE.md](https://github.com/warith-harchaoui/md2star/blob/main/LANDSCAPE.md)**.
 
+## How it works
+
+![How md2star works: Markdown in, a branded DOCX, PPTX or PDF out — and the trip back](https://raw.githubusercontent.com/warith-harchaoui/md2star/main/assets/diagrams/how-it-works.png)
+
 ## Installation
 
 `md2star` is a Python package distributed on PyPI. Installation via
