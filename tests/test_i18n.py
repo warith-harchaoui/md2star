@@ -312,3 +312,78 @@ def test_every_translated_call_site_has_a_french_entry() -> None:
         if untranslated:
             english.append(msgid)
     assert english == [], f"{len(english)} msgid(s) served in English to a French reader: {english}"
+
+
+# ── the converse direction, over the one surface a scan can see ──────────
+#
+# `test_every_translated_call_site_has_a_french_entry` goes forward: what the
+# code asks for, the catalogue must carry. Its docstring declines the converse
+# -- a catalogue entry nothing asks for -- because proving it needs the whole
+# translatable surface, and the doctor's table holds its strings in data
+# structures no scan can read.
+#
+# Error messages and hints are not like that. They are literal arguments at
+# `raise` sites, so they *are* scannable, and they are the prose a user is most
+# likely to meet. Ten of fourteen raise sites passed raw English while the
+# French for seven of them sat in the catalogue, translated and never once
+# looked up: `MD2STAR_LANG=fr md2pptx --reference-slides` printed an English
+# hint next to a French message.
+
+_ERROR_CLASSES = frozenset(
+    {
+        "Md2starError",
+        "MissingDependencyError",
+        "TemplateNotFoundError",
+        "RemoteResourceDisabledError",
+        "ConversionError",
+        "InvalidInputError",
+        "UnsafePathError",
+    }
+)
+
+
+def _raise_site_prose() -> list[str]:
+    """Report every raise site whose message or hint skips the catalogue.
+
+    A value counts as routed when it is a ``_()`` / ``_n()`` call, including
+    under a ``%`` interpolation (``_("...") % {...}``), which is how every
+    parameterised message in this package is written.
+    """
+    import ast
+
+    def routed(node: ast.expr | None) -> bool:
+        if node is None:  # no hint passed at all
+            return True
+        if isinstance(node, ast.BinOp):  # _("...") % {...}
+            return routed(node.left)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            return node.func.id in {"_", "_n"}
+        # Anything that is not a literal -- a name, an f-string of a path -- is
+        # not prose this test can judge, so it is left alone.
+        return not isinstance(node, ast.Constant | ast.JoinedStr)
+
+    offenders = []
+    for path in sorted((_ROOT / "md2star").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if not (isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call)):
+                continue
+            func = node.exc.func
+            name = func.id if isinstance(func, ast.Name) else getattr(func, "attr", "")
+            if name not in _ERROR_CLASSES:
+                continue
+            message = node.exc.args[0] if node.exc.args else None
+            hint = next((k.value for k in node.exc.keywords if k.arg == "hint"), None)
+            for label, value in (("message", message), ("hint", hint)):
+                if not routed(value):
+                    offenders.append(f"{path.name}:{node.lineno} ({label})")
+    return offenders
+
+
+def test_every_error_message_and_hint_goes_through_the_catalogue() -> None:
+    """No raise site hands a user English the catalogue could have translated."""
+    offenders = _raise_site_prose()
+    assert offenders == [], (
+        f"{len(offenders)} raise-site string(s) bypass _(): {offenders}. "
+        "Wrap them, then run scripts/compile_catalogs.py."
+    )

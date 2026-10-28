@@ -253,8 +253,8 @@ def _require_pandoc() -> str:
     path = shutil.which("pandoc")
     if path is None:
         raise MissingDependencyError(
-            "pandoc not found on PATH",
-            hint=(
+            _("pandoc not found on PATH"),
+            hint=_(
                 "Install it from https://pandoc.org/installing.html "
                 "(macOS: `brew install pandoc`, Ubuntu: "
                 "`sudo apt install pandoc`, Windows: "
@@ -420,7 +420,7 @@ def convert(fmt: str, opts: ConvertOptions, pandoc_args: Sequence[str] = ()) -> 
     if not in_path.exists():
         raise InvalidInputError(
             _("md2%(fmt)s: input file not found: %(path)s") % {"fmt": fmt, "path": in_path},
-            hint="md2star accepts a single .md / .markdown file as the first argument.",
+            hint=_("md2star accepts a single .md / .markdown file as the first argument."),
         )
 
     out_path = (
@@ -470,7 +470,7 @@ def convert(fmt: str, opts: ConvertOptions, pandoc_args: Sequence[str] = ()) -> 
         raise InvalidInputError(
             _("md2%(fmt)s: %(path)s is not valid UTF-8 (byte %(byte)#04x at offset %(pos)d)")
             % {"fmt": fmt, "path": in_path, "byte": _raw_byte(exc), "pos": exc.start},
-            hint=(
+            hint=_(
                 "md2star reads Markdown as UTF-8. Convert the file first, e.g. "
                 "`iconv -f latin1 -t utf-8 in.md > out.md`, or re-save it as "
                 "UTF-8 from your editor."
@@ -499,8 +499,8 @@ def convert(fmt: str, opts: ConvertOptions, pandoc_args: Sequence[str] = ()) -> 
         # the template's example pages, so a run that asked for them and got a
         # perfectly ordinary deck would look like the flag did nothing.
         raise InvalidInputError(
-            "md2pptx: --reference-slides only applies to --smart-layout",
-            hint="Add --smart-layout --template <designer.pptx>, or drop --reference-slides.",
+            _("md2pptx: --reference-slides only applies to --smart-layout"),
+            hint=_("Add --smart-layout --template <designer.pptx>, or drop --reference-slides."),
         )
 
     # Build the pandoc metadata / flag list from our high-level options. Each
@@ -563,7 +563,7 @@ def convert(fmt: str, opts: ConvertOptions, pandoc_args: Sequence[str] = ()) -> 
         raise InvalidInputError(
             _("md2%(fmt)s: cannot write a working file next to %(path)s (%(reason)s)")
             % {"fmt": fmt, "path": in_path.name, "reason": exc.strerror or exc},
-            hint=(
+            hint=_(
                 "The preprocessed Markdown is written beside the input so "
                 "relative image paths keep resolving, which needs a writable "
                 "source directory. Copy the Markdown somewhere writable and "
@@ -658,8 +658,8 @@ def _convert_smart_layout(
         )
     if not opts.template:
         raise InvalidInputError(
-            "md2pptx --smart-layout: --template <designer.pptx> is required",
-            hint="Point --template at the designer's own PPTX, not md2star's bundled template.",
+            _("md2pptx --smart-layout: --template <designer.pptx> is required"),
+            hint=_("Point --template at the designer's own PPTX, not md2star's bundled template."),
         )
     template = Path(opts.template).expanduser().resolve()
     if not template.exists():
@@ -669,7 +669,7 @@ def _convert_smart_layout(
         import pptx  # noqa: F401, PLC0415 — optional dep, probed here for a clear error
     except ImportError as exc:
         raise Md2starError(
-            "md2pptx --smart-layout needs python-pptx: pip install 'md2star[pptx]'"
+            _("md2pptx --smart-layout needs python-pptx: pip install 'md2star[pptx]'")
         ) from exc
 
     from .pptx_assemble import assemble, eyeball_slides  # noqa: PLC0415
@@ -683,9 +683,11 @@ def _convert_smart_layout(
 
     if not smart_layout_available():
         raise Md2starError(
-            "md2pptx --smart-layout needs a resolved LLM+VLM engine; run "
-            '`best-engine-ai-helper report --task "..."` or check '
-            "md2star/llm.engine.yaml for what best-engine-ai-helper resolved."
+            _(
+                "md2pptx --smart-layout needs a resolved LLM+VLM engine; run "
+                '`best-engine-ai-helper report --task "..."` or check '
+                "md2star/llm.engine.yaml for what best-engine-ai-helper resolved."
+            )
         )
 
     slides = segment(processed)
@@ -809,8 +811,8 @@ def _convert_docx_to_pdf(docx_path: Path, pdf_path: Path) -> int:
     soffice = _find_soffice()
     if soffice is None:
         raise MissingDependencyError(
-            "md2pdf: LibreOffice (`soffice`) not found",
-            hint=(
+            _("md2pdf: LibreOffice (`soffice`) not found"),
+            hint=_(
                 "Install it to enable PDF output:\n"
                 "  macOS:   brew install --cask libreoffice\n"
                 "  Ubuntu:  sudo apt install libreoffice\n"

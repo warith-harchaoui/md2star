@@ -273,7 +273,7 @@ def _soffice_to_pdf(src: Path, out_dir: Path) -> Path:
         raise MissingDependencyError(
             _("reading %(ext)s back to Markdown needs LibreOffice (`soffice`)")
             % {"ext": src.suffix},
-            hint=(
+            hint=_(
                 "Install it to convert this format to PDF first:\n"
                 "  macOS:   brew install --cask libreoffice\n"
                 "  Ubuntu:  sudo apt install libreoffice\n"

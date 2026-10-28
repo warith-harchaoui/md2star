@@ -200,8 +200,8 @@ msgid ""
 "Run `md2star templates list` to see which templates are discoverable, or "
 "pass --reference-doc /path/to/template.docx explicitly."
 msgstr ""
-"Lancez `md2star templates list` pour voir quels gabarits sont détectables, "
-"ou indiquez explicitement --reference-doc /chemin/vers/template.docx."
+"Lancez `md2star templates list` pour voir quels gabarits sont détectables ; "
+"sinon indiquez explicitement --reference-doc /chemin/vers/template.docx."
 
 msgid ""
 "md2star fetches remote resources it needs, but --offline is on. Drop "
@@ -210,8 +210,8 @@ msgid ""
 msgstr ""
 "md2star récupère les ressources distantes dont il a besoin, mais --offline "
 "est actif. Retirez --offline (et utilisez --allow-remote-images pour les "
-"images distantes) pour autoriser la récupération, ou gardez --offline afin "
-"que le refus soit explicite dans vos scripts."
+"images distantes) pour autoriser la récupération ; gardez --offline si vous "
+"voulez que le refus reste explicite dans vos scripts."
 
 msgid ""
 "If the failure mentions a missing engine (xelatex, soffice, mmdc), install "
@@ -246,7 +246,7 @@ msgid "md2%(fmt)s: %(path)s is both the input and the output"
 msgstr "md2%(fmt)s : %(path)s est à la fois l'entrée et la sortie"
 
 msgid "Writing the converted file over its own source would destroy the document. Pass a different --output, or drop --output to write next to the source with the right extension."
-msgstr "Écrire le fichier converti par-dessus sa propre source détruirait le document. Donnez un --output différent, ou retirez --output pour écrire à côté de la source avec la bonne extension."
+msgstr "Écrire le fichier converti par-dessus sa propre source détruirait le document. Donnez un --output différent ; sans --output, le fichier est écrit à côté de la source avec la bonne extension."
 
 msgid "md2%(fmt)s: %(path)s is not valid UTF-8 (byte %(byte)#04x at offset %(pos)d)"
 msgstr "md2%(fmt)s : %(path)s n'est pas de l'UTF-8 valide (octet %(byte)#04x à la position %(pos)d)"
@@ -261,7 +261,7 @@ msgid "md2pptx: --reference-slides only applies to --smart-layout"
 msgstr "md2pptx : --reference-slides ne s'applique qu'à --smart-layout"
 
 msgid "Add --smart-layout --template <designer.pptx>, or drop --reference-slides."
-msgstr "Ajoutez --smart-layout --template <gabarit.pptx>, ou retirez --reference-slides."
+msgstr "Ajoutez --smart-layout --template <gabarit.pptx> ; sinon retirez --reference-slides."
 
 msgid "md2%(fmt)s: --smart-layout is only valid for pptx"
 msgstr "md2%(fmt)s : --smart-layout n'est valable que pour pptx"
@@ -291,6 +291,24 @@ msgstr "md2pdf : LibreOffice (`soffice`) est introuvable"
 
 msgid "reading %(ext)s back to Markdown needs LibreOffice (`soffice`)"
 msgstr "relire un %(ext)s vers Markdown nécessite LibreOffice (`soffice`)"
+
+msgid "Install it from https://pandoc.org/installing.html (macOS: `brew install pandoc`, Ubuntu: `sudo apt install pandoc`, Windows: `winget install --id JohnMacFarlane.Pandoc`). Then re-run; `md2star doctor` confirms the install."
+msgstr "Installez-le depuis https://pandoc.org/installing.html (macOS : `brew install pandoc`, Ubuntu : `sudo apt install pandoc`, Windows : `winget install --id JohnMacFarlane.Pandoc`). Relancez ensuite ; `md2star doctor` confirme l'installation."
+
+msgid "md2star reads Markdown as UTF-8. Convert the file first, e.g. `iconv -f latin1 -t utf-8 in.md > out.md`, or re-save it as UTF-8 from your editor."
+msgstr "md2star lit le Markdown en UTF-8. Convertissez d'abord le fichier, par exemple `iconv -f latin1 -t utf-8 in.md > out.md` ; vous pouvez aussi le réenregistrer en UTF-8 depuis votre éditeur."
+
+msgid "The preprocessed Markdown is written beside the input so relative image paths keep resolving, which needs a writable source directory. Copy the Markdown somewhere writable and convert it there."
+msgstr "Le Markdown prétraité est écrit à côté de l'entrée pour que les chemins d'images relatifs continuent de se résoudre, ce qui exige un dossier source accessible en écriture. Copiez le Markdown dans un dossier où vous pouvez écrire puis convertissez-le là."
+
+msgid "md2pptx --smart-layout needs a resolved LLM+VLM engine; run `best-engine-ai-helper report --task \"...\"` or check md2star/llm.engine.yaml for what best-engine-ai-helper resolved."
+msgstr "md2pptx --smart-layout exige un moteur LLM+VLM résolu ; lancez `best-engine-ai-helper report --task \"...\"` ou consultez md2star/llm.engine.yaml pour voir ce que best-engine-ai-helper a résolu."
+
+msgid "Install it to enable PDF output:\n  macOS:   brew install --cask libreoffice\n  Ubuntu:  sudo apt install libreoffice\n  Windows: winget install --id TheDocumentFoundation.LibreOffice\n  other:   https://www.libreoffice.org/download/"
+msgstr "Installez-le pour activer la sortie PDF :\n  macOS :   brew install --cask libreoffice\n  Ubuntu :  sudo apt install libreoffice\n  Windows : winget install --id TheDocumentFoundation.LibreOffice\n  autre :   https://www.libreoffice.org/download/"
+
+msgid "Install it to convert this format to PDF first:\n  macOS:   brew install --cask libreoffice\n  Ubuntu:  sudo apt install libreoffice\n  Windows: winget install --id TheDocumentFoundation.LibreOffice\n  other:   https://www.libreoffice.org/download/"
+msgstr "Installez-le pour convertir d'abord ce format en PDF :\n  macOS :   brew install --cask libreoffice\n  Ubuntu :  sudo apt install libreoffice\n  Windows : winget install --id TheDocumentFoundation.LibreOffice\n  autre :   https://www.libreoffice.org/download/"
 
 # ── md2star doctor (translated at render time; --json stays English) ─────
 msgid "Core"
