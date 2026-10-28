@@ -6,22 +6,49 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Documentation
+## [3.11.0] - 2026-10-28
 
-- **The six reader-facing documents are on the suite spine** (CODING.md rules
-  16-18). `README.md` / `LISEZMOI.md` now reach `Installation` before
-  `Quick start` / `Prise en main rapide` — the French heading was
-  `Démarrage rapide`, which is not the suite's spelling — and the stale
-  "currently v3.1.3" line is gone. `LANDSCAPE.md` / `PAYSAGE.md` gained
-  `Sources and as-of date` / `Sources et date de relevé`: one primary source
-  per row, the date the sources were recorded, plus a plain statement that the
-  md2star column is read off the code while the competitor columns are read off
-  their own documentation. `EXAMPLES.md` / `EXEMPLES.md` gained
-  `Table of Contents`, `Setup`, `Command line` and `Troubleshooting`, the
-  language-switch links they never had, and measured output in place of
-  plausible output.
+### Added
+
+- **Six hints gained a French translation**: the two LibreOffice install
+  blocks, the pandoc install block, the UTF-8 conversion advice, the
+  unwritable-source-directory explanation, and the smart-layout engine hint.
+
+- **`tests/test_i18n.py` gains the converse of its call-site test.** The
+  existing one checks that what the code asks for, the catalogue carries; its
+  docstring declines the other direction because the doctor's table hides
+  strings from any scan. Raise sites do not hide, so they are checked: every
+  error message and hint must go through `_()`.
+
+### Changed
+
+- **CI stopped depending on the Ubuntu apt mirror.** `pandoc` comes from its
+  GitHub release at 3.7.0.2 -- the same version apt was resolving to -- and
+  `shellcheck` and `unzip` are taken from the runner image, which already
+  ships them. The `ocr round-trip identity` job had been dying at its
+  25-minute ceiling and `integration / ubuntu-latest` took 12m51s even when
+  green; they now take 56s and 1m6s. Only `libreoffice-writer` still comes
+  from apt, with `Acquire::Retries` and `Acquire::*::Timeout` set so a quiet
+  mirror is abandoned rather than waited on.
+
+- **The `coverage` job folded into `pytest`.** The two installed the same
+  toolchain and ran the same tests, differing only in flags, and `coverage`
+  appeared in no `needs:` list -- so the 70% threshold gated nothing that
+  `publish` waited on. It does now.
 
 ### Fixed
+
+- **The French hints were translated and the code never asked for them.** Ten
+  of fourteen `raise` sites passed raw English as the message or the `hint=`,
+  and seven of those strings already had a French entry sitting in
+  `md2star.po` -- translated, shipped, never looked up, because the call site
+  omitted `_()`. `MD2STAR_LANG=fr md2pptx x.md --reference-slides` printed a
+  French message above an English hint. All ten route through the catalogue
+  now.
+
+- **Four shipped strings broke the writing charter** with a comma before
+  « ou ». Rewritten rather than re-punctuated: the comma was usually holding
+  together two clauses that read better split.
 
 - **`{.column}` was never column syntax.** `EXAMPLES.md` and `EXEMPLES.md`
   documented a bare `{.column}` line as a slide splitter, and
@@ -41,6 +68,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `tests/examples/*.docx` / `*.pptx` build output, which `.gitignore` keeps out
   of the repository. The sources are listed instead, with the `./run.sh` line
   that renders them.
+
+### Documentation
+
+- **The six reader-facing documents are on the suite spine** (CODING.md rules
+  16-18). `README.md` / `LISEZMOI.md` now reach `Installation` before
+  `Quick start` / `Prise en main rapide` — the French heading was
+  `Démarrage rapide`, which is not the suite's spelling — and the stale
+  "currently v3.1.3" line is gone. `LANDSCAPE.md` / `PAYSAGE.md` gained
+  `Sources and as-of date` / `Sources et date de relevé`: one primary source
+  per row, the date the sources were recorded, plus a plain statement that the
+  md2star column is read off the code while the competitor columns are read off
+  their own documentation. `EXAMPLES.md` / `EXEMPLES.md` gained
+  `Table of Contents`, `Setup`, `Command line` and `Troubleshooting`, the
+  language-switch links they never had, and measured output in place of
+  plausible output.
 
 ## [3.10.0] - 2026-10-25
 
