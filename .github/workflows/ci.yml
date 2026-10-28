@@ -67,7 +67,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends shellcheck
+      # ubuntu-26.04 ships shellcheck 0.11.0 in the image, so installing it
+      # meant one more `apt-get update` against the mirror for a binary that
+      # was already on the box. The version is printed instead, so the log
+      # still records what did the judging.
+      - run: shellcheck --version
       - run: shellcheck scripts/install.sh scripts/uninstall.sh scripts/test.sh scripts/vendor_gui.sh scripts/brew.sh
 
   # ──────────────────────────────────────────────────────────────────
@@ -93,12 +97,38 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install pandoc (required by tests/test_lua_filter.py)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pandoc
+        run: |
+          set -euo pipefail
+          # Same reasoning as the ffmpeg step the rest of the suite now uses:
+          # every `apt-get update` talks to azure.archive.ubuntu.com, and when
+          # that mirror goes quiet the job just sits there. It cost this
+          # workflow `integration / ubuntu-latest` 12m51s in the last green run
+          # and killed the ocr job outright on dc29b43, at its 25-minute
+          # ceiling, with nothing wrong in the repository.
+          #
+          # 3.7.0.2 is not a new choice of version: it is exactly what apt was
+          # resolving to here (pandoc 3.7.0.2+ds-1, read out of the run log), so
+          # this changes where pandoc comes from and nothing about what it does.
+          ver=3.7.0.2
+          mkdir -p "$HOME/pandoc"
+          curl -fsSL --retry 5 --retry-all-errors \
+               --speed-limit 100000 --speed-time 30 --max-time 300 \
+               "https://github.com/jgm/pandoc/releases/download/${ver}/pandoc-${ver}-linux-amd64.tar.gz" \
+            | tar -xz --strip-components=1 -C "$HOME/pandoc"
+          echo "$HOME/pandoc/bin" >> "$GITHUB_PATH"
+          # GITHUB_PATH only reaches later steps, so prove it here by full path.
+          "$HOME/pandoc/bin/pandoc" --version | head -1
       - name: Install md2star + dev deps
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
-      - run: python -m pytest tests/ -v
+      # Coverage is measured here rather than in a job of its own. The two
+      # were installing the same toolchain and running the same tests, one
+      # of them twice over for the flags -- and the separate `coverage` job
+      # appeared in no `needs:` list, so the threshold in pyproject's
+      # [tool.coverage.report] gated nothing that `publish` waited on.
+      # Folded in here it costs no second install, and it actually blocks.
+      - run: python -m pytest tests/ -v --cov --cov-report=term-missing
 
   # ──────────────────────────────────────────────────────────────────
   # OCR round-trip identity — ACTUALLY RUN the md → docx → pdf → text
@@ -119,8 +149,45 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install pandoc + LibreOffice (f pipeline — md to docx to pdf)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pandoc libreoffice-writer
+      - name: pandoc (pinned release, not apt)
+        run: |
+          set -euo pipefail
+          # Same reasoning as the ffmpeg step the rest of the suite now uses:
+          # every `apt-get update` talks to azure.archive.ubuntu.com, and when
+          # that mirror goes quiet the job just sits there. It cost this
+          # workflow `integration / ubuntu-latest` 12m51s in the last green run
+          # and killed the ocr job outright on dc29b43, at its 25-minute
+          # ceiling, with nothing wrong in the repository.
+          #
+          # 3.7.0.2 is not a new choice of version: it is exactly what apt was
+          # resolving to here (pandoc 3.7.0.2+ds-1, read out of the run log), so
+          # this changes where pandoc comes from and nothing about what it does.
+          ver=3.7.0.2
+          mkdir -p "$HOME/pandoc"
+          curl -fsSL --retry 5 --retry-all-errors \
+               --speed-limit 100000 --speed-time 30 --max-time 300 \
+               "https://github.com/jgm/pandoc/releases/download/${ver}/pandoc-${ver}-linux-amd64.tar.gz" \
+            | tar -xz --strip-components=1 -C "$HOME/pandoc"
+          echo "$HOME/pandoc/bin" >> "$GITHUB_PATH"
+          # GITHUB_PATH only reaches later steps, so prove it here by full path.
+          "$HOME/pandoc/bin/pandoc" --version | head -1
+      - name: LibreOffice (the one apt left, with the mirror on a deadline)
+        run: |
+          set -euo pipefail
+          # LibreOffice has no single-file release to pull, so this install
+          # stays on apt. What changes is that apt is now told to give up on a
+          # quiet mirror rather than wait on it: Acquire::*::Timeout bounds
+          # socket inactivity and Retries re-dials. That is the knob the old
+          # `timeout 240` wrapper was reaching for from the outside, and it is
+          # the difference between this job finishing and this job hitting the
+          # 25-minute ceiling the way it did on dc29b43.
+          apt_opts="-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30"
+          # Word-split on purpose: these are six separate argv entries, not one.
+          # shellcheck disable=SC2086
+          sudo apt-get $apt_opts update
+          # shellcheck disable=SC2086
+          sudo apt-get $apt_opts install -y --no-install-recommends libreoffice-writer
+          command -v soffice
       - name: Install md2star + dev deps (includes kreuzberg, the g reader)
         run: |
           python -m pip install --upgrade pip
@@ -157,7 +224,27 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install pandoc (so doctor reports a real version)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pandoc
+        run: |
+          set -euo pipefail
+          # Same reasoning as the ffmpeg step the rest of the suite now uses:
+          # every `apt-get update` talks to azure.archive.ubuntu.com, and when
+          # that mirror goes quiet the job just sits there. It cost this
+          # workflow `integration / ubuntu-latest` 12m51s in the last green run
+          # and killed the ocr job outright on dc29b43, at its 25-minute
+          # ceiling, with nothing wrong in the repository.
+          #
+          # 3.7.0.2 is not a new choice of version: it is exactly what apt was
+          # resolving to here (pandoc 3.7.0.2+ds-1, read out of the run log), so
+          # this changes where pandoc comes from and nothing about what it does.
+          ver=3.7.0.2
+          mkdir -p "$HOME/pandoc"
+          curl -fsSL --retry 5 --retry-all-errors \
+               --speed-limit 100000 --speed-time 30 --max-time 300 \
+               "https://github.com/jgm/pandoc/releases/download/${ver}/pandoc-${ver}-linux-amd64.tar.gz" \
+            | tar -xz --strip-components=1 -C "$HOME/pandoc"
+          echo "$HOME/pandoc/bin" >> "$GITHUB_PATH"
+          # GITHUB_PATH only reaches later steps, so prove it here by full path.
+          "$HOME/pandoc/bin/pandoc" --version | head -1
       - name: Install md2star
         run: |
           python -m pip install --upgrade pip
@@ -224,7 +311,27 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install pandoc (so `doctor` finds it)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pandoc
+        run: |
+          set -euo pipefail
+          # Same reasoning as the ffmpeg step the rest of the suite now uses:
+          # every `apt-get update` talks to azure.archive.ubuntu.com, and when
+          # that mirror goes quiet the job just sits there. It cost this
+          # workflow `integration / ubuntu-latest` 12m51s in the last green run
+          # and killed the ocr job outright on dc29b43, at its 25-minute
+          # ceiling, with nothing wrong in the repository.
+          #
+          # 3.7.0.2 is not a new choice of version: it is exactly what apt was
+          # resolving to here (pandoc 3.7.0.2+ds-1, read out of the run log), so
+          # this changes where pandoc comes from and nothing about what it does.
+          ver=3.7.0.2
+          mkdir -p "$HOME/pandoc"
+          curl -fsSL --retry 5 --retry-all-errors \
+               --speed-limit 100000 --speed-time 30 --max-time 300 \
+               "https://github.com/jgm/pandoc/releases/download/${ver}/pandoc-${ver}-linux-amd64.tar.gz" \
+            | tar -xz --strip-components=1 -C "$HOME/pandoc"
+          echo "$HOME/pandoc/bin" >> "$GITHUB_PATH"
+          # GITHUB_PATH only reaches later steps, so prove it here by full path.
+          "$HOME/pandoc/bin/pandoc" --version | head -1
       - name: Download built wheel
         uses: actions/download-artifact@v4
         with:
@@ -248,31 +355,6 @@ jobs:
         run: |
           /tmp/smoke-venv/bin/md2star doctor --json > /tmp/doctor.json
           python -c "import json; j=json.load(open('/tmp/doctor.json')); assert 'features' in j and 'core_failing' in j"
-
-  # ──────────────────────────────────────────────────────────────────
-  # Coverage gate — runs pytest with pytest-cov, fails if coverage
-  # drops below the threshold declared in pyproject.toml's
-  # [tool.coverage.report] block. Catches the "we added a 200-line
-  # module but no test for it" class of regression.
-  # ──────────────────────────────────────────────────────────────────
-  coverage:
-    name: coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-      - name: Install pandoc (required by tests/test_lua_filter.py)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pandoc
-      - name: Install md2star + dev deps
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-      - name: pytest with coverage
-        run: python -m pytest tests/ --cov --cov-report=term-missing
 
   # ──────────────────────────────────────────────────────────────────
   # `pip-audit` — surface known CVEs in runtime + dev deps. Fails
@@ -330,9 +412,31 @@ jobs:
           python-version: "3.12"
           cache: pip
 
-      - name: Install pandoc (ubuntu)
+      # unzip is dropped from this install: ubuntu-26.04 ships 6.0 in the
+      # image, so it was an extra round trip to the mirror for nothing.
+      - name: pandoc (ubuntu — pinned release, not apt)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pandoc unzip
+        run: |
+          set -euo pipefail
+          # Same reasoning as the ffmpeg step the rest of the suite now uses:
+          # every `apt-get update` talks to azure.archive.ubuntu.com, and when
+          # that mirror goes quiet the job just sits there. It cost this
+          # workflow `integration / ubuntu-latest` 12m51s in the last green run
+          # and killed the ocr job outright on dc29b43, at its 25-minute
+          # ceiling, with nothing wrong in the repository.
+          #
+          # 3.7.0.2 is not a new choice of version: it is exactly what apt was
+          # resolving to here (pandoc 3.7.0.2+ds-1, read out of the run log), so
+          # this changes where pandoc comes from and nothing about what it does.
+          ver=3.7.0.2
+          mkdir -p "$HOME/pandoc"
+          curl -fsSL --retry 5 --retry-all-errors \
+               --speed-limit 100000 --speed-time 30 --max-time 300 \
+               "https://github.com/jgm/pandoc/releases/download/${ver}/pandoc-${ver}-linux-amd64.tar.gz" \
+            | tar -xz --strip-components=1 -C "$HOME/pandoc"
+          echo "$HOME/pandoc/bin" >> "$GITHUB_PATH"
+          # GITHUB_PATH only reaches later steps, so prove it here by full path.
+          "$HOME/pandoc/bin/pandoc" --version | head -1
       - name: Install pandoc (macos)
         if: runner.os == 'macOS'
         run: brew install pandoc
