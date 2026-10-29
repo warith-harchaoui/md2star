@@ -299,3 +299,15 @@ est ici un jugement daté sur l'adéquation à un créneau, ce qui est honnête 
 où une mesure sans date ne le serait pas. Quand une note a vieilli — et dans ce
 domaine certaines vieilliront — la section [Méthodologie](#méthodologie) dit à
 quoi ressemble une correction utile.
+
+## Idées à reprendre
+
+Étudié plutôt que deviné : ce que chaque voisin fait mieux, puis ce que cette bibliothèque devrait changer pour l'égaler. Rien ici n'est un engagement : c'est la liste de lecture dont part la version suivante.
+
+- **`Quarto` — `reference-doc` pour les présentations, pas seulement pour les documents** — Cette bibliothèque honore déjà un modèle de référence pour le `.docx`. Quarto applique la même idée au `.pptx`, qui est la moitié encore manquante : une présentation qui hérite d'un masque maison plutôt que des défauts de l'outil.
+
+- **`Marp` — nommer dans la doc l'arbitrage entre éditabilité puis fidélité** — `--pptx-editable` produit du vrai texte avec de vraies formes au prix d'un peu de fidélité ; le défaut produit une présentation fidèle qu'on ne peut guère modifier. Marp documente l'arbitrage au lieu de choisir à votre place, or un lecteur qui compare des convertisseurs a besoin exactement de cette phrase.
+
+- **L'export PPTX de `Slidev` — un point de vigilance, non une idée** — Il exporte chaque diapositive en image : aucun texte n'est sélectionnable. À consigner dans le tableau parce que « exporte en pptx » se lit comme équivalent d'un outil à l'autre sans l'être.
+
+- **`Quarto` — des cellules exécutables, des figures produites au rendu** — Une figure produite par le document lui-même ne peut pas dériver des nombres qui la fondent. Pour une suite qui génère déjà ses figures de paysage depuis des CSV, c'est le même principe un étage plus haut.

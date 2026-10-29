@@ -289,3 +289,15 @@ judgement about fit to one niche, which is honest in a way an undated
 measurement would not be. When a rating has gone stale — and in this space
 some will — the [Methodology](#methodology) section says what a useful
 correction looks like.
+
+## Ideas worth stealing
+
+Researched rather than guessed: what each neighbour does better, and what this library would have to change to match it. Nothing here is a commitment — it is the reading list the next version starts from.
+
+- **`Quarto` — `reference-doc` for decks, not only for documents** — This library already honours a reference template for `.docx`. Quarto applies the same idea to `.pptx`, which is the half still missing: a deck that inherits a house master rather than the writer's defaults.
+
+- **`Marp` — name the editability-versus-fidelity trade in the docs** — `--pptx-editable` produces real text and shapes at some cost in fidelity; the default produces a faithful deck you mostly cannot edit. Marp documents the trade instead of picking for you, and a reader choosing a converter needs exactly that sentence.
+
+- **`Slidev`'s PPTX export — a cautionary data point, not an idea** — It exports every slide as an image, so no text is selectable. Worth recording in the table because "exports to pptx" reads as equivalent across tools and is not.
+
+- **`Quarto` — executable cells, figures generated at render time** — A figure produced by the document itself cannot drift from the numbers behind it. For a suite that already generates its own landscape figures from CSVs, this is the same principle one layer up.
