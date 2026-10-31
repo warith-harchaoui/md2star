@@ -201,9 +201,12 @@ def _hash_file(path: str) -> str | None:
     """Return the first 16 hex of the file's content hash, or ``None`` on error.
 
     ``None`` signals "unreadable — skip caching for this image". We guard with
-    ``osh.file_exists`` first because ``osh.hashfile`` falls back to hashing the
-    *path* for a missing file (a valid-looking but wrong key); the ``OSError``
-    guard then covers an existing-but-unreadable file.
+    ``osh.file_exists`` first so a missing image is reported as uncacheable
+    rather than hashed: under os-helper 3.x ``osh.hashfile`` fell back to
+    hashing the *path* there, handing back a valid-looking but wrong key, and
+    since 4.0.0 it raises instead. The guard is right either way, and the
+    ``OSError`` catch below covers both the existing-but-unreadable file and
+    the narrow gap where the file is reaped between the check and the read.
     """
     if not osh.file_exists(path):
         return None
