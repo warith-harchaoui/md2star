@@ -386,7 +386,7 @@ same wheel, not a separate download).
   `os_helper.compile_catalogs` — the `.mo` is written in Python, so GNU
   gettext's `msgfmt` is never a build dependency.
 
-- **Template-Intelligent PPTX**: `md2pptx --smart-layout --template <designer.pptx>` maps each slide onto a real designer template's own named layouts (a marketing deck routinely ships 20-40) instead of Pandoc's ~7 generic ones. Selection is **measured before it is judged**: each slide's content is counted (words, bullets, images, table size) and each layout's placeholders are converted from their EMU geometry into a text capacity at a **30 pt floor** — Guy Kawasaki's 10/20/30 rule, which is what makes "does this fit?" arithmetic rather than opinion. Layouts that physically cannot host the slide (an image with no picture placeholder, a table with no body placeholder) are excluded up front, and the rest are ranked by occupancy against a ~55 % target, so a slide lands neither crammed nor marooned. An LLM then picks among the plausible candidates — it now sees the quantities and each layout's capacity, not just a list of feature names — and **geometry overrules it** if it names a layout that cannot hold the content. A **vision model visually confirms or overrides** that pick against the candidates' actual rendered thumbnails, not just their captions — and the candidates it is shown are drawn from that slide's own geometric ranking, so a tie-break arbitrates between layouts the fit model says can carry the slide rather than between whichever layouts the catalog lists first (which is how a vision model ends up recommending a two-column content design for a cover). It may no longer flatten the deck either: asked slide by slide, a model will happily answer with the same layout every time, and a tie-break between near-equals is not a licence to redesign, so once a layout carries half the slides a further override onto it is declined and the measured pick stands; and the **Ralph Eyeball Loop can now move a slide outright** rather than only nudging it — when the judge reports a slide its layout simply is not carrying, the loop re-selects from the geometric ranking instead of shrinking type on a decision that was wrong to begin with (`--eyeball-iterations N`, and the layout a slide has already been moved off is never offered again). Composition is scored too, from the template's own geometry: content piled into one corner, a body box sitting above its title, boxes that fail to share an edge, whether a focal image lands on a rule-of-thirds line, and whether each image's **real aspect ratio** matches the box it would go in — read from the file header, so a panorama routes to an image-top layout and a portrait to a half-and-half one without either rule being written down. A mismatch is reported in the terms a reader would notice ("it will be letterboxed or cropped"). Remote URLs and unreadable files are skipped rather than penalised: selection does no network I/O, and no signal is not a bad signal; a `python-pptx` assembler then builds the deck directly on the chosen layout. `--reference-slides` goes one level deeper than the layout: it **clones the designer's own example slide** for that layout and replaces its content, so the slide inherits their accent bars, numbered step chevrons and decorative rules — the shapes that make a deck look like *itself* and that no layout carries — along with their bullet glyph, face, size and colour. Nothing they *wrote* comes with it: every text frame is either filled with your content or retired, and retiring tells filler from design (the "01" of a numbered step stays, a bare text box goes, an autoshape is emptied but kept), while their stand-in photo is dropped from the file itself and not merely from the slide. A page that cannot honestly carry a slide is **declined rather than half-filled** — a three-column design needs three bullets; an image slide needs a picture slot, and a page built around a photograph needs an image, because their stand-in has to go and the rest of the page was composed around the shape of it; a page with a chart or a table on it is refused outright; and a page is refused when your text would have to **shrink past 12 pt** to fit the frames the designer sized for their own line, because the question worth asking is not "does it overflow" but "how small would it have to get" — a renderer answers overflow by quietly shrinking the type — and every refusal falls through to the assembler above, so the flag only ever adds. Among the pages that do qualify, a slide with an image takes the one whose slot is biggest, since contain-fitting makes that slot the size the reader actually sees. The **Ralph Eyeball Loop has two eyes, and only one needs a model**: every pass also runs the deterministic audit over the file just written and feeds each finding back as a verdict, so `--eyeball-iterations N` does real work on a machine with no vision model, no LibreOffice and no network — and where the two disagree the measurement wins, since a model looking at a render cannot see an overrun the renderer has already hidden by shrinking the type. Being a measurement it also knows the answer and not just the complaint: an overrun is reported with the size that *would* fit, so the loop applies the exact correction in one shot rather than nudging toward it — and when that size is itself under 12 pt it stops offering to shrink at all and goes looking for a bigger box instead. It **sharpens on this seam at both ends** too: a cloned slide is judged against *the designer page it was cloned from* (the candidate is literally that page with your words in it, so a discrepancy is about this slide rather than about the layout family), and the loop gains a correction it never had — when nothing bounded applies, it moves the slide onto **another of the designer's demonstrations of the same layout** before even considering a layout swap. Only once every page has been judged and refused does the slide fall through. Add `--eyeball-iterations N` for a target-matching Ralph Eyeball Loop that compares each rendered slide against its chosen layout's own thumbnail and applies bounded fixes (shrink overflow text, cap bullets, grow an undersized image). The deck it hands you is **editable, not merely pretty**: each slide's title goes into the layout's own title placeholder, so the file has real entries in PowerPoint's outline pane and a sensible screen-reader reading order, and every placeholder left unfilled is removed instead of shipping a "Click to add title" ghost under each overlay. A Pandoc `::: notes` block reaches the notes pane rather than the slide, and Markdown alt text reaches each picture's accessible description. Every run then ends with a **deterministic layout audit** of the file just written — shapes off the canvas, text over text, unfilled placeholders, type under 12 pt, **text a reader cannot separate from what is behind it** (the WCAG ratio, with the backdrop resolved through the slide, the layout and the master the way a renderer resolves it), and text that needs more room than its box gives it (reported with the size that *would* fit). No model, no render, no network: it is the half of a visual review that arithmetic can settle, so the quality gate still runs on a machine with no LLM at all. Opt-in (`pip install 'md2star[pptx]'`) and best-effort, same engine contract as the LLM Linter below. See [EXAMPLES.md §12](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#12-template-intelligent-pptx).
+- **Template-Intelligent PPTX**: `md2pptx --smart-layout --template <designer.pptx>` maps each slide onto a real designer template's own named layouts (a marketing deck routinely ships 20-40) instead of Pandoc's ~7 generic ones, with the fit **measured before any model is asked**. The whole mechanism has its own section: [Template-Intelligent PPTX](#template-intelligent-pptx).
 - **Deck Audit** (`md2star audit <deck.pptx>`): ask any PowerPoint what is wrong with it — text overlapping text, shapes past the canvas edge, placeholders nobody filled, type under a 12 pt legibility floor, and text that needs more room than its box gives it (reported with the size that *would* fit). It reads **any** `.pptx`, not only one md2star produced, and it is pure arithmetic on the OOXML: no model, no renderer, no network, and the file is never written to. Exits `1` on a defect and `0` when only observations remain (`--strict` counts overruns too), so it drops straight into CI or a pre-commit hook; `--json` for machines. Also `POST /audit` on the HTTP surface, which makes it an MCP tool for free. Needs `pip install 'md2star[pptx]'`. See [EXAMPLES.md §12](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#12-template-intelligent-pptx).
 - **Graceful Image Path Resolution**: URLs, absolute paths, and relative paths all "just work". Relative `![](images/foo.png)` references resolve against the input file's directory, so `md2docx subdir/file.md` from any cwd still finds the image. No need to `cd` into the source folder first.
 - **Zero-Config Branding**: drop a `template.docx` / `template.pptx` next to your Markdown and md2star will pick it up automatically as `--reference-doc`. If neither exists, md2star fetches the `deraison.ai` default template by default (since v2.5.0) and caches it; pass `--no-remote-templates` / `--offline` to use the bundled template instead.
@@ -400,6 +400,155 @@ same wheel, not a separate download).
   export.
 
 ---
+
+## Template-Intelligent PPTX
+
+`md2pptx --smart-layout --template <designer.pptx>` maps each slide onto a real
+designer template's own named layouts — a marketing deck routinely ships 20 to 40
+— instead of Pandoc's ~7 generic ones.
+
+Opt-in (`pip install 'md2star[pptx]'`) and best-effort, on the same engine
+contract as the [LLM Linter](#features). Worked example in
+[EXAMPLES.md §12](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#12-template-intelligent-pptx).
+
+### How a layout gets chosen
+
+Selection is **measured before it is judged**.
+
+1. **Count the slide.** Words, bullets, images, table size.
+2. **Measure each layout.** Every placeholder's EMU geometry becomes a text
+   capacity at a **30 pt floor** — Guy Kawasaki's 10/20/30 rule, which is what
+   makes "does this fit?" arithmetic rather than opinion.
+3. **Exclude the impossible.** An image with no picture placeholder, a table
+   with no body placeholder: those layouts go out up front.
+4. **Rank what is left** by occupancy against a ~55 % target, so a slide lands
+   neither crammed nor marooned.
+5. **Ask a model** among the plausible candidates. It sees the quantities and
+   each layout's capacity, not just a list of feature names.
+6. **Let geometry overrule it.** Name a layout that cannot hold the content and
+   the measurement wins.
+7. **Confirm visually.** A vision model checks that pick against the
+   candidates' actual rendered thumbnails, not just their captions — and the
+   candidates it is shown come from that slide's own geometric ranking, so a
+   tie-break arbitrates between layouts the fit model says can carry the slide.
+   Rank them by whatever the catalogue lists first instead, and you get a
+   vision model recommending a two-column content design for a cover.
+
+Two guards sit on top of that:
+
+- **It may not flatten the deck.** Asked slide by slide, a model will happily
+  answer with the same layout every time, and a tie-break between near-equals
+  is not a licence to redesign. Once a layout carries half the slides, a
+  further override onto it is declined and the measured pick stands.
+- **A wrong pick is moved, not shrunk.** When the judge reports a slide its
+  layout simply is not carrying, the Ralph Eyeball Loop re-selects from the
+  geometric ranking rather than shrinking type on a decision that was wrong to
+  begin with (`--eyeball-iterations N`). A layout a slide has already been
+  moved off is never offered again.
+
+### What composition scoring looks at
+
+Scored from the template's own geometry, not from taste:
+
+- content piled into one corner;
+- a body box sitting above its title;
+- boxes that fail to share an edge;
+- whether a focal image lands on a rule-of-thirds line;
+- whether each image's **real aspect ratio** matches the box it would go in,
+  read from the file header — so a panorama routes to an image-top layout and a
+  portrait to a half-and-half one without either rule being written down.
+
+A mismatch is reported in the terms a reader would notice: *it will be
+letterboxed or cropped*. Remote URLs and unreadable files are skipped rather
+than penalised, because selection does no network I/O and no signal is not a
+bad signal. A `python-pptx` assembler then builds the deck directly on the
+chosen layout.
+
+### `--reference-slides`: cloning the designer's own slide
+
+This goes one level deeper than the layout. It **clones the designer's example
+slide** for that layout and replaces its content, so the slide inherits their
+accent bars, numbered step chevrons and decorative rules — the shapes that make
+a deck look like *itself*, and that no layout carries — along with their bullet
+glyph, face, size and colour.
+
+Nothing they *wrote* comes with it. Every text frame is either filled with your
+content or retired, and retiring tells filler from design: the "01" of a
+numbered step stays, a bare text box goes, an autoshape is emptied but kept.
+Their stand-in photo is dropped from the file itself, not merely from the slide.
+
+A page that cannot honestly carry a slide is **declined rather than
+half-filled**:
+
+- a three-column design needs three bullets;
+- an image slide needs a picture slot, and a page built around a photograph
+  needs an image — their stand-in has to go, and the rest of the page was
+  composed around the shape of it;
+- a page with a chart or a table on it is refused outright;
+- a page is refused when your text would have to **shrink past 12 pt** to fit
+  frames the designer sized for their own line. The question worth asking is
+  not "does it overflow" but "how small would it have to get", since a renderer
+  answers overflow by quietly shrinking the type.
+
+Every refusal falls through to the assembler above, so the flag only ever adds.
+Among the pages that do qualify, a slide with an image takes the one whose slot
+is biggest, since contain-fitting makes that slot the size the reader actually
+sees.
+
+### The Ralph Eyeball Loop has two eyes, and only one needs a model
+
+Every pass also runs the deterministic audit over the file just written and
+feeds each finding back as a verdict. `--eyeball-iterations N` therefore does
+real work on a machine with no vision model, no LibreOffice and no network.
+
+Where the two eyes disagree, **the measurement wins**: a model looking at a
+render cannot see an overrun the renderer has already hidden by shrinking the
+type.
+
+Being a measurement, it also knows the answer and not merely the complaint. An
+overrun is reported with the size that *would* fit, so the loop applies the
+exact correction in one shot instead of nudging toward it — and when that size
+is itself under 12 pt, it stops offering to shrink and goes looking for a
+bigger box.
+
+Cloning sharpens both ends of this seam:
+
+- A cloned slide is judged against **the designer page it was cloned from**.
+  The candidate is literally that page with your words in it, so a discrepancy
+  is about this slide rather than about the layout family.
+- The loop gains a correction it never had. When nothing bounded applies, it
+  moves the slide onto **another of the designer's demonstrations of the same
+  layout** before even considering a layout swap. Only once every page has been
+  judged and refused does the slide fall through.
+
+### The deck is editable, not merely pretty
+
+- Each slide's title goes into the layout's own title placeholder, so the file
+  has real entries in PowerPoint's outline pane and a sensible screen-reader
+  reading order.
+- Every placeholder left unfilled is removed, rather than shipping a "Click to
+  add title" ghost under each overlay.
+- A Pandoc `::: notes` block reaches the notes pane rather than the slide.
+- Markdown alt text reaches each picture's accessible description.
+
+### The closing audit
+
+Every run ends with a **deterministic layout audit** of the file just written:
+
+- shapes off the canvas;
+- text over text;
+- unfilled placeholders;
+- type under 12 pt;
+- **text a reader cannot separate from what is behind it** — the WCAG ratio,
+  with the backdrop resolved through the slide, the layout and the master the
+  way a renderer resolves it;
+- text that needs more room than its box gives it, reported with the size that
+  *would* fit.
+
+No model, no render, no network. It is the half of a visual review arithmetic
+can settle, which is why the quality gate still runs on a machine with no LLM
+at all.
+
 
 ## Usage Guide
 

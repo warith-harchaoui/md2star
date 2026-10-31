@@ -403,7 +403,7 @@ principal : rien de plus à installer.
   `os_helper.compile_catalogs` — le `.mo` est écrit en Python, si bien que
   `msgfmt` de GNU n'est jamais une dépendance de construction.
 
-- **PPTX intelligent gabarit** : `md2pptx --smart-layout --template <gabarit-designer.pptx>` mappe chaque diapositive sur les vraies mises en page nommées d'un gabarit de designer (une présentation marketing en propose typiquement 20 à 40) au lieu des ~7 mises en page génériques de Pandoc. La sélection est **mesurée avant d'être jugée** : le contenu de chaque diapositive est compté (mots, puces, images, taille du tableau) puis les placeholders de chaque mise en page sont convertis, depuis leur géométrie EMU, en une capacité de texte à un **plancher de 30 pt** — la règle 10/20/30 de Guy Kawasaki, qui transforme « est-ce que ça tient ? » en arithmétique plutôt qu'en opinion. Les mises en page qui ne peuvent physiquement pas accueillir la diapositive (une image sans emplacement image, un tableau sans emplacement de corps) sont écartées d'emblée ; les autres sont classées par taux d'occupation autour d'une cible de ~55 %, pour qu'une diapositive ne soit ni entassée ni perdue. Un LLM tranche ensuite parmi les candidates plausibles — il voit désormais les quantités puis la capacité de chaque mise en page, non plus une simple liste de caractéristiques — et **la géométrie le corrige** s'il nomme une mise en page incapable de porter le contenu. La **Ralph Eyeball Loop peut désormais déplacer une diapositive** au lieu de seulement la retoucher : quand le juge signale une diapositive que sa mise en page ne porte pas, la boucle re-sélectionne depuis le classement géométrique plutôt que de rétrécir le corps sur une décision fausse dès le départ (une mise en page déjà quittée n'est jamais reproposée). La composition est notée elle aussi, depuis la géométrie du gabarit : contenu entassé dans un coin, boîte de corps placée au-dessus de son titre, boîtes qui ne partagent aucun bord, image focale sur une ligne des tiers, enfin le **rapport d'aspect réel** de chaque image comparé à celui de sa boîte — lu dans l'en-tête du fichier, si bien qu'un panorama va vers une mise en page image-en-haut puis un portrait vers une moitié-moitié, sans qu'aucune de ces deux règles soit écrite. Un écart est signalé dans les termes qu'un lecteur remarquerait (« il sera letterboxé ou recadré »). Les URL distantes puis les fichiers illisibles sont ignorés plutôt que pénalisés : la sélection ne fait aucune E/S réseau, puis une absence de signal n'est pas un mauvais signal ; un modèle de vision **confirme ou corrige visuellement** ce choix en comparant les vraies vignettes rendues des candidats, pas seulement leurs légendes — et les candidats qu'on lui montre viennent du classement géométrique de cette diapositive, de sorte que l'arbitrage se fait entre des mises en page dont le modèle de capacité dit qu'elles peuvent la porter et non entre celles que le catalogue liste en premier (c'est ainsi qu'un modèle de vision finit par recommander une composition de contenu à deux colonnes pour une couverture). Sans pouvoir non plus aplatir la présentation : interrogé diapositive par diapositive, un modèle répond volontiers la même mise en page à chaque fois, or un arbitrage entre quasi-égaux n'autorise pas à redessiner, donc dès qu'une mise en page porte la moitié des diapositives, une correction supplémentaire vers elle est déclinée et le choix mesuré tient ; un assembleur `python-pptx` construit ensuite la présentation directement sur la mise en page choisie. `--reference-slides` descend un cran plus bas que la mise en page : il **clone la diapositive d'exemple du designer** pour cette mise en page puis en remplace le contenu, si bien que la diapositive hérite de ses filets d'accent, de ses chevrons numérotés et de ses traits décoratifs — les formes qui font qu'une présentation *se ressemble* et qu'aucune mise en page ne porte — avec son glyphe de puce, sa graisse, son corps puis sa couleur. Rien de ce qu'il a *écrit* ne suit : chaque cadre de texte est soit rempli avec votre contenu, soit retiré et le retrait distingue le bouche-trou du dessin (le « 01 » d'une étape numérotée reste, une simple zone de texte part, une forme automatique est vidée mais conservée) ; sa photo d'illustration est retirée du fichier lui-même et pas seulement de la diapositive. Une page qui ne peut pas porter honnêtement une diapositive est **refusée plutôt que remplie à moitié** — une composition à trois colonnes exige trois puces, une diapositive avec image exige un emplacement photo, une page portant un graphique ou un tableau est refusée d'office — une page composée autour d'une photographie exige une image, puisque la photo d'illustration doit partir et que le reste de la page a été composé autour de sa forme ; une page est enfin refusée quand votre texte devrait **descendre sous 12 pt** pour tenir dans les cadres dimensionnés pour la ligne du designer, la bonne question n'étant pas « est-ce que ça déborde ? » mais « jusqu'où faudrait-il rétrécir ? » — et chaque refus repasse par l'assembleur ci-dessus : l'option ne fait donc qu'ajouter. Parmi les pages qui conviennent, une diapositive avec image prend celle dont l'emplacement est le plus grand, l'ajustement par contenance faisant de cet emplacement la taille réellement vue. La **Ralph Eyeball Loop a deux yeux, dont un seul a besoin d'un modèle** : chaque passe exécute aussi l'audit déterministe sur le fichier qui vient d'être écrit et renvoie chaque constat sous forme de verdict, si bien que `--eyeball-iterations N` fait un vrai travail sur une machine sans modèle de vision, sans LibreOffice et sans réseau — et en cas de désaccord la mesure l'emporte, un modèle qui regarde un rendu ne pouvant pas voir un débordement que le moteur a déjà masqué en rapetissant le corps. Étant une mesure, elle connaît aussi la réponse et pas seulement le grief : un débordement est signalé avec la taille qui tiendrait, donc la correction exacte est appliquée d'un coup au lieu d'être approchée — et quand cette taille passe sous 12 pt, la boucle cesse de proposer de rétrécir et va chercher une boîte plus grande. Elle **s'aiguise aussi des deux côtés sur ce seam** : une diapositive clonée est jugée face à *la page du designer dont elle sort* (la candidate est littéralement cette page avec vos mots dedans, donc un écart parle de cette diapositive et non de la famille de mises en page) et la boucle gagne une correction qu'elle n'avait pas — quand rien de borné ne s'applique, elle déplace la diapositive sur **une autre démonstration de la même mise en page par le designer** avant même d'envisager d'en changer. Ce n'est qu'une fois toutes les pages jugées puis refusées que la diapositive retombe. Ajoutez `--eyeball-iterations N` pour une boucle de comparaison visuelle guidée par la cible qui compare chaque diapositive rendue à la vignette de sa mise en page choisie et applique des corrections bornées (réduire un débordement de texte, limiter les puces, agrandir une image trop petite). La présentation qu'il vous rend est **modifiable, pas seulement jolie** : le titre de chaque diapositive va dans l'emplacement de titre de la mise en page elle-même, si bien que le fichier a de vraies entrées dans le volet plan de PowerPoint puis un ordre de lecture correct pour un lecteur d'écran ; et chaque emplacement resté vide est supprimé au lieu de livrer un fantôme « Cliquez pour ajouter un titre » sous chaque calque. Un bloc Pandoc `::: notes` arrive dans le volet des notes et non sur la diapositive, puis le texte alternatif Markdown arrive dans la description accessible de chaque image. Chaque exécution se termine enfin par un **audit de disposition déterministe** du fichier qui vient d'être écrit — formes hors du cadre, texte sur texte, emplacements non remplis, corps sous 12 pt, **texte qu'un lecteur ne peut pas distinguer de ce qui est derrière** (le rapport WCAG, le fond étant résolu à travers la diapositive, la mise en page et le masque comme le fait un moteur de rendu), enfin texte qui réclame plus de place que sa boîte ne lui en donne (signalé avec la taille qui, elle, tiendrait). Sans modèle, sans rendu, sans réseau : c'est la moitié d'une relecture visuelle que l'arithmétique peut trancher, donc le garde-fou qualité fonctionne encore sur une machine sans aucun LLM. Opt-in (`pip install 'md2star[pptx]'`) et non bloquant, même contrat de moteur que le Linter LLM ci-dessous. Voir [EXAMPLES.md §12](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#12-template-intelligent-pptx).
+- **PPTX intelligent gabarit** : `md2pptx --smart-layout --template <gabarit-designer.pptx>` mappe chaque diapositive sur les vraies mises en page nommées d'un gabarit de designer (une présentation marketing en propose typiquement 20 à 40) au lieu des ~7 mises en page génériques de Pandoc, l'ajustement étant **mesuré avant qu'aucun modèle ne soit interrogé**. Tout le mécanisme a sa propre section : [PPTX intelligent gabarit](#pptx-intelligent-gabarit).
 - **Audit de présentation** (`md2star audit <deck.pptx>`) : demandez à n'importe quel PowerPoint ce qui ne va pas chez lui — du texte sur du texte, des formes qui dépassent du cadre, des emplacements que personne n'a remplis, un corps sous le plancher de lisibilité de 12 pt, enfin du texte qui réclame plus de place que sa boîte ne lui en donne (signalé avec la taille qui, elle, tiendrait). Il lit **n'importe quel** `.pptx`, pas seulement ceux produits par md2star et ce n'est que de l'arithmétique sur l'OOXML : aucun modèle, aucun rendu, aucun réseau et le fichier n'est jamais réécrit. Code de sortie `1` en présence d'un défaut, `0` s'il ne reste que des observations (`--strict` compte aussi les débordements) : il s'insère donc tel quel dans un job CI ou un hook pre-commit ; `--json` pour les machines. Également `POST /audit` sur la surface HTTP, ce qui en fait gratuitement un outil MCP. Nécessite `pip install 'md2star[pptx]'`. Voir [EXAMPLES.md §12](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#12-template-intelligent-pptx).
 - **Résolution souple des chemins d'images** : URL, chemins absolus et chemins relatifs se comportent tous comme attendu. Une référence relative `![](images/foo.png)` se résout par rapport au dossier du fichier source, donc `md2docx sousdossier/fichier.md` depuis n'importe quel répertoire courant retrouve toujours l'image sans avoir à s'y déplacer d'abord.
 - **Identité visuelle sans configuration** : déposez un `template.docx` ou `template.pptx` à côté de votre Markdown : md2star le détecte automatiquement comme `--reference-doc`. À défaut, md2star télécharge par défaut (depuis la v2.5.0) le template `deraison.ai` et le met en cache ; passez `--no-remote-templates` ou `--offline` pour utiliser le template embarqué à la place.
@@ -418,6 +418,169 @@ principal : rien de plus à installer.
   de son export PDF.
 
 ---
+
+## PPTX intelligent gabarit
+
+`md2pptx --smart-layout --template <gabarit-designer.pptx>` mappe chaque
+diapositive sur les vraies mises en page nommées d'un gabarit de designer — une
+présentation marketing en propose typiquement 20 à 40 — au lieu des ~7 mises en
+page génériques de Pandoc.
+
+Opt-in (`pip install 'md2star[pptx]'`) puis non bloquant, sur le même contrat de
+moteur que le [Linter LLM](#fonctionnalités). Exemple travaillé dans
+[EXAMPLES.md §12](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#12-template-intelligent-pptx).
+
+### Comment une mise en page est choisie
+
+La sélection est **mesurée avant d'être jugée**.
+
+1. **Compter la diapositive.** Mots, puces, images, taille du tableau.
+2. **Mesurer chaque mise en page.** La géométrie EMU de chaque placeholder
+   devient une capacité de texte à un **plancher de 30 pt** — la règle 10/20/30
+   de Guy Kawasaki, qui transforme « est-ce que ça tient ? » en arithmétique
+   plutôt qu'en opinion.
+3. **Écarter l'impossible.** Une image sans emplacement image, un tableau sans
+   emplacement de corps : ces mises en page sortent d'emblée.
+4. **Classer le reste** par taux d'occupation autour d'une cible de ~55 %, pour
+   qu'une diapositive ne soit ni entassée ni perdue.
+5. **Interroger un modèle** parmi les candidates plausibles. Il voit les
+   quantités puis la capacité de chaque mise en page, non plus une simple liste
+   de caractéristiques.
+6. **Laisser la géométrie le corriger.** Qu'il nomme une mise en page incapable
+   de porter le contenu, la mesure l'emporte.
+7. **Confirmer visuellement.** Un modèle de vision compare ce choix aux vraies
+   vignettes rendues des candidates, pas seulement à leurs légendes — puis les
+   candidates qu'on lui montre viennent du classement géométrique de cette
+   diapositive, de sorte que l'arbitrage se fait entre des mises en page dont le
+   modèle de capacité dit qu'elles peuvent la porter. Classez-les plutôt dans
+   l'ordre du catalogue : vous obtenez un modèle de vision qui recommande une
+   composition à deux colonnes pour une couverture.
+
+Deux garde-fous se posent par-dessus :
+
+- **Interdiction d'aplatir la présentation.** Interrogé diapositive par
+  diapositive, un modèle répond volontiers la même mise en page à chaque fois,
+  or un arbitrage entre quasi-égaux n'autorise pas à redessiner. Dès qu'une mise
+  en page porte la moitié des diapositives, une correction supplémentaire vers
+  elle est déclinée puis le choix mesuré tient.
+- **Un mauvais choix se déplace, il ne se rétrécit pas.** Quand le juge signale
+  une diapositive que sa mise en page ne porte pas, la Ralph Eyeball Loop
+  re-sélectionne depuis le classement géométrique plutôt que de rétrécir le
+  corps sur une décision fausse dès le départ (`--eyeball-iterations N`). Une
+  mise en page déjà quittée n'est jamais reproposée.
+
+### Ce que la note de composition regarde
+
+Noté depuis la géométrie du gabarit, jamais depuis le goût :
+
+- du contenu entassé dans un coin ;
+- une boîte de corps placée au-dessus de son titre ;
+- des boîtes qui ne partagent aucun bord ;
+- une image focale posée sur une ligne des tiers ;
+- le **rapport d'aspect réel** de chaque image comparé à celui de sa boîte, lu
+  dans l'en-tête du fichier — si bien qu'un panorama va vers une mise en page
+  image-en-haut puis un portrait vers une moitié-moitié, sans qu'aucune de ces
+  deux règles soit écrite.
+
+Un écart est signalé dans les termes qu'un lecteur remarquerait : *il sera
+letterboxé ou recadré*. Les URL distantes puis les fichiers illisibles sont
+ignorés plutôt que pénalisés, car la sélection ne fait aucune E/S réseau puis une
+absence de signal n'est pas un mauvais signal. Un assembleur `python-pptx`
+construit ensuite la présentation directement sur la mise en page choisie.
+
+### `--reference-slides` : cloner la diapositive même du designer
+
+Cette option descend un cran plus bas que la mise en page. Elle **clone la
+diapositive d'exemple du designer** pour cette mise en page puis en remplace le
+contenu, si bien que la diapositive hérite de ses filets d'accent, de ses
+chevrons numérotés puis de ses traits décoratifs — les formes qui font qu'une
+présentation *se ressemble*, qu'aucune mise en page ne porte — avec son glyphe
+de puce, sa graisse, son corps puis sa couleur.
+
+Rien de ce qu'il a *écrit* ne suit. Chaque cadre de texte est soit rempli avec
+votre contenu, soit retiré, puis le retrait distingue le bouche-trou du dessin :
+le « 01 » d'une étape numérotée reste, une simple zone de texte part, une forme
+automatique est vidée mais conservée. Sa photo d'illustration est retirée du
+fichier lui-même, pas seulement de la diapositive.
+
+Une page qui ne peut pas porter honnêtement une diapositive est **refusée plutôt
+que remplie à moitié** :
+
+- une composition à trois colonnes exige trois puces ;
+- une diapositive avec image exige un emplacement photo, puis une page composée
+  autour d'une photographie exige une image — la photo d'illustration doit
+  partir, or le reste de la page a été composé autour de sa forme ;
+- une page portant un graphique ou un tableau est refusée d'office ;
+- une page est refusée quand votre texte devrait **descendre sous 12 pt** pour
+  tenir dans des cadres dimensionnés pour la ligne du designer. La bonne
+  question n'est pas « est-ce que ça déborde ? » mais « jusqu'où faudrait-il
+  rétrécir ? », puisqu'un moteur de rendu répond au débordement en rapetissant
+  le corps sans rien dire.
+
+Chaque refus repasse par l'assembleur ci-dessus : l'option ne fait donc
+qu'ajouter. Parmi les pages qui conviennent, une diapositive avec image prend
+celle dont l'emplacement est le plus grand, l'ajustement par contenance faisant
+de cet emplacement la taille réellement vue.
+
+### La Ralph Eyeball Loop a deux yeux, dont un seul a besoin d'un modèle
+
+Chaque passe exécute aussi l'audit déterministe sur le fichier qui vient d'être
+écrit puis renvoie chaque constat sous forme de verdict. `--eyeball-iterations N`
+fait donc un vrai travail sur une machine sans modèle de vision, sans
+LibreOffice, sans réseau.
+
+En cas de désaccord entre les deux yeux, **la mesure l'emporte** : un modèle qui
+regarde un rendu ne peut pas voir un débordement que le moteur a déjà masqué en
+rapetissant le corps.
+
+Étant une mesure, elle connaît aussi la réponse et pas seulement le grief. Un
+débordement est signalé avec la taille qui, elle, tiendrait, donc la correction
+exacte est appliquée d'un coup au lieu d'être approchée — puis quand cette taille
+passe elle-même sous 12 pt, la boucle cesse de proposer de rétrécir pour aller
+chercher une boîte plus grande.
+
+Le clonage aiguise cette jonction des deux côtés :
+
+- Une diapositive clonée est jugée face à **la page du designer dont elle sort**.
+  La candidate est littéralement cette page avec vos mots dedans, donc un écart
+  parle de cette diapositive plutôt que de la famille de mises en page.
+- La boucle gagne une correction qu'elle n'avait pas. Quand rien de borné ne
+  s'applique, elle déplace la diapositive sur **une autre démonstration de la
+  même mise en page par le designer** avant même d'envisager d'en changer. Ce
+  n'est qu'une fois toutes les pages jugées puis refusées que la diapositive
+  retombe.
+
+### La présentation est modifiable, pas seulement jolie
+
+- Le titre de chaque diapositive va dans l'emplacement de titre de la mise en
+  page elle-même, si bien que le fichier a de vraies entrées dans le volet plan
+  de PowerPoint puis un ordre de lecture correct pour un lecteur d'écran.
+- Chaque emplacement resté vide est supprimé, au lieu de livrer un fantôme
+  « Cliquez pour ajouter un titre » sous chaque calque.
+- Un bloc Pandoc `::: notes` arrive dans le volet des notes, non sur la
+  diapositive.
+- Le texte alternatif Markdown arrive dans la description accessible de chaque
+  image.
+
+### L'audit de clôture
+
+Chaque exécution se termine par un **audit de disposition déterministe** du
+fichier qui vient d'être écrit :
+
+- des formes hors du cadre ;
+- du texte sur du texte ;
+- des emplacements non remplis ;
+- un corps sous 12 pt ;
+- du **texte qu'un lecteur ne peut pas distinguer de ce qui est derrière** — le
+  rapport WCAG, le fond étant résolu à travers la diapositive, la mise en page
+  puis le masque, comme le fait un moteur de rendu ;
+- du texte qui réclame plus de place que sa boîte ne lui en donne, signalé avec
+  la taille qui, elle, tiendrait.
+
+Sans modèle, sans rendu, sans réseau. C'est la moitié d'une relecture visuelle
+que l'arithmétique peut trancher, ce qui explique que le garde-fou qualité
+fonctionne encore sur une machine sans aucun LLM.
+
 
 ## Guide d'utilisation
 
