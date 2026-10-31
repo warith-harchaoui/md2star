@@ -104,16 +104,10 @@ travail entre les deux consiste à poser l'un sur l'autre. Si vous n'avez encore
 ni les mots ni de gabarit, c'est cette catégorie qu'il vous faut, pas celle-ci.
 
 Là où ce n'est plus une affaire de goût, c'est sur ce qu'on vous rend.
-[SlidesGen-Bench](https://arxiv.org/html/2601.09487) (2026) a mesuré la
-modifiabilité comme un niveau lu dans la structure du fichier lui-même et
-constaté une **barrière structurelle** : sur les systèmes évalués, la force
-esthétique était *inversement* corrélée à la profondeur de modifiabilité et
-aucun n'était bon aux deux. Une présentation qui a l'air juste et qu'on ne peut
-pas modifier est une photo de présentation. Le pari de md2star est que cette
-barrière vient de ce que l'on *génère* le design au lieu d'en hériter : prenez
-le design du gabarit d'un vrai graphiste et la sortie reste de l'OOXML natif de
-bout en bout — de vrais emplacements, un vrai plan, les notes dans le volet des
-notes, du texte alternatif sur les images.
+
+[SlidesGen-Bench](https://arxiv.org/html/2601.09487) (2026) a mesuré la modifiabilité comme un niveau lu dans la structure du fichier lui-même puis constaté une **barrière structurelle** : sur les systèmes évalués, la force esthétique était *inversement* corrélée à la profondeur de modifiabilité, aucun n'étant bon aux deux. Une présentation qui a l'air juste puis qu'on ne peut pas modifier est une photo de présentation.
+
+Le pari de md2star est que cette barrière vient de ce que l'on *génère* le design au lieu d'en hériter. Prenez le design du gabarit d'un vrai graphiste : la sortie reste de l'OOXML natif de bout en bout — de vrais emplacements, un vrai plan, les notes dans le volet des notes, du texte alternatif sur les images.
 
 Et là où ces systèmes vérifient leur propre travail avec un modèle, md2star le
 mesure. [ACE](https://arxiv.org/abs/2608.24103) (2026) pilote sa boucle
@@ -628,7 +622,13 @@ md2docx brouillon.md --no-lint
 
 Avec `--lint`, une passe locale corrige les liens d'images cassés, les fences non fermées et les pipes de tableaux mal formés avant que Pandoc ne lise le fichier. Le même `--lint` remplit aussi les `![](src)` vides via un modèle de vision local, dans la langue même du document.
 
-**Quel modèle et comment il est choisi (contrat brief → engine).** md2star ne code aucun tag de modèle en dur. Il embarque un `md2star/llm.brief.yaml` versionné décrivant les besoins de ses passes IA (local, texte et vision, faible latence, multilingue). Au premier usage, [`best-engine-ai-helper`](https://pypi.org/project/best-engine-ai-helper/) résout ce brief contre *votre* machine et écrit le backend et le modèle concrets dans un `md2star/llm.engine.yaml` gitignoré ; chaque exécution suivante se contente de lire ce fichier engine. Tous les appels passent par `best_engine_ai_helper.llm.chat` ; le transport (Ollama local pour l'instant) gère lui-même le cycle de vie du démon : md2star ne lance jamais `ollama serve` ni `ollama pull`. Si aucun modèle local n'est résolu, `--lint` avertit sur stderr et retombe sur le Markdown original, si bien que la conversion réussit toujours. `best-engine-ai-helper` est une dépendance cœur, donc cela fonctionne d'emblée dès qu'un runtime de modèle local (Ollama aujourd'hui) est installé.
+**Quel modèle puis comment il est choisi (contrat brief → engine).** md2star ne code aucun tag de modèle en dur.
+
+Il embarque un `md2star/llm.brief.yaml` versionné décrivant les besoins de ses passes IA : local, texte avec vision, faible latence, multilingue. Au premier usage, [`best-engine-ai-helper`](https://pypi.org/project/best-engine-ai-helper/) résout ce brief contre *votre* machine puis écrit le backend avec le modèle concrets dans un `md2star/llm.engine.yaml` gitignoré. Chaque exécution suivante se contente de lire ce fichier engine.
+
+Tous les appels passent par `best_engine_ai_helper.llm.chat` ; le transport (Ollama local pour l'instant) gère lui-même le cycle de vie du démon : md2star ne lance jamais `ollama serve` ni `ollama pull`.
+
+Si aucun modèle local n'est résolu, `--lint` avertit sur stderr puis retombe sur le Markdown original, si bien que la conversion réussit toujours. `best-engine-ai-helper` étant une dépendance de base, cela fonctionne d'emblée.
 
 ---
 

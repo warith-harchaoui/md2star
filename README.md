@@ -96,15 +96,10 @@ between is mapping one onto the other. If you have neither the words nor a
 template yet, that category is the right tool and this one is not.
 
 Where it stops being a matter of taste is what you get back.
-[SlidesGen-Bench](https://arxiv.org/html/2601.09487) (2026) measured
-editability as a level from the file's own structure and found a **structural
-barrier**: across the systems it scored, aesthetic strength was *inversely*
-correlated with editability depth, and nothing was good at both. A deck that
-looks right and cannot be edited is a picture of a deck. md2star's bet is that
-the barrier is an artefact of *generating* design rather than inheriting it —
-take the design from a human designer's own template and the output stays
-native OOXML the whole way down: real placeholders, a real outline, speaker
-notes where notes go, alt text on the pictures.
+
+[SlidesGen-Bench](https://arxiv.org/html/2601.09487) (2026) measured editability as a level read from the file's own structure, and found a **structural barrier**: across the systems it scored, aesthetic strength was *inversely* correlated with editability depth, and nothing was good at both. A deck that looks right and cannot be edited is a picture of a deck.
+
+md2star's bet is that the barrier is an artefact of *generating* design rather than inheriting it. Take the design from a human designer's own template and the output stays native OOXML the whole way down: real placeholders, a real outline, speaker notes where notes go, alt text on the pictures.
 
 And where those systems verify their own work with a model, md2star measures
 it. [ACE](https://arxiv.org/abs/2608.24103) (2026) drives its self-correction
@@ -597,7 +592,13 @@ md2docx draft.md --no-lint
 
 When you pass `--lint`, a local model fixes broken image links, unclosed code fences, and malformed table pipes before Pandoc sees the file. The same `--lint` flag also fills empty `![](src)` alt text via a local vision model, written in the document's own language.
 
-**Which model, and how it's chosen (brief → engine contract).** md2star does not hard-code a model tag. It ships a committed `md2star/llm.brief.yaml` describing what its AI passes need (local, text + vision, low latency, multilingual). On first use, [`best-engine-ai-helper`](https://pypi.org/project/best-engine-ai-helper/) resolves that brief against *your* machine and writes the concrete backend + model pick to a gitignored `md2star/llm.engine.yaml`; every later run just reads that engine file. All calls go through `best_engine_ai_helper.llm.chat`, and the transport (currently local Ollama) owns the daemon/serving lifecycle: md2star never runs `ollama serve` / `ollama pull` itself. If no local model can be resolved, `--lint` warns on stderr and falls back to the original Markdown, so the conversion always succeeds. `best-engine-ai-helper` is a core dependency, so this works out of the box once a local model runtime (Ollama today) is installed.
+**Which model, and how it is chosen (brief → engine contract).** md2star does not hard-code a model tag.
+
+It ships a committed `md2star/llm.brief.yaml` describing what its AI passes need: local, text + vision, low latency, multilingual. On first use, [`best-engine-ai-helper`](https://pypi.org/project/best-engine-ai-helper/) resolves that brief against *your* machine and writes the concrete backend + model pick to a gitignored `md2star/llm.engine.yaml`. Every later run just reads that engine file.
+
+All calls go through `best_engine_ai_helper.llm.chat`, and the transport (currently local Ollama) owns the daemon and serving lifecycle: md2star never runs `ollama serve` or `ollama pull` itself.
+
+If no local model can be resolved, `--lint` warns on stderr and falls back to the original Markdown, so the conversion always succeeds. `best-engine-ai-helper` is a core dependency, so this works out of the box.
 
 ---
 
