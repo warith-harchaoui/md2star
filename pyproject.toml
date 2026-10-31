@@ -52,7 +52,7 @@ dependencies = [
     # comment in tests/test_i18n.py, which records what a wrong floor cost. The
     # cap is <4: os-helper 3.0.0 dropped its own CLI, which md2star never
     # imported, so nothing here is affected by that major.
-    "os-helper>=2.10.0,<4",
+    "os-helper>=2.10.0,<5",
     # best-engine-ai-helper is the suite's brief -> engine contract AND the LLM
     # transport. md2star commits `md2star/llm.brief.yaml`; on first use
     # `beh.ensure()` resolves it against this machine, writes the gitignored
