@@ -79,14 +79,11 @@ jamais votre machine.
 
 ## Pourquoi md2star ? (la réponse honnête au « utilise juste Pandoc »)
 
-Pandoc est un **convertisseur** ; md2star est un **livrable**. Pandoc
-transforme du Markdown en un `.docx` valide ; md2star transforme du Markdown
-en un `.docx` que vous pouvez envoyer à un client sans ouvrir Word, puis le
-relit en Markdown éditable quand il vous revient. md2star ne cherche pas à
-surpasser Pandoc : il *appelle* Pandoc et y ajoute le template soigné, la
-colle Mermaid/images/PDF, le chemin inverse `md2star twin` et un aller-retour
-vérifié en CI que Pandoc brut vous force à construire vous-même. Il se pose
-*au-dessus* de Pandoc ; il ne vous demande jamais d'abandonner Pandoc.
+Pandoc est un **convertisseur** ; md2star est un **livrable**.
+
+Pandoc transforme du Markdown en un `.docx` valide. md2star transforme du Markdown en un `.docx` que vous pouvez envoyer à un client sans ouvrir Word, puis le relit en Markdown éditable quand il vous revient.
+
+md2star ne cherche pas à surpasser Pandoc : il l'*appelle*, en y ajoutant le template soigné, la colle Mermaid/images/PDF, le chemin inverse `md2star twin`, enfin un aller-retour vérifié en CI que Pandoc brut vous force à construire vous-même. Il se pose *au-dessus* de Pandoc ; il ne vous demande jamais d'y renoncer.
 
 L'argumentaire complet, les manques de style que laisse sur vos bras un
 `pandoc rapport.md -o rapport.docx` brut, le seul point où « utilise juste
@@ -374,35 +371,32 @@ principal : rien de plus à installer.
 - **Notes de bas de page natives** : les footnotes Markdown (`texte[^1]` + `[^1]: …`) passent directement par l'extension `footnotes` de Pandoc et deviennent de vraies notes Word. Le DOCX obtient de vraies notes en bas de page, le PPTX les regroupe en notes par diapositive. Aucune syntaxe spéciale, aucun prétraitement. Voir [EXAMPLES.md §10](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#10-footnotes).
 - **Nettoyages automatiques** (petit confort discret) : téléchargement des images `http(s)://` pour l'intégration (opt-in), conversion des `<table>` HTML en pipe-tables Pandoc et isolation des images sur leur propre diapositive PPTX quand elles cohabitent avec un tableau (sinon Pandoc les supprime).
 - **Réversible par conception** : la sortie de md2star est un rendu *fidèle et récupérable*, pas une impasse à sens unique. Relisez le DOCX avec Pandoc et vos titres, votre emphase `**gras**`/`*italique*`/`` `code` ``, vos tableaux et vos listes reviennent intacts ; rendez jusqu'au PDF et relisez-le avec [kreuzberg](https://github.com/Goldziher/kreuzberg) : l'aller-retour `md → docx → pdf → texte` est l'identité exacte `g(f(x)) = x`, pour la prose, les listes à puces, les documents multi-pages et les notes de bas de page (vérifié en CI). Les conversions répétées convergent vers un **point fixe stable** au lieu de dériver. Voir [Fidélité de l'aller-retour](#fidélité-de-laller-retour).
-- **Jumeau Markdown (sens inverse)** : `md2star twin <fichier>` relit **n'importe quel PDF ou tout ce que LibreOffice sait convertir en PDF,** en un `<nom>.md` *éditable* **plus un dossier `assets/`**. Les tableaux reviennent en pipe-tables GFM ; chaque image intégrée est extraite puis reliée à nouveau. Ajoutez `--diagrams` (opt-in, nécessite un modèle local, voir le Linter LLM ci-dessous) : les figures en nœuds et flèches sont alors **ré-écrites en Mermaid** via une boucle de comparaison visuelle guidée par la cible. Un candidat est rendu avec le même `mmdc` que le sens direct et comparé à l'original extrait par un modèle de vision local ; le tout itère jusqu'à correspondance ; les autres figures vectorielles nettes sont ré-écrites en SVG éditable de la même façon. Le PNG extrait reste toujours conservé en repli, donc rien n'est jamais perdu. Tout se dégrade proprement : si le modèle local ne peut pas être résolu, les images restent de simples PNG extraits. Nécessite `pip install 'md2star[ocr]'`.
-- **Interface dans votre langue** : la CLI et la GUI locale lisent des
-  catalogues de messages par `os_helper.Catalog`, le chargeur partagé par la
-  suite (`gettext` de la bibliothèque standard en dessous, aucune
-  dépendance nouvelle), le français étant complet pour toute surface qu'une
-  personne lit : les constats et le verdict de l'audit, la ligne qui termine
-  chaque conversion, l'habillage de la GUI, chaque erreur typée avec son
-  indice et `md2star doctor` — dont le `--json` reste volontairement en
-  anglais, ses noms de section étant des clés et ses statuts des jetons que
-  l'on filtre. Les
-  déclencheurs diffèrent volontairement : la CLI n'obéit qu'à **`MD2STAR_LANG`**
-  — elle ne doit pas changer la langue d'une sortie qu'un script analyse sous
-  prétexte que `$LANG` le dit — tandis que la **GUI négocie `Accept-Language`**,
-  parce qu'un navigateur qui demande du français, c'est une personne qui
-  demande. Un message non traduit garde sa source anglaise : un catalogue
-  incomplet donne une interface partiellement traduite, jamais cassée. Les
-  *types* de constats de l'audit restent en anglais partout, puisque c'est le
-  vocabulaire machine que l'on filtre. Pour ajouter une langue, copiez
-  `md2star/data/locales/fr/LC_MESSAGES/md2star.po` puis lancez
-  `python scripts/compile_catalogs.py`, simple ligne de commande au-dessus de
-  `os_helper.compile_catalogs` — le `.mo` est écrit en Python, si bien que
-  `msgfmt` de GNU n'est jamais une dépendance de construction.
+- **Jumeau Markdown (sens inverse)** : `md2star twin <fichier>` relit **n'importe quel PDF ou tout ce que LibreOffice sait convertir en PDF,** en un `<nom>.md` *éditable* **plus un dossier `assets/`**. Les tableaux reviennent en pipe-tables GFM ; chaque image intégrée est extraite puis reliée à nouveau.
+  - Ajoutez `--diagrams` (opt-in, nécessite un modèle local — voir le Linter LLM ci-dessous) : les figures en nœuds puis flèches sont **ré-écrites en Mermaid** via une boucle de comparaison visuelle guidée par la cible. Un candidat est rendu avec le même `mmdc` que le sens direct, comparé à l'original extrait par un modèle de vision local, le tout itérant jusqu'à correspondance. Les autres figures vectorielles nettes sont ré-écrites en SVG éditable de la même façon.
+  - **Rien n'est jamais perdu** : le PNG extrait reste conservé en repli. Tout se dégrade proprement — si le modèle local ne peut pas être résolu, les images restent de simples PNG extraits.
+
+  Nécessite `pip install 'md2star[ocr]'`.
+- **Interface dans votre langue** : la CLI puis la GUI locale lisent des catalogues de messages par `os_helper.Catalog`, le chargeur partagé par la suite (`gettext` de la bibliothèque standard en dessous, aucune dépendance nouvelle). Le français est complet pour toute surface qu'une personne lit : les constats puis le verdict de l'audit, la ligne qui termine chaque conversion, l'habillage de la GUI, chaque erreur typée avec son indice, enfin `md2star doctor`.
+  - **Le `--json` de `doctor` reste volontairement en anglais**, ses noms de section étant des clés puis ses statuts des jetons que l'on filtre.
+  - **Les déclencheurs diffèrent volontairement.** La CLI n'obéit qu'à `MD2STAR_LANG` — elle ne doit pas changer la langue d'une sortie qu'un script analyse sous prétexte que `$LANG` le dit — tandis que la GUI négocie `Accept-Language`, parce qu'un navigateur qui demande du français, c'est une personne qui demande.
+  - **Un catalogue incomplet se dégrade, il ne casse pas.** Un message non traduit garde sa source anglaise. Les *types* de constats de l'audit restent en anglais partout, puisque c'est le vocabulaire machine que l'on filtre.
+  - **Pour ajouter une langue**, copiez `md2star/data/locales/fr/LC_MESSAGES/md2star.po` puis lancez `python scripts/compile_catalogs.py`, simple ligne de commande au-dessus de `os_helper.compile_catalogs`. Le `.mo` est écrit en Python, si bien que `msgfmt` de GNU n'est jamais une dépendance de construction.
 
 - **PPTX intelligent gabarit** : `md2pptx --smart-layout --template <gabarit-designer.pptx>` mappe chaque diapositive sur les vraies mises en page nommées d'un gabarit de designer (une présentation marketing en propose typiquement 20 à 40) au lieu des ~7 mises en page génériques de Pandoc, l'ajustement étant **mesuré avant qu'aucun modèle ne soit interrogé**. Tout le mécanisme a sa propre section : [PPTX intelligent gabarit](#pptx-intelligent-gabarit).
-- **Audit de présentation** (`md2star audit <deck.pptx>`) : demandez à n'importe quel PowerPoint ce qui ne va pas chez lui — du texte sur du texte, des formes qui dépassent du cadre, des emplacements que personne n'a remplis, un corps sous le plancher de lisibilité de 12 pt, enfin du texte qui réclame plus de place que sa boîte ne lui en donne (signalé avec la taille qui, elle, tiendrait). Il lit **n'importe quel** `.pptx`, pas seulement ceux produits par md2star et ce n'est que de l'arithmétique sur l'OOXML : aucun modèle, aucun rendu, aucun réseau et le fichier n'est jamais réécrit. Code de sortie `1` en présence d'un défaut, `0` s'il ne reste que des observations (`--strict` compte aussi les débordements) : il s'insère donc tel quel dans un job CI ou un hook pre-commit ; `--json` pour les machines. Également `POST /audit` sur la surface HTTP, ce qui en fait gratuitement un outil MCP. Nécessite `pip install 'md2star[pptx]'`. Voir [EXAMPLES.md §12](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#12-template-intelligent-pptx).
+- **Audit de présentation** (`md2star audit <deck.pptx>`) : demandez à n'importe quel PowerPoint ce qui ne va pas chez lui — du texte sur du texte, des formes qui dépassent du cadre, des emplacements que personne n'a remplis, un corps sous le plancher de lisibilité de 12 pt, enfin du texte qui réclame plus de place que sa boîte ne lui en donne (signalé avec la taille qui, elle, tiendrait).
+  - Il lit **n'importe quel** `.pptx`, pas seulement ceux produits par md2star.
+  - Ce n'est que de l'arithmétique sur l'OOXML : aucun modèle, aucun rendu, aucun réseau, puis le fichier n'est jamais réécrit.
+  - Code de sortie `1` en présence d'un défaut, `0` s'il ne reste que des observations (`--strict` compte aussi les débordements) : il s'insère donc tel quel dans un job CI ou un hook pre-commit. `--json` pour les machines.
+  - `POST /audit` sur la surface HTTP expose la même chose, ce qui en fait gratuitement un outil MCP.
+
+  Nécessite `pip install 'md2star[pptx]'`. Voir [EXAMPLES.md §12](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#12-template-intelligent-pptx).
 - **Résolution souple des chemins d'images** : URL, chemins absolus et chemins relatifs se comportent tous comme attendu. Une référence relative `![](images/foo.png)` se résout par rapport au dossier du fichier source, donc `md2docx sousdossier/fichier.md` depuis n'importe quel répertoire courant retrouve toujours l'image sans avoir à s'y déplacer d'abord.
 - **Identité visuelle sans configuration** : déposez un `template.docx` ou `template.pptx` à côté de votre Markdown : md2star le détecte automatiquement comme `--reference-doc`. À défaut, md2star télécharge par défaut (depuis la v2.5.0) le template `deraison.ai` et le met en cache ; passez `--no-remote-templates` ou `--offline` pour utiliser le template embarqué à la place.
 - **CLI auto-documentée** : chaque wrapper accepte `--help` / `-h` et affiche d'abord les options propres à md2star, puis `pandoc --help` : toute la surface de conversion est à une commande de distance. Essayez `md2docx --help`, `md2pptx --help` ou `md2star --help`. `md2star doctor` va plus loin et signale aussi les extras optionnels (`[pptx]` / `[ocr]` / `[api]` / `[mcp]`), chacun avec ce qu'il débloque puis la commande `pip` exacte : un extra pip ne laisse aucune trace à l'exécution, sans quoi le seul moyen de découvrir qu'une fonction manque est de la lancer et de la voir échouer.
-- **Linter LLM en option** : une passe locale corrige les erreurs de syntaxe (liens d'images cassés, fences non fermées, pipes mal formés) **avant** que Pandoc ne lise le fichier. **Désactivé par défaut**, pour que les conversions restent déterministes ; ajoutez `--lint` pour l'activer. Le backend et le modèle sont choisis par le **contrat brief → engine** de la suite : md2star embarque un `md2star/llm.brief.yaml` versionné décrivant les besoins de ses passes IA ; [`best-engine-ai-helper`](https://pypi.org/project/best-engine-ai-helper/) le résout contre *votre* machine au premier usage, en écrivant le choix concret dans un `md2star/llm.engine.yaml` gitignoré. **Aucun tag de modèle n'est codé en dur dans le paquet** ; le transport (Ollama local pour l'instant) gère lui-même le cycle de vie du démon, donc md2star ne lance jamais `ollama serve` ni `ollama pull`. Si aucun modèle local n'est résolu, `--lint` avertit et retombe sur le Markdown original : la passe n'est jamais bloquante.
+- **Linter LLM en option** : une passe locale corrige les erreurs de syntaxe — liens d'images cassés, fences non fermées, pipes mal formés — **avant** que Pandoc ne lise le fichier. **Désactivé par défaut**, pour que les conversions restent déterministes ; ajoutez `--lint` pour l'activer.
+  - **Le modèle n'est pas nommé ici.** Le backend puis le modèle viennent du **contrat brief → engine** de la suite : md2star embarque un `md2star/llm.brief.yaml` versionné décrivant les besoins de ses passes IA, puis [`best-engine-ai-helper`](https://pypi.org/project/best-engine-ai-helper/) le résout contre *votre* machine au premier usage, en écrivant le choix concret dans un `md2star/llm.engine.yaml` gitignoré. **Aucun tag de modèle n'est codé en dur dans le paquet.**
+  - **Le transport possède le démon.** Ollama local pour l'instant, ce qui veut dire que md2star ne lance jamais `ollama serve` ni `ollama pull`.
+  - **La passe n'est jamais bloquante.** Si aucun modèle local n'est résolu, `--lint` avertit puis retombe sur le Markdown original.
 - **Texte alternatif rédigé par IA** : avec `--lint`, chaque `![](src)` au texte alternatif vide reçoit une description générée par un modèle de vision, dans la langue même du document, en s'appuyant sur le titre et la prose environnants (mise en cache par image). Le modèle de vision provient du même engine résolu que le linter.
 - **Compagnon : adaptateur de templates IA** : pour brander un template PPTX
   d'entreprise dont les noms de mises en page ne suivent pas la convention
@@ -917,16 +911,11 @@ l'organisation du projet et la checklist de PR. En résumé : `make dev`
 
 ## Variante Rust
 
-Un projet distinct, [`md2star-rs`](https://github.com/warith-harchaoui/md2star-rs), poursuit le
-même objectif « Markdown en entrée, DOCX/PPTX fidèle en sortie » sans Pandoc : un pipeline
-lecteur → AST → écrivain entièrement en Rust, compilé en un binaire statique unique sans
-dépendance d'exécution — pas d'installation de Pandoc requise, ce qui le rend utilisable sur
-téléphone, sur des machines verrouillées et (à terme) en WASM. La contrepartie : c'est un
-sous-ensemble ciblé, pas un remplacement — pas de bibliographie ni de citations (aucun
-processeur CSL Rust stable pour l'instant), pas de conversion mathématique vers OMML, pas
-d'images intégrées ni de relations d'hyperliens dans le moteur PPTX. Utilisez `md2star-rs` pour
-un binaire unique sans installation, pour du Markdown → Word/PowerPoint simple ; restez sur
-`md2star` (ce paquet) pour les citations, les mathématiques et la fidélité maximale.
+Un projet distinct, [`md2star-rs`](https://github.com/warith-harchaoui/md2star-rs), poursuit le même objectif « Markdown en entrée, DOCX/PPTX fidèle en sortie » sans Pandoc : un pipeline lecteur → AST → écrivain entièrement en Rust, compilé en un binaire statique unique sans dépendance d'exécution. Pas d'installation de Pandoc requise, ce qui le rend utilisable sur téléphone, sur des machines verrouillées, à terme en WASM.
+
+La contrepartie est qu'il s'agit d'un sous-ensemble ciblé plutôt que d'un remplacement. Absents : la bibliographie puis les citations (aucun processeur CSL Rust stable pour l'instant), la conversion mathématique vers OMML, les images intégrées puis les relations d'hyperliens dans le moteur PPTX.
+
+Prenez `md2star-rs` pour un binaire unique sans installation, sur du Markdown → Word/PowerPoint simple. Restez sur `md2star` pour les citations, les mathématiques puis la fidélité maximale.
 
 ## Auteur
 

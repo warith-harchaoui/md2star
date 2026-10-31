@@ -361,32 +361,28 @@ same wheel, not a separate download).
 - **Native Footnotes**: Markdown footnotes (`text[^1]` + `[^1]: …`) pass straight through Pandoc's `footnotes` extension to real Word footnotes: DOCX gets true bottom-of-page footnotes, PPTX collects them into per-slide notes. No special syntax, no preprocessing. See [EXAMPLES.md §10](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#10-footnotes).
 - **Automatic Cleanups** (quiet quality-of-life): remote `http(s)://` images downloaded for embedding (opt-in), HTML `<table>` blocks converted to Pandoc pipe-tables, and standalone images split off PPTX slides that contain a table (Pandoc otherwise drops them).
 - **Reversible by Design**: md2star's output is a *faithful, recoverable* rendering, not a one-way dead end. Read the DOCX back with Pandoc and your headings, `**bold**`/`*italic*`/`` `code` `` emphasis, tables, and lists come back intact; render all the way to PDF and read it back with [kreuzberg](https://github.com/Goldziher/kreuzberg), and the `md → docx → pdf → text` round-trip is the exact identity `g(f(x)) = x` for prose, bullet lists, multi-page docs, and footnotes (CI-enforced). Repeated conversions converge to a **stable fixed point** rather than drifting. See [Round-trip fidelity](#round-trip-fidelity).
-- **Markdown twin (reverse direction)**: `md2star twin <file>` reads **any PDF, or anything LibreOffice can convert to one,** back into an *editable* `<stem>.md` **plus an `assets/` folder**. Tables return as GFM pipe tables and every embedded image is scraped out and re-linked. Add `--diagrams` (opt-in, needs a local model, see the LLM Linter below) and node-and-edge figures are **re-authored as Mermaid** via a *target-matching eyeball loop*: render a candidate with the same `mmdc` the forward path uses, compare it against the scraped original with a local vision model, and iterate until it matches; other clean vector figures are re-authored as editable SVG the same way. The scraped PNG is always kept as a fallback so nothing is ever lost. Everything degrades gracefully: if the local model can't be resolved, images simply stay as scraped PNGs. Needs `pip install 'md2star[ocr]'`.
-- **Interface in your language**: the CLI and the local GUI read message
-  catalogues through `os_helper.Catalog`, the loader shared across the suite
-  (stdlib `gettext` underneath, no new dependency), with French complete for
-  every surface a person reads: the audit's findings and verdict, the line
-  every conversion ends on, the GUI's chrome, every typed error with its hint,
-  and `md2star doctor` — whose `--json` deliberately stays English, since its
-  section names are dictionary keys and its statuses are tokens you grep.
-  The triggers differ on purpose: the CLI answers to **`MD2STAR_LANG` only** —
-  it must not change the language of output a script greps because `$LANG` says
-  so — while the **GUI negotiates `Accept-Language`**, because a browser asking
-  for French is a person asking. Untranslated messages keep their English
-  source, so a partial catalogue is a partly translated interface rather than a
-  broken one, and the audit's finding *kinds* stay English everywhere since
-  they are the machine vocabulary you grep. Add a language by copying
-  `md2star/data/locales/fr/LC_MESSAGES/md2star.po` and running
-  `python scripts/compile_catalogs.py`, which is a thin command line over
-  `os_helper.compile_catalogs` — the `.mo` is written in Python, so GNU
-  gettext's `msgfmt` is never a build dependency.
+- **Markdown twin (reverse direction)**: `md2star twin <file>` reads **any PDF, or anything LibreOffice can convert to one,** back into an *editable* `<stem>.md` **plus an `assets/` folder**. Tables return as GFM pipe tables, and every embedded image is scraped out then re-linked.
+  - Add `--diagrams` (opt-in, needs a local model — see the LLM Linter below) and node-and-edge figures are **re-authored as Mermaid** through a *target-matching eyeball loop*: render a candidate with the same `mmdc` the forward path uses, compare it against the scraped original with a local vision model, and iterate until it matches.
+  - Other clean vector figures are re-authored as editable SVG the same way.
+- **Interface in your language**: the CLI and the local GUI read message catalogues through `os_helper.Catalog`, the loader shared across the suite (stdlib `gettext` underneath, no new dependency). French is complete for every surface a person reads: the audit's findings and verdict, the line every conversion ends on, the GUI's chrome, every typed error with its hint, and `md2star doctor`.
+  - **`doctor --json` deliberately stays English**, since its section names are dictionary keys and its statuses are tokens you grep.
+  - **The triggers differ on purpose.** The CLI answers to `MD2STAR_LANG` *only* — it must not change the language of output a script greps just because `$LANG` says so — while the GUI negotiates `Accept-Language`, because a browser asking for French is a person asking.
+  - **A partial catalogue degrades, it does not break.** Untranslated messages keep their English source. The audit's finding *kinds* stay English everywhere, since they are the machine vocabulary you grep.
+  - **Adding a language** means copying `md2star/data/locales/fr/LC_MESSAGES/md2star.po` and running `python scripts/compile_catalogs.py`, a thin command line over `os_helper.compile_catalogs`. The `.mo` is written in Python, so GNU gettext's `msgfmt` is never a build dependency.
 
 - **Template-Intelligent PPTX**: `md2pptx --smart-layout --template <designer.pptx>` maps each slide onto a real designer template's own named layouts (a marketing deck routinely ships 20-40) instead of Pandoc's ~7 generic ones, with the fit **measured before any model is asked**. The whole mechanism has its own section: [Template-Intelligent PPTX](#template-intelligent-pptx).
-- **Deck Audit** (`md2star audit <deck.pptx>`): ask any PowerPoint what is wrong with it — text overlapping text, shapes past the canvas edge, placeholders nobody filled, type under a 12 pt legibility floor, and text that needs more room than its box gives it (reported with the size that *would* fit). It reads **any** `.pptx`, not only one md2star produced, and it is pure arithmetic on the OOXML: no model, no renderer, no network, and the file is never written to. Exits `1` on a defect and `0` when only observations remain (`--strict` counts overruns too), so it drops straight into CI or a pre-commit hook; `--json` for machines. Also `POST /audit` on the HTTP surface, which makes it an MCP tool for free. Needs `pip install 'md2star[pptx]'`. See [EXAMPLES.md §12](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#12-template-intelligent-pptx).
+- **Deck Audit** (`md2star audit <deck.pptx>`): ask any PowerPoint what is wrong with it — text overlapping text, shapes past the canvas edge, placeholders nobody filled, type under a 12 pt legibility floor, and text that needs more room than its box gives it (reported with the size that *would* fit).
+  - It reads **any** `.pptx`, not only one md2star produced.
+  - It is pure arithmetic on the OOXML: no model, no renderer, no network, and the file is never written to.
+  - It exits `1` on a defect and `0` when only observations remain (`--strict` counts overruns too), so it drops straight into CI or a pre-commit hook. `--json` for machines.
+  - `POST /audit` on the HTTP surface exposes the same thing, which makes it an MCP tool as well.
 - **Graceful Image Path Resolution**: URLs, absolute paths, and relative paths all "just work". Relative `![](images/foo.png)` references resolve against the input file's directory, so `md2docx subdir/file.md` from any cwd still finds the image. No need to `cd` into the source folder first.
 - **Zero-Config Branding**: drop a `template.docx` / `template.pptx` next to your Markdown and md2star will pick it up automatically as `--reference-doc`. If neither exists, md2star fetches the `deraison.ai` default template by default (since v2.5.0) and caches it; pass `--no-remote-templates` / `--offline` to use the bundled template instead.
 - **Discoverable CLI**: every wrapper supports `--help` / `-h` and prints the md2star-specific flags followed by `pandoc --help`, so the full conversion surface is one command away. Try `md2docx --help`, `md2pptx --help`, or `md2star --help`. `md2star doctor` goes further and reports the optional extras too (`[pptx]` / `[ocr]` / `[api]` / `[mcp]`), each with what it unlocks and the exact `pip install` — a pip extra leaves no trace at runtime, so otherwise the only way to find out a feature is missing is to run it and watch it fail.
-- **Opt-in LLM Linter**: a local model pass fixes syntax-level mistakes (broken image links, unclosed fences, malformed pipes) **before** Pandoc parses the file. **Off by default** so conversions stay deterministic; pass `--lint` to opt in. The backend and model are chosen by the suite's **brief → engine contract**: md2star ships a committed `md2star/llm.brief.yaml` describing what its AI passes need, and [`best-engine-ai-helper`](https://pypi.org/project/best-engine-ai-helper/) resolves it against *your* machine on first use, writing the concrete pick to a gitignored `md2star/llm.engine.yaml`. There is **no hard-coded model tag anywhere in the package**; the transport (currently local Ollama) owns the daemon/serving lifecycle, so md2star never runs `ollama serve` / `ollama pull` itself. If no local model can be resolved, `--lint` warns and falls back to the original Markdown: the pass is never load-bearing.
+- **Opt-in LLM Linter**: a local model pass fixes syntax-level mistakes — broken image links, unclosed fences, malformed pipes — **before** Pandoc parses the file. **Off by default** so conversions stay deterministic; pass `--lint` to opt in.
+  - **The model is not named here.** The backend and model come from the suite's **brief → engine contract**: md2star ships a committed `md2star/llm.brief.yaml` describing what its AI passes need, and [`best-engine-ai-helper`](https://pypi.org/project/best-engine-ai-helper/) resolves it against *your* machine on first use, writing the concrete pick to a gitignored `md2star/llm.engine.yaml`. There is **no hard-coded model tag anywhere in the package**.
+  - **The transport owns the daemon.** Currently local Ollama, which means md2star never runs `ollama serve` or `ollama pull` itself.
+  - **The pass is never load-bearing.** If no local model can be resolved, `--lint` warns and falls back to the original Markdown.
 - **AI-Drafted Alt-Text**: with `--lint`, every empty `![](src)` reference gets a vision-model-drafted alt text in the document's own language, using the surrounding heading and prose as context (cached per image). The vision model comes from the same resolved engine as the linter.
 - **Companion: AI Template Adapter**: when you need to brand a corporate
   PPTX template that doesn't follow Pandoc's standard layout names, use the
@@ -863,14 +859,11 @@ project layout, and PR checklist. The TL;DR is `make dev` +
 
 ## Rust spin-off
 
-A separate project, [`md2star-rs`](https://github.com/warith-harchaoui/md2star-rs), reaches for
-the same "Markdown in, faithful DOCX/PPTX out" goal without Pandoc: a pure-Rust reader → AST →
-writer pipeline, compiled into a single static binary with zero runtime dependency — no Pandoc
-install, so it runs on phones, locked-down machines, and (eventually) WASM. The trade-off: it's
-a focused subset, not a replacement — no bibliography/citations (no stable Rust CSL processor
-yet), no math→OMML, no embedded images or hyperlink relations in the PPTX backend. Use
-`md2star-rs` when you need a zero-install single binary for straightforward Markdown →
-Word/PowerPoint; keep using `md2star` (this package) for citations, math, and maximum fidelity.
+A separate project, [`md2star-rs`](https://github.com/warith-harchaoui/md2star-rs), reaches for the same "Markdown in, faithful DOCX/PPTX out" goal without Pandoc: a pure-Rust reader → AST → writer pipeline, compiled into a single static binary with zero runtime dependency. No Pandoc install, so it runs on phones, on locked-down machines, and eventually in WASM.
+
+The trade-off is that it is a focused subset rather than a replacement. Missing: bibliography and citations (no stable Rust CSL processor yet), math → OMML, embedded images and hyperlink relations in the PPTX backend.
+
+Reach for `md2star-rs` when you need a zero-install single binary for straightforward Markdown → Word/PowerPoint. Stay on `md2star` for citations, math and maximum fidelity.
 
 ## Author
 
