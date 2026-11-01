@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.11.1] - 2026-11-01
+
+### Fixed
+
+- **The published metadata capped `os-helper<4`, so nobody installing from the
+  index could reach 4.0.0.** The ceiling was raised in this repository on
+  2026-10-31, but a wheel's `Requires-Dist` is frozen at upload: until this
+  release a fresh resolve still pulled os-helper 3.1.0 and the raised ceiling
+  reached no installer at all. This release is what carries the `<5` to the
+  index. Both call sites guard with `osh.file_exists` before hashing; the comment that
+  justified the old fallback was corrected on 2026-10-31, when it became untrue.
+
 ## [3.11.0] - 2026-10-28
 
 ### Added
