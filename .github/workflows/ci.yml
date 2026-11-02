@@ -16,11 +16,14 @@ concurrency:
 
 jobs:
   # ──────────────────────────────────────────────────────────────────
-  # Static lint via ruff — fast fail on style / unused-import /
-  # common-bug-pattern regressions. Configuration in pyproject.toml.
+  # Les trois gardes statiques dans UN coureur : ruff, la densite de
+  # commentaires, shellcheck. Ils tournaient dans trois jobs separes, donc
+  # trois checkouts et deux installations de Python pour lancer trois
+  # commandes qui durent quelques secondes chacune. L'installation coutait
+  # plus cher que le travail.
   # ──────────────────────────────────────────────────────────────────
-  lint:
-    name: ruff
+  gate:
+    name: ruff + commentaires + shellcheck
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -29,56 +32,19 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      # Pinned: an unpinned `--upgrade ruff` let ruff 0.16 change default
-      # behaviour under the gate. Bump this deliberately, not by surprise.
-      - run: python -m pip install "ruff==0.15.21"
-      # scripts/ is in the gate too: the developer tools there (the comment
-      # auditor, the trigger check, the VLM bench) are Python the project
-      # owns, and they were drifting ungated.
-      - run: ruff check md2star/ tests/ scripts/
+      - name: Outils
+        # ruff epingle : une installation libre l'a deja fait changer de
+        # comportement sur les blocs de code Markdown du jour au lendemain.
+        run: python -m pip install "ruff==0.15.21" "click>=8.1,<9"
+      - name: ruff
+        run: ruff check md2star/ tests/ scripts/
+      - name: Densite de commentaires
+        run: python scripts/audit_comments.py md2star
+      - name: shellcheck
+        run: |
+          shellcheck --version
+          shellcheck scripts/install.sh scripts/uninstall.sh scripts/test.sh scripts/vendor_gui.sh scripts/brew.sh
 
-  # ──────────────────────────────────────────────────────────────────
-  # Comment-density gate (house coding-standard rule 4). Fails when any
-  # non-glue source file drops below the 15% floor. Pure stdlib, so no
-  # install step is needed.
-  # ──────────────────────────────────────────────────────────────────
-  comment-density:
-    name: comment-density
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-      # click only: the script is a click command now, like every other in
-      # the suite. This job deliberately installs nothing else — it reads
-      # source, it does not import md2star.
-      - run: python -m pip install --quiet "click>=8.1,<9"
-      - run: python scripts/audit_comments.py md2star
-
-  # ──────────────────────────────────────────────────────────────────
-  # Static shellcheck on the install / uninstall / test scripts.
-  # Catches quoting bugs, unset variables, common shell-only issues.
-  # ──────────────────────────────────────────────────────────────────
-  shellcheck:
-    name: shellcheck
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v7
-      # ubuntu-26.04 ships shellcheck 0.11.0 in the image, so installing it
-      # meant one more `apt-get update` against the mirror for a binary that
-      # was already on the box. The version is printed instead, so the log
-      # still records what did the judging.
-      - run: shellcheck --version
-      - run: shellcheck scripts/install.sh scripts/uninstall.sh scripts/test.sh scripts/vendor_gui.sh scripts/brew.sh
-
-  # ──────────────────────────────────────────────────────────────────
-  # Unit tests across the supported Python interpreter range.
-  # Ubuntu only — the Python pipeline has no OS-specific code; the
-  # 3-OS integration matrix below covers platform regressions.
-  # ──────────────────────────────────────────────────────────────────
   pytest:
     name: pytest / py${{ matrix.python-version }}
     runs-on: ubuntu-latest
@@ -270,7 +236,7 @@ jobs:
     name: build wheel + sdist
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [lint, pytest]
+    needs: [gate, pytest]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -411,7 +377,11 @@ jobs:
         # reads like somebody pressed cancel. The two other repos in the
         # suite with a three-OS matrix were already on macos-latest and were
         # green throughout. Do not re-pin a dated macOS image.
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # Les trois OS sur demande ou sur pull request ; sur un push, ubuntu
+        # seul. Trois coureurs a chaque commit pour une difference de
+        # plateforme qui bouge quelques fois par an, c'est le genre de depense
+        # qu'on ne remarque que sur la facture.
+        os: ${{ github.event_name == 'push' && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest","macos-latest","windows-latest"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -489,7 +459,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_TO_PYPI == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [lint, shellcheck, pytest, ocr-roundtrip, cli-smoke, build, integration]
+    needs: [gate, pytest, ocr-roundtrip, cli-smoke, build, integration]
     environment:
       name: pypi
       url: https://pypi.org/project/md2star/
