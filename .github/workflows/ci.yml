@@ -137,6 +137,17 @@ jobs:
           echo "$HOME/pandoc/bin" >> "$GITHUB_PATH"
           # GITHUB_PATH only reaches later steps, so prove it here by full path.
           "$HOME/pandoc/bin/pandoc" --version | head -1
+      # The .deb files LibreOffice pulls, kept between runs. The timeouts below
+      # catch a mirror that goes silent, not one that trickles: on 2026-11-04
+      # (run 41891873186) azure.archive.ubuntu.com served libreoffice-core for
+      # 11.5 minutes without ever pausing 30 s, and the job hit its 25-minute
+      # ceiling mid-download, which GitHub reports as "cancelled". With the
+      # archives restored from the cache, apt only fetches what changed.
+      - name: Cache LibreOffice packages
+        uses: actions/cache@v6
+        with:
+          path: ~/apt-archives
+          key: apt-libreoffice-writer-${{ runner.os }}-${{ runner.arch }}-v1
       - name: LibreOffice (the one apt left, with the mirror on a deadline)
         run: |
           set -euo pipefail
@@ -151,8 +162,15 @@ jobs:
           # Word-split on purpose: these are six separate argv entries, not one.
           # shellcheck disable=SC2086
           sudo apt-get $apt_opts update
+          # Download into the cached folder instead of /var/cache/apt/archives;
+          # apt refuses to start unless its partial/ subfolder already exists.
+          mkdir -p "$HOME/apt-archives/partial"
           # shellcheck disable=SC2086
-          sudo apt-get $apt_opts install -y --no-install-recommends libreoffice-writer
+          sudo apt-get $apt_opts -o Dir::Cache::Archives="$HOME/apt-archives" \
+            install -y --no-install-recommends libreoffice-writer
+          # apt leaves root-owned files (its lock among them) that the cache
+          # step, running as the runner user, could not read back to save.
+          sudo chown -R "$(id -u):$(id -g)" "$HOME/apt-archives"
           command -v soffice
       - name: Install md2star + dev deps (includes kreuzberg, the g reader)
         run: |

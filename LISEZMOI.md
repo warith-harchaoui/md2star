@@ -579,11 +579,25 @@ de `:::: {.columns}` sont remplies.
 
 Les indices explicites court-circuitent les modèles : `## Titre {layout="Big
 Number"}` nomme une mise en page exactement ; `{.statement}`, `{.bignumber}`,
-`{.quote}`, `{.recap}`, `{.agenda}`, `{.section}`, `{.closing}` nomment un rôle ;
-« Qu'est-ce que nous avons appris » / « What we have learned » va sur `Recap` ;
-un `#` après la couverture est un intercalaire. `MD2STAR_LLM_MODEL` /
-`MD2STAR_VLM_MODEL` choisissent les modèles, `--refresh-catalog` reconstruit le
-catalogue en cache.
+`{.quote}`, `{.recap}`, `{.agenda}`, `{.section}`, `{.closing}`, `{.photo}`
+nomment un rôle ; « Qu'est-ce que nous avons appris » / « What we have learned »
+va sur `Recap` ; un `#` après la couverture est un intercalaire.
+`MD2STAR_LLM_MODEL` / `MD2STAR_VLM_MODEL` choisissent les modèles,
+`--refresh-catalog` reconstruit le catalogue en cache.
+
+`{.photo}` (ou `{layout="Photo"}`) pose l'image dans le cadre d'image plein
+cadre du gabarit, recadrée pour le couvrir, le titre dans le bandeau ; le
+bandeau, le logo et le pied sont redessinés au-dessus de la photo, les autres
+mots partent dans les notes. Les modèles ne choisissent jamais cette page
+d'eux-mêmes. Un bloc de code va dans une seule boîte, une ligne source par
+paragraphe, en `MD2STAR_MONO_FONT` s'il est défini (sinon la chasse fixe du
+gabarit, sinon Consolas).
+
+md2star choisit aussi où finit chaque ligne d'un titre, d'une légende ou d'une
+puce, avec les vraies chasses de la police : jamais de fin de ligne sur « de »
+ni sur « the », jamais « : » ni « % » en début de ligne, un nombre reste avec
+son unité. Les coupures sont écrites en sauts de ligne explicites, que
+PowerPoint et LibreOffice gardent. Les notes restent au moteur de rendu.
 
 ### L'audit de clôture
 
@@ -591,7 +605,8 @@ Chaque exécution se termine par un **audit de disposition déterministe** du
 fichier qui vient d'être écrit :
 
 - des formes hors du cadre ;
-- du texte sur du texte ;
+- du texte sur du texte, et une image qui couvre plus de 10 % d'une zone de
+  texte (un fond plein cadre, 80 % du canevas et plus, ne compte pas) ;
 - des emplacements non remplis ;
 - un corps sous 12 pt ;
 - du **texte qu'un lecteur ne peut pas distinguer de ce qui est derrière** — le

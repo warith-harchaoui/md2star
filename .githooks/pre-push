@@ -96,6 +96,14 @@ for sha in $SHAS; do
     echo "[pre-push]   ruff format --check..."
     ruff format --check . || { echo "[pre-push] ruff format failed - push aborted."; exit 1; }
 
+    # CI's gate job runs this too; without it here, a file under the 15 %
+    # floor passed this hook and turned cc3cde7 red only once it was pushed.
+    echo "[pre-push]   comment density (rule 4)..."
+    python scripts/audit_comments.py md2star >/dev/null || {
+      python scripts/audit_comments.py md2star | grep -E "FLOOR-FAIL|floor"
+      echo "[pre-push] comment density below the floor - push aborted."; exit 1;
+    }
+
     echo "[pre-push]   full pytest sweep (unit + integration)..."
     # A gate must never hang. This sweep deliberately clears the marker filter
     # with -m "", which wakes integration tests that reach the network; yt-dlp

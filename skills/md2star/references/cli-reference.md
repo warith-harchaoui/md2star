@@ -52,11 +52,14 @@ more than the defaults (branding, citations, offline, phase control).
 - `--refresh-catalog` — rebuild the cached layout catalog (captions included).
 - Layout hints in the Markdown bypass the models: `## T {layout="Big Number"}`
   (exact layout name), `{.statement}` `{.bignumber}` `{.quote}` `{.recap}`
-  `{.agenda}` `{.section}` `{.closing}`; a "What we have learned" /
+  `{.agenda}` `{.section}` `{.closing}` `{.photo}` (full-bleed picture frame,
+  title in the banner, other words to the notes); a "What we have learned" /
   "Qu'est-ce que nous avons appris" title maps to a `Recap` layout; an `#` past
   the cover is a section divider.
 - Environment: `MD2STAR_LLM_MODEL` / `MD2STAR_VLM_MODEL` override the models of
-  `llm.engine.yaml` for layout selection and the eyeball judge.
+  `llm.engine.yaml` for layout selection and the eyeball judge;
+  `MD2STAR_MONO_FONT` sets the face of code blocks (default: the template's
+  mono face, else Consolas).
 - `md2star audit --min-pt N` — also fail on content text under N pt (footer
   chrome exempt).
 

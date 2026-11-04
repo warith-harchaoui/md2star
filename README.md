@@ -549,17 +549,32 @@ slide's `---` stay with it; both columns of `:::: {.columns}` are filled.
 
 Explicit hints bypass the models: `## Title {layout="Big Number"}` names a
 layout exactly; `{.statement}`, `{.bignumber}`, `{.quote}`, `{.recap}`,
-`{.agenda}`, `{.section}`, `{.closing}` name a role; a "What we have learned"
-/ "Qu'est-ce que nous avons appris" slide goes to `Recap`; an `#` past the
-cover is a section divider. `MD2STAR_LLM_MODEL` / `MD2STAR_VLM_MODEL` pick the
-models, `--refresh-catalog` rebuilds the cached layout catalog.
+`{.agenda}`, `{.section}`, `{.closing}`, `{.photo}` name a role; a "What we
+have learned" / "Qu'est-ce que nous avons appris" slide goes to `Recap`; an `#`
+past the cover is a section divider. `MD2STAR_LLM_MODEL` / `MD2STAR_VLM_MODEL`
+pick the models, `--refresh-catalog` rebuilds the cached layout catalog.
+
+`{.photo}` (or `{layout="Photo"}`) puts the image inside the template's
+full-bleed picture frame, cropped to cover it, with the title in the banner;
+the banner, logo and footer are redrawn above the photo, and any other words go
+to the speaker notes. The models never pick that page on their own. A code
+block goes into a single box, one source line per paragraph, in
+`MD2STAR_MONO_FONT` when it is set (else the template's mono face, else
+Consolas).
+
+md2star also chooses where each title, caption and bullet line ends, from the
+face's real advance widths: a line never ends on « de » or « the », never
+starts with « : » or « % », and a number stays with its unit. The breaks are
+written as explicit line breaks, which PowerPoint and LibreOffice keep. Speaker
+notes are left to the renderer.
 
 ### The closing audit
 
 Every run ends with a **deterministic layout audit** of the file just written:
 
 - shapes off the canvas;
-- text over text;
+- text over text, and an image covering more than 10 % of a text box (a
+  full-bleed background, 80 % of the canvas or more, is not counted);
 - unfilled placeholders;
 - type under 12 pt;
 - **text a reader cannot separate from what is behind it** — the WCAG ratio,

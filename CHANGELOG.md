@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.12.0] - 2026-11-04
+
 ### Added
 
 - **`--min-pt N` on `md2pptx --smart-layout`** (recommended: 30, Kawasaki's
@@ -27,6 +29,22 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   level and position now reach the selection prompt.
 - **`--refresh-catalog`**, and `MD2STAR_LLM_MODEL` / `MD2STAR_VLM_MODEL` to
   choose the models without regenerating `llm.engine.yaml`.
+- **md2star breaks slide lines itself** (`md2star.linebreak`). Satoshi has no
+  glyph for U+00A0 or U+202F, so a no-break space protected nothing. Titles,
+  statements, captions and bullets are broken by dynamic programming over the
+  face's real advance widths (`cmap` + `hmtx`, 0.55 em when the file is not
+  found): no line ends on a function word, none starts with « : » or « % », a
+  number keeps its unit, no orphan last word, balanced lines. The breaks are
+  written as `<a:br/>`; speaker notes are left alone.
+- **`{.photo}` / `{layout="Photo"}`**: the image fills the template's
+  full-bleed picture frame, cropped to cover, the title in the banner; banner,
+  logo and footer are copied above the photo, other words go to the notes. The
+  page is reserved like Recap or Agenda: the models cannot choose it.
+- **`md2star audit` flags an image over text**: a picture covering more than
+  10 % of a text box is an overlap; only a full-bleed background (80 % of the
+  canvas or more) stays a composition.
+- Code blocks (and a block of inline-code lines) go into one box, one source
+  line per paragraph, in `MD2STAR_MONO_FONT` when set, else a monospace face.
 
 ### Fixed
 
@@ -56,6 +74,29 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   boxes), which had a "fitting" slide spilling into the footer.
 - The audit's contrast check reads a filled shape (a code panel) as its own
   text's backdrop.
+- **Images are placed where they come out largest**: a lone image takes the
+  largest picture zone rather than the caption box; two images in columns each
+  get their own column (the second used to vanish) and an image beside text no
+  longer covers it; a demonstration picture zone that would sit on the text is
+  dropped in favour of sharing the width; figures keep the template's side
+  margins.
+- Recap, agenda, closing, cover and section layouts are given by hints and
+  roles only, never by the model's taste; a hinted slide is paginated against
+  its own layout, not the roomiest one; the visual tie-break of a column slide
+  only sees layouts with one box per column.
+- One flow of text is no longer placed on a multi-box layout, which left the
+  second card empty.
+- The audit no longer reads a picture sitting in its own frame as an empty
+  placeholder.
+
+### Changed
+
+- **CI keeps LibreOffice's packages in a cache.** On 2026-11-04 the Azure apt
+  mirror trickled `libreoffice-core` for 11.5 minutes without ever going
+  silent, so the inactivity timeouts never fired and the `ocr round-trip
+  identity` job was cancelled at its 25-minute ceiling.
+- The pre-push hook now runs the comment-density audit CI runs; its absence let
+  a file under the 15 % floor reach `main`.
 
 - **`md2pptx --reference-doc` replaced the first Section Header with a date
   slide.** With `title` in the front matter, the Lua filter still took the

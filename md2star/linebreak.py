@@ -80,16 +80,23 @@ _NBSP = "   "
 def _metrics(path: Path) -> tuple[int, list[int], dict[int, int]]:
     """``(units per em, advance widths, codepoint → glyph id)`` of an OTF/TTF."""
     b = path.read_bytes()
+    # The sfnt header: numTables sits at offset 4, and the table directory
+    # starts at 12 with one 16-byte record (tag, checksum, offset, length) each.
     n = struct.unpack_from(">H", b, 4)[0]
     tables = {}
     for i in range(n):
         tag, _, off, ln = struct.unpack_from(">4sIII", b, 12 + 16 * i)
         tables[tag.decode("latin1")] = (off, ln)
+    # unitsPerEm (head + 18) turns every advance into a fraction of the em.
     upm = struct.unpack_from(">H", b, tables["head"][0] + 18)[0]
+    # numberOfHMetrics (hhea + 34): hmtx holds that many (advance, lsb) pairs;
+    # glyphs past the last one reuse its advance, hence the clamp in width().
     n_hm = struct.unpack_from(">H", b, tables["hhea"][0] + 34)[0]
     hmtx = tables["hmtx"][0]
     adv = [struct.unpack_from(">H", b, hmtx + 4 * i)[0] for i in range(n_hm)]
     cmap = tables["cmap"][0]
+    # Pick a Unicode subtable: Windows BMP (3, 1) is preferred and ends the
+    # search; Unicode-platform 0/3 and 0/4 are kept as fallbacks if it is absent.
     sub = None
     for i in range(struct.unpack_from(">H", b, cmap + 2)[0]):
         pid, eid, off = struct.unpack_from(">HHI", b, cmap + 4 + 8 * i)
@@ -98,7 +105,12 @@ def _metrics(path: Path) -> tuple[int, list[int], dict[int, int]]:
             if (pid, eid) == (3, 1):
                 break
     table: dict[int, int] = {}
+    # Only format 4 (segment mapping to delta values) is decoded: it is the one
+    # every Latin text face ships. Any other format leaves the table empty, and
+    # width() then prices every character at the fallback em.
     if sub is not None and struct.unpack_from(">H", b, sub)[0] == 4:
+        # segCountX2, then four parallel arrays: endCode, (a reserved pad),
+        # startCode, idDelta, idRangeOffset, each segCountX2 bytes long.
         seg2 = struct.unpack_from(">H", b, sub + 6)[0]
         end_o = sub + 14
         start_o = end_o + seg2 + 2
@@ -110,11 +122,14 @@ def _metrics(path: Path) -> tuple[int, list[int], dict[int, int]]:
             delta = struct.unpack_from(">h", b, delta_o + 2 * s)[0]
             rng = struct.unpack_from(">H", b, range_o + 2 * s)[0]
             if start == 0xFFFF:
-                continue
+                continue  # the mandatory closing segment maps nothing
             for c in range(start, min(end, 0xFFFE) + 1):
                 if rng == 0:
+                    # Direct segment: the glyph id is the codepoint plus delta, mod 2^16.
                     gid = (c + delta) & 0xFFFF
                 else:
+                    # Indirect segment: idRangeOffset is a byte offset, counted from
+                    # its own slot, into glyphIdArray; 0 there still means "no glyph".
                     gid = struct.unpack_from(">H", b, range_o + 2 * s + rng + 2 * (c - start))[0]
                     gid = (gid + delta) & 0xFFFF if gid else 0
                 if gid:
@@ -154,6 +169,9 @@ def face(family: str | None, bold: bool = False) -> tuple[int, list[int], dict[i
 
 
 def has_glyph(metrics, ch: str) -> bool:
+    """Whether the face draws *ch* (always ``False`` without metrics)."""
+    # Satoshi is the case in point: no U+00A0, no U+202F, so a no-break space
+    # written into its box would render as a missing-glyph box or a fallback.
     return metrics is not None and ord(ch) in metrics[2]
 
 
@@ -166,13 +184,20 @@ def width(text: str, size: float, metrics=None) -> float:
     for ch in text:
         gid = table.get(ord(ch))
         if gid is None and ch in _NBSP:
+            # A face without a no-break space gets a plain one in break_lines(),
+            # so measure it as what will actually be printed.
             gid = table.get(32)
+        # Unknown glyph: price it at the fallback em rather than at zero, so a
+        # missing character can only make a line look wider, never narrower.
         total += adv[min(gid, len(adv) - 1)] if gid is not None else FALLBACK_EM * upm
     return total * size / upm * WIDTH_MARGIN
 
 
 # ── where a line may end ─────────────────────────────────────────────────────
 def _is_number(word: str) -> bool:
+    """Whether *word* is digits once its group separators are removed."""
+    # « 1 000 », « 1,000 » and « 2.5 » all count: what matters is that the
+    # next token (another group of digits, or a unit) must stay beside it.
     core = word
     for ch in _NBSP + " ,.":
         core = core.replace(ch, "")
