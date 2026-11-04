@@ -677,7 +677,10 @@ def test_lone_figure_goes_where_it_comes_out_largest(tmp_path):
         ph = SimpleNamespace(kind="pic", emu=(0, 0, w, h))
         return SimpleNamespace(name=name, placeholders=[ph])
 
-    content = [lay("Picture with Caption", 4_600_000, 5_300_000), lay("Title Only", 11_000_000, 3_900_000)]
+    content = [
+        lay("Picture with Caption", 4_600_000, 5_300_000),
+        lay("Title Only", 11_000_000, 3_900_000),
+    ]
     assert largest_picture_layout(metrics, content, base_dir=tmp_path) == "Title Only"
     # too many words: the ordinary ranking decides
     wordy = pptx_fit.measure("t", f"![]({img.name})\n\n" + "mot " * 40)
