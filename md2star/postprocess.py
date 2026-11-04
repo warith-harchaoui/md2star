@@ -26,6 +26,7 @@ Author
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import sys
 import xml.etree.ElementTree as ET
@@ -342,6 +343,52 @@ def center_standalone_images(docx_path: str) -> bool:
         for item in zin.infolist():
             zout.writestr(item, members.get(item.filename, zin.read(item.filename)))
     shutil.move(tmp_path, docx_path)
+    return True
+
+
+# ── PPTX: trailing line breaks ────────────────────────────────────────────────
+# Pandoc's PPTX writer builds the title slide's subtitle as subtitle, author
+# and date joined by <a:br/>, and keeps the breaks when author or date is
+# absent: "Jour 1 · Comprendre" shipped as "Jour 1 · Comprendre\v\v", two
+# empty lines that push the subtitle up off its anchor. A break that ends a
+# paragraph never carries text, so dropping it is always safe.
+_TRAILING_BR_RE = re.compile(
+    rb"(?:(?:<a:br(?:\s[^>]*)?/>"
+    rb"|<a:br(?:\s[^>/]*)?>(?:<a:rPr[^>]*/>|<a:rPr[^>]*[^/]>.*?</a:rPr>)?</a:br>)\s*)+"
+    rb"(?=</a:p>)",
+    re.DOTALL,
+)
+_SLIDE_PART_RE = re.compile(r"ppt/slides/slide\d+\.xml")
+
+
+def _strip_trailing_breaks_xml(xml_bytes: bytes) -> tuple[bytes, bool]:
+    """Remove every run of ``<a:br>`` that closes a paragraph."""
+    new, count = _TRAILING_BR_RE.subn(b"", xml_bytes)
+    return new, bool(count)
+
+
+def strip_trailing_line_breaks(pptx_path: str) -> bool:
+    """Drop the empty trailing lines Pandoc leaves in *pptx_path*; True if changed."""
+    with zipfile.ZipFile(pptx_path, "r") as zin:
+        members = {item.filename: zin.read(item.filename) for item in zin.infolist()}
+    changed = False
+    for name, data in members.items():
+        if not _SLIDE_PART_RE.fullmatch(name):
+            continue
+        new, hit = _strip_trailing_breaks_xml(data)
+        if hit:
+            members[name] = new
+            changed = True
+    if not changed:
+        return False
+    tmp_path = pptx_path + ".tmp"
+    with (
+        zipfile.ZipFile(pptx_path, "r") as zin,
+        zipfile.ZipFile(tmp_path, "w", zipfile.ZIP_DEFLATED) as zout,
+    ):
+        for item in zin.infolist():
+            zout.writestr(item, members[item.filename])
+    shutil.move(tmp_path, pptx_path)
     return True
 
 

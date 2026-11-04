@@ -6,6 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`md2pptx --reference-doc` replaced the first Section Header with a date
+  slide.** With `title` in the front matter, the Lua filter still took the
+  first `# Part` heading for the title, dropped it, and put the auto-dated
+  subtitle Div where it had been: slide 2 read "Mercredi 4 novembre 2026"
+  on a "Title and Content" layout. A front-matter title now leaves every H1
+  in place; on a deck, author and date go to Pandoc's title metadata (the
+  title slide's subtitle) rather than into the body, and a deck carries a
+  date only when one was asked for (`--date` or front-matter `date`).
+- **The title slide's subtitle no longer ends with empty lines.** Pandoc
+  writes one `<a:br/>` per missing author/date line ("Jour 1 ·
+  Comprendre\v\v"); trailing breaks are now stripped from every slide.
+
 ## [3.11.1] - 2026-11-01
 
 ### Fixed

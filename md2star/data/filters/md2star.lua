@@ -22,7 +22,11 @@
 -- 4. SUBTITLE INJECTION
 --    Constructs an "Author, Date" subtitle line, wraps it in a Div
 --    with custom-style="Subtitle", and inserts it right after the
---    title.  This maps to the DOCX/PPTX "Subtitle" style.
+--    title.  This maps to the DOCX "Subtitle" style.  On a PPTX deck, or
+--    when the front matter already declares a title, author and date go
+--    into Pandoc's own title metadata instead (a body Div there became a
+--    slide of its own), the first H1 is left in place, and a deck only
+--    carries a date the author asked for (--date or front-matter date).
 --
 -- 5. HEADING-ID CLEANUP
 --    Strips all automatic heading identifiers (e.g. {#my-heading}) to
@@ -57,6 +61,22 @@ function Pandoc(doc)
     local new_blocks = {}
     local subtitle_inlines = {}
     local date_str = nil
+    local is_pptx = FORMAT:match("pptx") ~= nil
+    -- A title declared in the front matter is THE title. The first H1 is
+    -- then an ordinary heading (on a deck, a Section Header slide) and must
+    -- survive: consuming it as before dropped "# Part one" and put the
+    -- subtitle Div — the date — on the slide it left behind.
+    local title_preset = meta.title ~= nil and #pandoc.utils.stringify(meta.title) > 0
+    -- A date the author asked for: the --date flag, or a front-matter
+    -- ``date``. Only those reach a deck; the auto-dated subtitle is a
+    -- document convention, and on a slide deck it is noise nobody wrote.
+    local explicit_date = nil
+    if meta.date_override then
+        explicit_date = pandoc.utils.stringify(meta.date_override)
+    elseif meta.date then
+        explicit_date = pandoc.utils.stringify(meta.date)
+    end
+    if explicit_date == "" then explicit_date = nil end
 
     -- ── 0. Tag every Table with a "MyTable" or "MyTableSmall" style ─
     -- Pandoc's DOCX writer maps the ``custom-style`` attribute on a Table
@@ -163,8 +183,14 @@ function Pandoc(doc)
             local formatted = format_author_list(author_str)
             table.insert(subtitle_inlines, pandoc.Str(formatted))
         end
-        -- Remove 'author' from metadata so it does not appear twice
-        meta.author = nil
+        -- Remove 'author' from metadata so it does not appear twice — except
+        -- where the subtitle is NOT injected as a Div (a deck, or a preset
+        -- title): there Pandoc's own title block is what shows it.
+        if is_pptx or title_preset then
+            meta.author = #subtitle_inlines > 0 and pandoc.MetaInlines(subtitle_inlines) or nil
+        else
+            meta.author = nil
+        end
     end
 
     -- ── 3. Date formatting ──────────────────────────────────────────
@@ -177,11 +203,11 @@ function Pandoc(doc)
     -- verbatim and skip the os.date()+locale path entirely. This lets
     -- authors backdate, post-date, or stamp a non-date label
     -- ("Draft 2", "Pre-print") without fighting the auto-locale.
-    if meta.date_override then
-        local override_str = pandoc.utils.stringify(meta.date_override)
-        if override_str ~= "" then
-            date_str = override_str
-        end
+    if explicit_date then
+        date_str = explicit_date
+    elseif is_pptx then
+        -- No auto-date on a deck: see explicit_date above.
+        date_str = nil
     elseif meta.date_format then
         local fmt = pandoc.utils.stringify(meta.date_format)
         if fmt ~= "" then
@@ -254,6 +280,9 @@ function Pandoc(doc)
     if meta.date then
         meta.date = nil
     end
+    if meta.date_override then
+        meta.date_override = nil
+    end
 
     -- ── 4. Build subtitle content ───────────────────────────────────
     -- Authors and date land on TWO separate lines, each its own Para
@@ -286,6 +315,39 @@ function Pandoc(doc)
         local rest = pandoc.text.sub(date_str, 2, -1)
         local capitalized = pandoc.text.upper(first_char) .. rest
         table.insert(subtitle_blocks, pandoc.Para({pandoc.Str(capitalized)}))
+    end
+
+    -- ── 4b. Decks and preset titles: metadata, never a body Div ─────
+    -- Pandoc's PPTX writer builds the title slide from title / subtitle /
+    -- author / date metadata; a Div in the body becomes a slide of its own
+    -- (observed: a "Mercredi 4 novembre" slide in place of the first
+    -- Section Header). Same for a document whose title came from the front
+    -- matter: its title block is Pandoc's, so the date joins it there.
+    local use_meta = is_pptx or title_preset
+    if use_meta and date_str then
+        local first_char = pandoc.text.sub(date_str, 1, 1)
+        local rest = pandoc.text.sub(date_str, 2, -1)
+        local dated = pandoc.text.upper(first_char) .. rest
+        if is_pptx then
+            -- On a deck the date rides on the author line of the title
+            -- slide's subtitle. Pandoc's own date slot wants a date
+            -- placeholder on the Title Slide layout, and on a template
+            -- without one it writes an empty <p:sp/> and the date is lost.
+            local line = {}
+            for _, inline in ipairs(subtitle_inlines) do table.insert(line, inline) end
+            if #line > 0 then table.insert(line, pandoc.LineBreak()) end
+            table.insert(line, pandoc.Str(dated))
+            meta.author = pandoc.MetaInlines(line)
+        else
+            meta.date = pandoc.MetaInlines({pandoc.Str(dated)})
+        end
+    end
+    if use_meta then
+        subtitle_blocks = {}
+    end
+    if title_preset then
+        -- Nothing left to promote: the first H1 stays where the author put it.
+        title_found = true
     end
 
     -- ── 5. Walk blocks: extract title, inject subtitle, strip IDs ──

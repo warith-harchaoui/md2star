@@ -61,6 +61,7 @@ from .postprocess import (
     center_standalone_images,
     inject_table_styles,
     strip_table_normal_for_pdf,
+    strip_trailing_line_breaks,
 )
 from .preprocessing import preprocess_markdown
 
@@ -596,6 +597,14 @@ def convert(fmt: str, opts: ConvertOptions, pandoc_args: Sequence[str] = ()) -> 
                 f"md2star warning: image-centring pass failed ({exc}); "
                 "images will render left-aligned."
             )
+
+    # 5b. PPTX-only: Pandoc ends the title slide's subtitle with an empty
+    #     line per missing author/date; strip them (see postprocess).
+    if docx_fmt == "pptx":
+        try:
+            strip_trailing_line_breaks(str(docx_path))
+        except Exception as exc:
+            logger.warning(f"md2star warning: line-break tidy failed ({exc}); deck is complete.")
 
     # 6. PDF-only: shell out to headless LibreOffice. The intermediate
     #    DOCX is correct as-is for Word, but the bundled template's
