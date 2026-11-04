@@ -176,6 +176,9 @@ msgstr "%(pt).0f pt au-delà du bord inférieur"
 msgid "%(a)r and %(b)r share %(share).0f%% of the smaller box"
 msgstr "%(a)r et %(b)r se recouvrent sur %(share).0f %% de la plus petite boîte"
 
+msgid "picture %(a)r covers text %(b)r (%(share).0f%% of the smaller box)"
+msgstr "l'image %(a)r recouvre le texte %(b)r (%(share).0f %% de la plus petite boîte)"
+
 msgid "unfilled placeholder"
 msgstr "emplacement non rempli"
 

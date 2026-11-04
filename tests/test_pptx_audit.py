@@ -102,15 +102,28 @@ class TestOverlap:
         _text(prs.slides[0], (4.9, 1.9, 4, 1), "second", 18)
         assert au.audit(_saved(prs, tmp_path)) == []
 
-    def test_text_over_a_picture_is_a_composition_not_a_bug(self, tmp_path: Path) -> None:
-        """Half the point of a photo-hero layout is a title on the image."""
+    def test_text_over_a_backdrop_is_a_composition_not_a_bug(self, tmp_path: Path) -> None:
+        """Half the point of a photo-hero layout is a title on a full-bleed image."""
+        prs = _blank()
+        slide = prs.slides[0]
+        png = tmp_path / "px.png"
+        _one_pixel_png(png)
+        slide.shapes.add_picture(str(png), 0, 0, prs.slide_width, prs.slide_height)
+        _text(slide, (1.5, 2, 4, 1), "title on the photo", 28)
+        assert au.audit(_saved(prs, tmp_path)) == []
+
+    def test_a_picture_laid_over_words_is_an_overlap(self, tmp_path: Path) -> None:
+        """A picture placed across the slide on top of the column beside it:
+        the assembler did this and the audit called the deck clean."""
         prs = _blank()
         slide = prs.slides[0]
         png = tmp_path / "px.png"
         _one_pixel_png(png)
         slide.shapes.add_picture(str(png), Inches(1), Inches(1), Inches(6), Inches(4))
-        _text(slide, (1.5, 2, 4, 1), "title on the photo", 28)
-        assert au.audit(_saved(prs, tmp_path)) == []
+        _text(slide, (5, 2, 4, 1), "the other column", 28)
+        findings = au.audit(_saved(prs, tmp_path))
+        assert _kinds(findings) == ["overlap"]
+        assert "Picture" in findings[0].detail
 
 
 # ── type size ────────────────────────────────────────────────────────────────

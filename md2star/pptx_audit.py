@@ -10,9 +10,11 @@ render, no network:
 ``off-slide``
     A shape extends past the canvas. Content that nobody will ever see.
 ``overlap``
-    Two text shapes cover the same region. Text over a *picture* is a normal
-    designer composition and is not flagged; text over text never is. A
-    one-glyph ornament (:func:`md2star.pptx_assemble.is_ornament`) does not
+    Two text shapes cover the same region, or a picture covers part of a text
+    shape: words with a photograph laid over them (or under them) are as
+    unreadable as words over words. A picture filling most of the canvas
+    (:data:`BACKDROP_SHARE`) is a backdrop, the photo-hero composition, and
+    is not counted. A one-glyph ornament (:func:`md2star.pptx_assemble.is_ornament`) does not
     count as one of the two — a "01" inside a title's generous box is a
     designer's composition too, and cloned pages are full of them.
 ``ghost-placeholder``
@@ -114,6 +116,10 @@ BLEED_TOLERANCE = 0.01
 #: tenth of a shape is a legibility problem.
 OVERLAP_TOLERANCE = 0.10
 
+#: Share of the canvas above which a picture is a backdrop (a full-bleed photo
+#: with a title on it, by design) rather than a picture placed beside words.
+BACKDROP_SHARE = 0.8
+
 #: Every finding kind this module can report, in descending severity. Used to
 #: order a report and to keep the vocabulary closed (a typo'd kind in a caller
 #: would otherwise sort and summarise silently).
@@ -175,6 +181,10 @@ class Finding:
             "where": where,
             "detail": self.detail,
         }
+
+
+#: A ``<p:pic>``: a picture, whether added freely or filled into a placeholder.
+_PIC_TAG = "{http://schemas.openxmlformats.org/presentationml/2006/main}pic"
 
 
 # ── geometry helpers ─────────────────────────────────────────────────────────
@@ -311,6 +321,37 @@ def _check_overlaps(
                         "overlap",
                         _("%(a)r and %(b)r share %(share).0f%% of the smaller box")
                         % {"a": shape_a.name, "b": shape_b.name, "share": fraction * 100},
+                    )
+                )
+    return findings
+
+
+def _check_picture_overlaps(
+    index: int,
+    pictures: list[tuple[object, tuple[int, int, int, int]]],
+    texts: list[tuple[object, tuple[int, int, int, int]]],
+    canvas: tuple[int, int],
+) -> list[Finding]:
+    """Flag a picture that covers part of a text shape (backdrops excepted)."""
+    findings: list[Finding] = []
+    limit = canvas[0] * canvas[1] * BACKDROP_SHARE
+    for pic, pbox in pictures:
+        if pbox[2] * pbox[3] >= limit:
+            continue
+        for shape, tbox in texts:
+            shared = _intersection(pbox, tbox)
+            if not shared:
+                continue
+            smaller = min(pbox[2] * pbox[3], tbox[2] * tbox[3])
+            fraction = shared / smaller if smaller else 0.0
+            if fraction > OVERLAP_TOLERANCE:
+                findings.append(
+                    Finding(
+                        index,
+                        "overlap",
+                        _("picture %(a)r covers text %(b)r (%(share).0f%% of the smaller box)")
+                        % {"a": pic.name, "b": shape.name, "share": fraction * 100},
+                        pic.name,
                     )
                 )
     return findings
@@ -592,12 +633,15 @@ def audit(
         # Collected across the slide, because an overlap is a property of a
         # PAIR: it cannot be judged while visiting either shape alone.
         texts: list[tuple[object, tuple[int, int, int, int]]] = []
+        pictures: list[tuple[object, tuple[int, int, int, int]]] = []
         for shape in slide.shapes:
             box = _box(shape)
             # Bounds first, and for pictures too: an image half off the canvas
             # is the same defect as a text box half off it.
             if box is not None:
                 findings += _check_bounds(index, shape, box, size)
+                if shape.element.tag == _PIC_TAG:
+                    pictures.append((shape, box))
             if not shape.has_text_frame or not shape.text_frame.text.strip():
                 # An EMPTY placeholder is the ghost the assembler should have
                 # removed; an empty plain shape is a designer's decoration, and
@@ -626,6 +670,7 @@ def audit(
                     # over a picture.
                     texts.append((shape, box))
         findings += _check_overlaps(index, texts)
+        findings += _check_picture_overlaps(index, pictures, texts, size)
 
     # Slide order first (a reader fixes a deck front to back), severity within
     # a slide, then shape name so two runs over one deck report identically.
