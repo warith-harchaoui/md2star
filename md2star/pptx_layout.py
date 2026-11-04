@@ -1646,7 +1646,16 @@ def select_layouts(
             # few words go wherever that image, fitted to its own aspect, comes
             # out largest. A wide figure in a half-width picture box is shrunk
             # to a third of the slide, and no caption or tie-break notices.
-            biggest = largest_picture_layout(metrics, content, base_dir=image_base_dir)
+            # Pictures in columns first: one image beside its words, or two
+            # side by side, go on the layout whose columns show them largest.
+            # Scored as a lone figure, the slide won a full-width picture box
+            # and its picture was laid over the other column's words.
+            biggest = largest_columns_layout(
+                "" if s.title_only else s.body,
+                [c for c in content if c.name not in reserved],
+                base_dir=image_base_dir,
+                canvas=canvas,
+            ) or largest_picture_layout(metrics, content, base_dir=image_base_dir)
             if biggest is not None:
                 s.chosen_layout = biggest
                 s.chosen_confidence = 1.0
@@ -2042,4 +2051,141 @@ def largest_picture_layout(metrics, content, *, base_dir: Path | None = None) ->
             if best is None or area > best[0]:
                 best = (area, lay.name)
             break
+    return best[1] if best else None
+
+
+def split_columns(body: str) -> list[str]:
+    """The bodies of a slide's ``::: {.column}`` divs, in order (``[]`` if none)."""
+    columns: list[list[str]] = []
+    stack: list[bool] = []  # True for a column div
+    for line in body.splitlines():
+        s = line.strip()
+        if re.match(r"^:{3,}[ \t]*$", s) and stack:
+            stack.pop()
+            continue
+        if re.match(r"^:{3,}[ \t]*\S", s):
+            is_col = bool(
+                re.match(r"^:{3,}[ \t]*(?:\{[^}]*\.column\b(?!s)[^}]*\}|column\b(?!s))", s)
+            )
+            stack.append(is_col)
+            if is_col:
+                columns.append([])
+            continue
+        if any(stack) and columns:
+            columns[-1].append(line)
+    return ["\n".join(c) for c in columns] if len(columns) >= 2 else []
+
+
+#: Space left between the title's bottom edge and a stage drawn under it, and
+#: the share of the canvas kept free at its foot when nothing else bounds it.
+_STAGE_GAP = 0.02
+_STAGE_FOOT = 0.92
+
+
+def column_regions(
+    info: LayoutInfo | None, n: int, canvas: tuple[int, int] | None = None
+) -> list[tuple[int, int, int, int]] | None:
+    """Where *n* side-by-side columns go on *info*, in EMU, left to right.
+
+    The layout's own body boxes when it has *n* of them (the *n* largest, so a
+    "Comparison" layout's small header boxes lose to the content boxes under
+    them). Otherwise the stage under a full-width title, cut in *n* equal
+    parts: that is how a "Title Only" layout holds two pictures. ``None`` when
+    the layout has neither (its title sits beside the content, as on "Picture
+    with Caption"), which is the layout's way of saying it cannot hold columns.
+
+    The assembler places columns with this same geometry, so the layout chosen
+    for a column slide is chosen for the boxes its columns will really get.
+    """
+    if info is None or n < 2:
+        return None
+    phs = [p for p in info.placeholders if p.emu is not None and p.kind not in _LATENT_KINDS]
+    bodies = [p.emu for p in phs if p.kind in ("body", "obj")]
+    if len(bodies) >= n:
+        biggest = sorted(bodies, key=lambda b: -b[2] * b[3])[:n]
+        return sorted(biggest, key=lambda b: b[0])  # type: ignore[return-value]
+    stage = stage_region(info, canvas)
+    if stage is None:
+        return None
+    left, top, span, height = stage
+    sep = int(span * 0.025)
+    each = (span - sep * (n - 1)) // n
+    return [(left + k * (each + sep), top, each, height) for k in range(n)]
+
+
+def stage_region(
+    info: LayoutInfo | None, canvas: tuple[int, int] | None = None
+) -> tuple[int, int, int, int] | None:
+    """The area under a full-width title, down to the lowest content box, in EMU.
+
+    ``None`` when the layout has no title, a title beside the content rather
+    than over it, or a title that fills the page and leaves no stage.
+    """
+    if info is None:
+        return None
+    phs = [p for p in info.placeholders if p.emu is not None and p.kind not in _LATENT_KINDS]
+    title = next((p.emu for p in phs if p.kind in ("title", "ctrTitle")), None)
+    if title is None:
+        return None
+    others = [p.emu for p in phs if p.kind not in ("title", "ctrTitle")]
+    width = canvas[0] if canvas else max([title[0] + title[2], *(b[0] + b[2] for b in others)])
+    height = canvas[1] if canvas else width * 9 // 16
+    if title[2] < 0.5 * width:
+        return None  # a side title: the area under it is a margin, not a stage
+    top = title[1] + title[3] + int(height * _STAGE_GAP)
+    below = [b[1] + b[3] for b in others if b[1] + b[3] > top]
+    bottom = max(below) if below else int(height * _STAGE_FOOT)
+    if bottom - top < 0.4 * height:
+        return None  # a title that fills the page leaves no stage under it
+    return (title[0], top, title[2], bottom - top)
+
+
+_COLUMN_IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*<?([^)\s>]+)")
+
+
+def largest_columns_layout(
+    body: str,
+    content,
+    *,
+    base_dir: Path | None = None,
+    canvas: tuple[int, int] | None = None,
+) -> str | None:
+    """Name of the layout whose columns show this slide's pictures largest, or ``None``.
+
+    Applies only to a slide in columns where at least one column carries an
+    image (two pictures side by side, or a picture beside its words). Each
+    candidate's columns (:func:`column_regions`) are scored by the area the
+    *smallest* of the pictures takes once fitted to its own aspect inside its
+    column, so neither of two pictures is sacrificed to the other. ``None``
+    leaves the slide to the ordinary ranking: no image in a column, an
+    unreadable file, no layout able to hold the columns.
+    """
+    cols = split_columns(body)
+    if not cols:
+        return None
+    aspects: list[float | None] = []
+    for col in cols:
+        m = _COLUMN_IMAGE_RE.search(col)
+        if m is None:
+            aspects.append(None)
+            continue
+        resolved = pptx_fit._resolve(m.group(1), base_dir)
+        aspect = pptx_fit._image_aspect(resolved) if resolved else None
+        if not aspect:
+            return None
+        aspects.append(aspect)
+    if not any(aspects):
+        return None
+    best: tuple[float, str] | None = None
+    for lay in content:
+        regions = column_regions(lay, len(cols), canvas)
+        if not regions:
+            continue
+        smallest = min(
+            min(bw, bh * a) ** 2 / a
+            for (_, _, bw, bh), a in zip(regions, aspects, strict=False)
+            if a
+        )
+        if best is None or smallest > best[0]:
+            best = (smallest, lay.name)
     return best[1] if best else None

@@ -685,3 +685,157 @@ def test_lone_figure_goes_where_it_comes_out_largest(tmp_path):
     # too many words: the ordinary ranking decides
     wordy = pptx_fit.measure("t", f"![]({img.name})\n\n" + "mot " * 40)
     assert largest_picture_layout(wordy, content, base_dir=tmp_path) is None
+
+
+# ── pictures in columns, and a lone picture's box ────────────────────────────
+def _pictures(slide) -> list:
+    return [sh for sh in slide.shapes if sh.shape_type == 13]
+
+
+def _rect(sh) -> tuple[int, int, int, int]:
+    return (sh.left, sh.top, sh.width, sh.height)
+
+
+def _inside(inner, outer, slack: int = 2) -> bool:
+    return (
+        inner[0] >= outer[0] - slack
+        and inner[1] >= outer[1] - slack
+        and inner[0] + inner[2] <= outer[0] + outer[2] + slack
+        and inner[1] + inner[3] <= outer[1] + outer[3] + slack
+    )
+
+
+def _ref_like_catalog() -> list[pl.LayoutInfo]:
+    """The geometry of the course template (16:9): a side title on "Picture
+    with Caption", a full-width title and picture zone on "Title Only"."""
+    inch = 914400
+
+    def lay(name, *phs):
+        info = pl.LayoutInfo(name=name, example_pages=[1])
+        info.placeholders = [
+            pl.Placeholder(idx=i, kind=k, emu=tuple(int(v * inch) for v in box))
+            for i, (k, box) in enumerate(phs)
+        ]
+        return info
+
+    return [
+        lay(
+            "Picture with Caption",
+            ("title", (0.6, 1.2, 5.03, 2.19)),
+            ("body", (0.6, 3.55, 5.03, 2.62)),
+            ("pic", (6.12, 0.93, 6.61, 5.6)),
+        ),
+        lay("Title Only", ("title", (0.6, 0.87, 12.13, 0.87)), ("pic", (0.6, 1.86, 12.13, 4.46))),
+        lay(
+            "Two Content",
+            ("title", (0.6, 0.98, 12.13, 1.04)),
+            ("body", (0.6, 2.24, 5.85, 4.28)),
+            ("body", (6.89, 2.24, 5.85, 4.28)),
+        ),
+    ]
+
+
+class TestPicturesInColumns:
+    TWO = (
+        "# D\n\n## Hawkeye et Hulk\n\n:::: {.columns}\n::: {.column}\n![](a.png)\n:::\n"
+        "::: {.column}\n![](b.png)\n:::\n::::\n\n## E\n"
+    )
+    BESIDE = (
+        "# D\n\n## La photographie\n\n:::: {.columns}\n::: {.column}\n![](wide.png)\n:::\n"
+        "::: {.column}\nDeux étapes tiennent.\n\nLa troisième casse.\n:::\n::::\n\n## E\n"
+    )
+
+    @pytest.fixture
+    def images(self, tmp_path: Path) -> Path:
+        from PIL import Image
+
+        Image.new("RGB", (600, 800), (200, 30, 30)).save(tmp_path / "a.png")
+        Image.new("RGB", (600, 800), (30, 30, 200)).save(tmp_path / "b.png")
+        Image.new("RGB", (1600, 900), (30, 160, 30)).save(tmp_path / "wide.png")
+        Image.new("RGB", (800, 600), (90, 90, 90)).save(tmp_path / "four3.png")
+        return tmp_path
+
+    def test_columns_with_pictures_choose_a_layout_that_holds_both(self, images) -> None:
+        """Hawkeye | Hulk went to "Picture with Caption", whose one picture box
+        took the first image while the second was silently dropped."""
+        catalog = _ref_like_catalog()
+        canvas = (12192000, 6858000)
+        for md in (self.TWO, self.BESIDE):
+            body = pl.segment(md)[1].body
+            name = pl.largest_columns_layout(body, catalog, base_dir=images, canvas=canvas)
+            assert name in ("Two Content", "Title Only")
+            regions = pl.column_regions(next(c for c in catalog if c.name == name), 2, canvas)
+            assert regions is not None and regions[0][0] + regions[0][2] <= regions[1][0]
+        assert pl.column_regions(catalog[0], 2, canvas) is None  # a side title
+
+    def test_select_layouts_pins_the_column_layout(self, images) -> None:
+        slides = pl.segment(self.TWO)
+        pl.select_layouts(
+            slides, _ref_like_catalog(), chat=lambda *a, **k: None, image_base_dir=images
+        )
+        assert slides[1].chosen_layout in ("Two Content", "Title Only")
+        assert slides[1].pinned
+
+    @pytest.mark.parametrize("layout", ["Two Content", "Title Only", "Comparison"])
+    @pytest.mark.parametrize("min_pt", [None, 30])
+    def test_two_pictures_are_both_placed_side_by_side(
+        self, images, default_template, catalog, layout, min_pt
+    ) -> None:
+        slides = pl.segment(self.TWO)
+        slides[1].chosen_layout = layout
+        out = images / "two.pptx"
+        pa.assemble(slides, catalog, default_template, out, image_base_dir=images, min_pt=min_pt)
+        prs = pptx.Presentation(str(out))
+        pics = sorted(_pictures(prs.slides[1]), key=lambda sh: sh.left)
+        assert len(pics) == 2
+        left, right = (_rect(p) for p in pics)
+        assert left[0] + left[2] <= right[0]  # side by side, no overlap
+        half = prs.slide_width // 2
+        assert left[0] + left[2] <= half + Inches(0.3) and right[0] >= half - Inches(0.3)
+        # each fitted to its 3:4 aspect, not stretched
+        for p in pics:
+            assert abs(p.width / p.height - 0.75) < 0.02
+        assert not [f for f in au.audit(out) if f.kind == "overlap"]
+
+    def test_a_caption_goes_under_its_own_picture(self, images, default_template, catalog):
+        md = self.TWO.replace("![](a.png)\n", "![](a.png)\n\nHawkeye : la précision\n")
+        slides = pl.segment(md)
+        slides[1].chosen_layout = "Two Content"
+        out = images / "cap.pptx"
+        pa.assemble(slides, catalog, default_template, out, image_base_dir=images, min_pt=30)
+        slide = pptx.Presentation(str(out)).slides[1]
+        pics = sorted(_pictures(slide), key=lambda sh: sh.left)
+        cap = next(
+            sh for sh in slide.shapes if sh.has_text_frame and "précision" in sh.text_frame.text
+        )
+        assert len(pics) == 2
+        assert cap.top >= pics[0].top + pics[0].height - 2
+        assert cap.left < pics[0].left + pics[0].width and cap.left + cap.width <= pics[1].left
+        assert not [f for f in au.audit(out) if f.kind == "overlap"]
+
+    @pytest.mark.parametrize("min_pt", [None, 30])
+    def test_a_picture_beside_words_stays_in_its_column(
+        self, images, default_template, min_pt
+    ) -> None:
+        """A wide photo in one column was drawn across the whole picture zone
+        of "Title Only", over the words of the other column, and the audit
+        called the slide clean."""
+        catalog = pl.extract_layouts(default_template)
+        info = next(c for c in catalog if c.name == "Title Only")
+        info.placeholders = [
+            pl.Placeholder(idx=0, kind="title", emu=(457200, 274638, 8229600, 1143000)),
+            pl.Placeholder(idx=9, kind="pic", emu=(457200, 1600200, 8229600, 4525963)),
+        ]
+        slides = pl.segment(self.BESIDE)
+        slides[1].chosen_layout = "Title Only"
+        out = images / "beside.pptx"
+        pa.assemble(slides, catalog, default_template, out, image_base_dir=images, min_pt=min_pt)
+        slide = pptx.Presentation(str(out)).slides[1]
+        (pic,) = _pictures(slide)
+        words = next(
+            sh for sh in slide.shapes if sh.has_text_frame and "étapes" in sh.text_frame.text
+        )
+        assert not pa._intersects(_rect(pic), _rect(words))
+        assert pic.left + pic.width <= words.left
+        assert abs(pic.width / pic.height - 16 / 9) < 0.03
+        assert not [f for f in au.audit(out) if f.kind == "overlap"]

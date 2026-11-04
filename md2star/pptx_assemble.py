@@ -75,10 +75,12 @@ from .pptx_layout import (
     LayoutInfo,
     RenderFn,
     Slide,
+    column_regions,
     default_chat,
     default_render,
     parse_json_reply,
     render_deck_pages,
+    split_columns,
 )
 
 logger = get_logger(__name__)
@@ -541,28 +543,6 @@ def fallback_bullets(body: str, cap: int | None = None) -> list[str]:
     """
     texts = [it.text for it in body_items(body)]
     return texts if cap is None else texts[:cap]
-
-
-def split_columns(body: str) -> list[str]:
-    """The bodies of a slide's ``::: {.column}`` divs, in order (``[]`` if none)."""
-    columns: list[list[str]] = []
-    stack: list[bool] = []  # True for a column div
-    for line in body.splitlines():
-        s = line.strip()
-        if re.match(r"^:{3,}[ \t]*$", s) and stack:
-            stack.pop()
-            continue
-        if re.match(r"^:{3,}[ \t]*\S", s):
-            is_col = bool(
-                re.match(r"^:{3,}[ \t]*(?:\{[^}]*\.column\b(?!s)[^}]*\}|column\b(?!s))", s)
-            )
-            stack.append(is_col)
-            if is_col:
-                columns.append([])
-            continue
-        if any(stack) and columns:
-            columns[-1].append(line)
-    return ["\n".join(c) for c in columns] if len(columns) >= 2 else []
 
 
 def parse_table(body: str) -> list[list[str]]:
@@ -1253,13 +1233,24 @@ def assemble(
             fd = int(ov.get("font_delta", 0))
             igrow = float(ov.get("img_grow", 0.0))
             ts = _Typeset(min_pt=min_pt, fd=fd, fg=fg)
-            columns = [body_items(c) for c in split_columns(body)] if not title_only else []
+            raw_cols = split_columns(body) if not title_only else []
+            columns = [body_items(c) for c in raw_cols]
+            # A picture inside a column belongs to that column: it is placed in
+            # the column's box, never as the slide's one full-width visual.
+            col_pics = [
+                (parse_image(c, image_base_dir), parse_alt_text(c)) if not mer else (None, "")
+                for c in raw_cols
+            ]
+            if any(p for p, _ in col_pics):
+                img = None
+            else:
+                col_pics = []
             items = [] if title_only else body_items(body)
             bullets = [it.text for it in items]
             mpng = render_mermaid(mer) if (mer and render_mermaid) else None
 
             # ── Seam E: clone the designer's own example page, if one fits ──
-            if clone is not None and info is not None and not code and not table:
+            if clone is not None and info is not None and not code and not table and not col_pics:
                 payload = clone.Content(
                     title=title_lines[0],
                     bullets=bullets,
@@ -1305,6 +1296,7 @@ def assemble(
                 title_only=title_only,
                 items=items,
                 columns=columns,
+                col_pics=col_pics,
                 visual=(mpng, img, code, table),
                 igrow=igrow,
                 fonts=(title_font, body_font, fam.get("family", "Consolas")),
@@ -1342,6 +1334,7 @@ def _build(
     items: list[Item],
     columns: list[list[Item]],
     visual: tuple,
+    col_pics: list[tuple[Path | None, str]] | None = None,
     igrow: float,
     fonts: tuple[str, str, str],
 ) -> None:
@@ -1466,7 +1459,11 @@ def _build(
         outside = [it for it in items if it.text not in inside]
         if outside:
             columns = [outside + columns[0], *columns[1:]]
-        if use_ph and len(body_phs) >= len(columns):
+        if col_pics:
+            _picture_columns(
+                prs, slide, info, ts, columns, col_pics, body_phs, use_ph, body_font, title
+            )
+        elif use_ph and len(body_phs) >= len(columns):
             targets = sorted(body_phs[: len(columns)], key=lambda ph: ph.left or 0)
             for col, ph in zip(columns, targets, strict=False):
                 _write_items(slide, col, ts=ts, font=body_font, into=ph)
@@ -1539,6 +1536,76 @@ def _build(
             size=ts.size(14, None, inherit_ok=False),
             font=body_font,
         )
+
+
+def _caption_height(items: list[Item], width: float, size: float) -> float:
+    """Inches a caption of *items* needs at *size* pt in a box *width* inches wide."""
+    per_line = max(1.0, width * 72 / (size * 0.5))
+    lines = sum(max(1, -(-len(it.text) // int(per_line))) for it in items)
+    return lines * size * 1.2 / 72 + len(items) * 6 / 72 + 0.15
+
+
+def _picture_columns(
+    prs,
+    slide,
+    info: LayoutInfo | None,
+    ts: _Typeset,
+    columns: list[list[Item]],
+    col_pics: list[tuple[Path | None, str]],
+    body_phs: list,
+    use_ph: bool,
+    font: str,
+    title: str,
+) -> None:
+    """Columns where at least one carries a picture: each confined to its own box.
+
+    The boxes are the slide's own body placeholders when it has one per column
+    (written into, for the text columns), else :func:`column_regions` — the
+    geometry the layout was chosen by — else an even split. A picture is
+    fitted to its aspect inside its column and never reaches into the next
+    one; words in the same column are its caption, set under it.
+    """
+    n = len(columns)
+    real = sorted(body_phs[:n], key=lambda ph: ph.left or 0) if len(body_phs) >= n else []
+    if real and all(_ph_box(ph) for ph in real):
+        boxes = [_ph_box(ph) for ph in real]
+        targets = list(real)
+    else:
+        regions = column_regions(info, n, (prs.slide_width, prs.slide_height))
+        boxes = (
+            [tuple(v / EMU_PER_INCH for v in r) for r in regions]
+            if regions
+            else _column_boxes(prs, info, n)
+        )
+        targets = [None] * n
+    style = _style_of(_layout_ph(slide.slide_layout, _BODY_PH_KINDS))
+    size = ts.size(16, style[0], inherit_ok=False) or 16
+    colour = ts.colour(style, inherit_ok=False)
+    for col, (pic, alt), box, ph in zip(columns, col_pics, boxes, targets, strict=False):
+        if pic is None:
+            if col:
+                _write_items(
+                    slide,
+                    col,
+                    ts=ts,
+                    font=font,
+                    into=ph if use_ph else None,
+                    box=None if use_ph and ph is not None else box,
+                )
+            continue
+        left, top, width, height = box
+        if col:
+            cap = min(_caption_height(col, width, size), height * 0.4)
+            add_text(
+                slide,
+                [(it.text, size, False, font) for it in col],
+                (left, top + height - cap, width, cap),
+                color=colour,
+                center=True,
+                shrink=ts.min_pt is None,
+            )
+            height -= cap
+        add_image(slide, pic, box=(left, top, width, height), alt=alt or title)
 
 
 # ── target-matching Ralph Eyeball Loop ───────────────────────────────────────
