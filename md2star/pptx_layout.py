@@ -1251,7 +1251,24 @@ def continuation_label(lang: str = "", sample: str = "") -> str:
         return "(suite)" if code == "fr" else "(cont.)"
     words = re.findall(r"[a-zà-ÿ']+", sample.lower())
     fr = sum(
-        w in {"le", "la", "les", "des", "est", "une", "du", "et", "pour", "que"} for w in words
+        w
+        in {
+            "le",
+            "la",
+            "les",
+            "des",
+            "est",
+            "un",
+            "une",
+            "de",
+            "du",
+            "et",
+            "pour",
+            "que",
+            "à",
+            "en",
+        }
+        for w in words
     )
     en = sum(
         w in {"the", "and", "is", "of", "to", "for", "that", "with", "are", "a"} for w in words
@@ -1349,13 +1366,15 @@ def paginate(
     label = continuation_label(slides[0].lang if slides else "", " ".join(s.body for s in slides))
     out: list[Slide] = []
 
-    def holds(title: str, body: str) -> bool:
+    by_name = {c.name: c for c in catalog}
+
+    def holds(title: str, body: str, host: LayoutInfo | None = None) -> bool:
         # Measured a notch above the floor: the character model ignores
         # paragraph spacing and real glyph widths, and a split that lands
         # exactly on the estimate was observed spilling into the footer.
         report = pptx_fit.evaluate(
             pptx_fit.measure(title, body),
-            roomy,
+            host or roomy,
             min_pt=min_pt * PAGINATE_MARGIN,
             strict=True,
             canvas=canvas,
@@ -1363,13 +1382,19 @@ def paginate(
         return not report.overruns
 
     for s in slides:
-        if s.title_only or holds(s.title, s.body):
+        # A slide the author pinned to a layout is measured against THAT
+        # layout: the roomiest one is not where it is going.
+        hinted = resolve_hint(s, catalog)
+        host = by_name.get(hinted) if hinted else None
+        if host is not None and not pptx_fit.body_capacity(host, min_pt).chars:
+            host = None  # a title-only pinned layout: nothing to split into
+        if s.title_only or holds(s.title, s.body, host):
             out.append(s)
             continue
         m = pptx_fit.measure(s.title, s.body)
         if m.table_rows or m.code_lines or m.image_count or "two-column" in s.features:
             logger.warning(
-                "slide %d (%r) does not fit any layout at %gpt and cannot be split "
+                "slide %d (%r) does not fit its layout(s) at %gpt and cannot be split "
                 "automatically (table, code, image or columns): split it by hand",
                 s.index,
                 s.title,
@@ -1384,13 +1409,13 @@ def paginate(
             # that slide still holds at the floor, else it opens the next.
             # A block that overflows on its own still gets a slide of its own.
             title = s.title if len(groups) <= 1 else f"{s.title} {label}"
-            if groups and holds(title, "\n\n".join([*groups[-1], block])):
+            if groups and holds(title, "\n\n".join([*groups[-1], block]), host):
                 groups[-1].append(block)
             else:
                 groups.append([block])
         if len(groups) <= 1:
             logger.warning(
-                "slide %d (%r) does not fit any layout at %gpt and has a single "
+                "slide %d (%r) does not fit its layout(s) at %gpt and has a single "
                 "block to show: shorten it",
                 s.index,
                 s.title,
@@ -1399,7 +1424,7 @@ def paginate(
             out.append(s)
             continue
         logger.warning(
-            "slide %d (%r) does not fit any layout at %gpt: split into %d slides",
+            "slide %d (%r) does not fit its layout(s) at %gpt: split into %d slides",
             s.index,
             s.title,
             min_pt,

@@ -611,3 +611,15 @@ def test_deepcopy_slide_is_harmless() -> None:
     # Slides are plain dataclasses; the new fields must not break copying.
     s = pl.Slide(index=1, title="x", layout_hint="A", class_hint="recap", subtitle="y")
     assert copy.deepcopy(s).subtitle == "y"
+
+
+def test_a_pinned_slide_is_paginated_against_its_own_layout() -> None:
+    """An agenda pinned to a small "Agenda" layout splits even when a roomier
+    layout elsewhere in the template would have held it."""
+    small = _box_layout("Agenda", 1.5)
+    roomy = _box_layout("Roomy", 6.0)
+    lines = "\n".join(f"- Partie {i} · un intitulé de partie assez long" for i in range(6))
+    slides = pl.segment(f"# D\n\n## Au programme {{.agenda}}\n\n{lines}\n\n## E\n")
+    out = pl.paginate(slides, [small, roomy], min_pt=30)
+    assert [s.title for s in out][1:3] == ["Au programme", "Au programme (suite)"]
+    assert all(s.class_hint == "agenda" for s in out[1:3])
