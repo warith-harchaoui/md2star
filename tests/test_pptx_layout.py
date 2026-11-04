@@ -442,7 +442,11 @@ class TestACoverIsMeasuredAsOne:
         assert [s.title_only for s in slides] == [True, False, True]
 
     def test_a_single_slide_deck_is_both(self) -> None:
-        assert pl.segment("# Only\n\n- a\n")[0].title_only is True
+        assert pl.segment("# Only\n\nsubtitle\n")[0].title_only is True
+
+    def test_a_cover_with_bullets_keeps_them(self) -> None:
+        """Position alone no longer strips a slide's body (bullets were lost)."""
+        assert pl.segment("# Only\n\n- a\n")[0].title_only is False
 
 
 # ── tolerant reply parsing (the lenient half of the phase-5 bench) ───────────

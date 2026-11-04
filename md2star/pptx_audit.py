@@ -34,6 +34,12 @@ render, no network:
     slide. Only runs that state their own colour are judged, and a backdrop
     this module cannot read (a photograph, a gradient) is left unjudged rather
     than guessed at.
+``under-min-pt``
+    Only with ``min_pt`` (``md2star audit --min-pt 30``): slide *content*
+    set under that size — Kawasaki's 30 pt, enforced instead of observed.
+    Footer chrome is not content: date / footer / slide-number placeholders,
+    any shape holding a field (``<a:fld>``, e.g. the page number), and a
+    single line of text in the bottom 12 % of the slide are exempt.
 ``overrun``
     The text needs more room than its box gives it at the size it declares.
     Reported with the size that *would* fit, because PowerPoint's auto-shrink
@@ -76,7 +82,7 @@ from .logging import get_logger
 # (it is what writes placeholders), the audit only reads it. Should the eyeball
 # loop ever want to consume this module, it must import it inside the function
 # — as md2star/cli.py does — rather than at module scope.
-from .pptx_assemble import LATENT_KINDS, is_ornament, placeholder_kind
+from .pptx_assemble import LATENT_KINDS, declared_style, is_ornament, placeholder_kind
 from .pptx_fit import AVG_CHAR_WIDTH_EM, EMU_PER_PT, FIT_SLACK, LINE_SPACING
 
 logger = get_logger(__name__)
@@ -116,9 +122,14 @@ KINDS: tuple[str, ...] = (
     "overlap",
     "ghost-placeholder",
     "illegible-type",
+    "under-min-pt",
     "low-contrast",
     "overrun",
 )
+
+#: Share of the slide's height, from the bottom, where a single line of text
+#: is footer chrome (a course name, a page number) for ``under-min-pt``.
+CHROME_BAND = 0.12
 
 
 @dataclass(frozen=True)
@@ -190,15 +201,30 @@ def _intersection(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) ->
     return dx * dy if dx > 0 and dy > 0 else 0
 
 
-def _runs_of(para) -> list[tuple[str, float | None]]:
+def _inherited_pt(shape, level: int) -> float | None:
+    """The size a placeholder's paragraph inherits from its layout / master."""
+    if not getattr(shape, "is_placeholder", False):
+        return None
+    try:
+        return declared_style(shape, level)[0]
+    except Exception:  # noqa: BLE001 — an unreadable chain is "unknown", not an error
+        return None
+
+
+def _runs_of(para, shape=None) -> list[tuple[str, float | None]]:
     """One paragraph's ``(text, point size)`` runs.
 
     Paragraph-level size is the fallback for a run that declares none: that is
     the next link in OOXML's own inheritance chain, and it keeps a uniformly
-    styled paragraph measurable. ``None`` survives only when the size comes
-    from the master, where this module declines to guess.
+    styled paragraph measurable. For a placeholder (*shape* given) the chain
+    continues through its layout and master (:func:`declared_style`) — the
+    sizes md2star's ``--min-pt`` deliberately leaves to the template, which an
+    audit that read only declared sizes would never check. ``None`` survives
+    only where nothing declares a size.
     """
     para_pt = para.font.size.pt if para.font.size is not None else None
+    if para_pt is None and shape is not None:
+        para_pt = _inherited_pt(shape, para.level)
     return [
         (run.text, run.font.size.pt if run.font.size is not None else para_pt) for run in para.runs
     ]
@@ -206,7 +232,7 @@ def _runs_of(para) -> list[tuple[str, float | None]]:
 
 def _runs(shape) -> list[tuple[str, float | None]]:
     """Every run in a shape, flattened."""
-    return [run for para in shape.text_frame.paragraphs for run in _runs_of(para)]
+    return [run for para in shape.text_frame.paragraphs for run in _runs_of(para, shape)]
 
 
 def _needed_pt_height(shape, box: tuple[int, int, int, int]) -> tuple[float, float]:
@@ -221,7 +247,7 @@ def _needed_pt_height(shape, box: tuple[int, int, int, int]) -> tuple[float, flo
     total = 0.0
     largest = 0.0
     for para in shape.text_frame.paragraphs:
-        runs = _runs_of(para)
+        runs = _runs_of(para, shape)
         text = "".join(t for t, _ in runs)
         sizes = [pt for _, pt in runs if pt]
         if not text.strip() or not sizes:
@@ -413,7 +439,8 @@ def _check_contrast(index: int, slide, shape, box) -> list[Finding]:
     findings rather than report them. That is the known limit of this check,
     and it is a limit in the conservative direction.
     """
-    behind = _backdrop(slide, shape, box)
+    # A shape with its own fill (a code panel) is its text's backdrop.
+    behind = _solid_rgb(shape) or _backdrop(slide, shape, box)
     if behind is None:
         return []
     worst: tuple[float, float, object] | None = None
@@ -470,6 +497,40 @@ def _check_type(index: int, shape) -> list[Finding]:
     ]
 
 
+def _is_chrome(shape, box, canvas) -> bool:
+    """Footer furniture rather than slide content (see ``under-min-pt``)."""
+    if shape.is_placeholder and placeholder_kind(shape) in LATENT_KINDS:
+        return True
+    if (
+        shape.element.find(".//{http://schemas.openxmlformats.org/drawingml/2006/main}fld")
+        is not None
+    ):
+        return True
+    if box is None:
+        return False
+    lines = [p for p in shape.text_frame.paragraphs if "".join(r.text for r in p.runs).strip()]
+    single = len(lines) <= 1 and "\x0b" not in shape.text_frame.text
+    return single and box[1] >= canvas[1] * (1 - CHROME_BAND)
+
+
+def _check_min_pt(index: int, shape, box, canvas, min_pt: float) -> list[Finding]:
+    """Flag content text set under *min_pt* (``md2star audit --min-pt``)."""
+    if _is_chrome(shape, box, canvas):
+        return []
+    small = sorted({pt for text, pt in _runs(shape) if text.strip() and pt and pt < min_pt})
+    if not small:
+        return []
+    return [
+        Finding(
+            index,
+            "under-min-pt",
+            _("%(sizes)s is under the %(floor)gpt minimum")
+            % {"sizes": ", ".join(f"{pt:g}pt" for pt in small), "floor": min_pt},
+            shape.name,
+        )
+    ]
+
+
 def _check_overrun(index: int, shape, box) -> list[Finding]:
     """Flag text that needs more vertical room than its box gives it."""
     needed, largest = _needed_pt_height(shape, box)
@@ -495,7 +556,9 @@ def _check_overrun(index: int, shape, box) -> list[Finding]:
 
 
 # ── the audit ────────────────────────────────────────────────────────────────
-def audit(deck: Path, *, canvas: tuple[int, int] | None = None) -> list[Finding]:
+def audit(
+    deck: Path, *, canvas: tuple[int, int] | None = None, min_pt: float | None = None
+) -> list[Finding]:
     """Audit a saved ``.pptx``, slide by slide.
 
     Parameters
@@ -506,6 +569,8 @@ def audit(deck: Path, *, canvas: tuple[int, int] | None = None) -> list[Finding]
         ``(width, height)`` in EMU to measure against. Defaults to the deck's
         own slide size, which is what you want unless you are checking a deck
         against a different target canvas.
+    min_pt : float, optional
+        Also report content text under this size (``under-min-pt``).
 
     Returns
     -------
@@ -548,6 +613,8 @@ def audit(deck: Path, *, canvas: tuple[int, int] | None = None) -> list[Finding]
                     )
                 continue
             findings += _check_type(index, shape)
+            if min_pt is not None:
+                findings += _check_min_pt(index, shape, box, size, min_pt)
             if box is not None:
                 findings += _check_overrun(index, shape, box)
                 findings += _check_contrast(index, slide, shape, box)
@@ -627,7 +694,9 @@ def log_findings(findings: list[Finding]) -> None:
 DEFECT_KINDS = frozenset(KINDS) - {"overrun"}
 
 
-def run(deck_path: str, *, as_json: bool = False, strict: bool = False) -> int:
+def run(
+    deck_path: str, *, as_json: bool = False, strict: bool = False, min_pt: float | None = None
+) -> int:
     """``md2star audit <deck.pptx>`` — measure a deck and report what is wrong.
 
     Works on **any** presentation, not only the ones md2star built: everything
@@ -646,6 +715,9 @@ def run(deck_path: str, *, as_json: bool = False, strict: bool = False) -> int:
         Emit the findings as JSON instead of one line each plus a summary.
     strict : bool, optional
         Also fail on ``overrun``, which is otherwise an observation.
+    min_pt : float, optional
+        Fail on content text under this size (``under-min-pt``); footer
+        chrome is exempt.
 
     Returns
     -------
@@ -663,7 +735,7 @@ def run(deck_path: str, *, as_json: bool = False, strict: bool = False) -> int:
         print(f"md2star audit: no such file: {deck}", file=sys.stderr)
         return 2
     try:
-        findings = audit(deck)
+        findings = audit(deck, min_pt=min_pt)
     except Exception as exc:  # noqa: BLE001 — any reader error is the same answer
         # python-pptx raises several unrelated types for "that is not a pptx"
         # (PackageNotFoundError, KeyError, BadZipFile); the user needs one

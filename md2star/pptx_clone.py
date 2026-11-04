@@ -526,8 +526,8 @@ def _retext(paragraph, text: str) -> None:
     run.text = text
 
 
-def _enforce_floor(shape, font_delta: int = 0) -> None:
-    """Apply *font_delta*, never going under the legibility floor.
+def _enforce_floor(shape, font_delta: int = 0, min_pt: float | None = None) -> None:
+    """Apply *font_delta*, never going under the legibility floor (or *min_pt*).
 
     A run with no declared size is left untouched: its size comes from the
     designer's own master, which is the typography this seam exists to inherit,
@@ -537,10 +537,13 @@ def _enforce_floor(shape, font_delta: int = 0) -> None:
         for run in paragraph.runs:
             if run.font.size is None:
                 continue
-            run.font.size = Pt(max(LEGIBLE_MIN_PT, run.font.size.pt + font_delta))
+            floor = max(LEGIBLE_MIN_PT, min_pt or 0.0)
+            run.font.size = Pt(max(floor, run.font.size.pt + font_delta))
 
 
-def _fill_frame(shape, lines: list[str], *, font_delta: int = 0) -> None:
+def _fill_frame(
+    shape, lines: list[str], *, font_delta: int = 0, min_pt: float | None = None
+) -> None:
     """Replace a designer frame's paragraphs with one per line of *lines*.
 
     Every line is a copy of the designer's own first paragraph, so indent
@@ -569,9 +572,10 @@ def _fill_frame(shape, lines: list[str], *, font_delta: int = 0) -> None:
 
     frame.word_wrap = True
     # Belt and braces, exactly as Seam D: our line is not the designer's filler
-    # and may be longer, so the renderer shrinks it rather than clipping it.
-    frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
-    _enforce_floor(shape, font_delta)
+    # and may be longer, so the renderer shrinks it rather than clipping it —
+    # unless a floor is set (--min-pt), which shrinking would break.
+    frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE if min_pt is None else MSO_AUTO_SIZE.NONE
+    _enforce_floor(shape, font_delta, min_pt)
 
 
 def _retire(shape) -> None:
@@ -697,7 +701,7 @@ def pick_example(
     return page, slide
 
 
-def compose(prs, example, content: Content, *, font_delta: int = 0):
+def compose(prs, example, content: Content, *, font_delta: int = 0, min_pt: float | None = None):
     """Clone *example* and put *content* in it; ``None`` if it cannot carry it.
 
     Classification runs twice on purpose: once on *example* to decide
@@ -718,13 +722,13 @@ def compose(prs, example, content: Content, *, font_delta: int = 0):
     slide = clone_slide(prs, example)
     roles = classify(slide, canvas)
     if roles.title is not None:
-        _fill_frame(roles.title, [content.title], font_delta=font_delta)
+        _fill_frame(roles.title, [content.title], font_delta=font_delta, min_pt=min_pt)
 
     columns: list = []
     if content.bullets:
         columns = peers(roles.bodies)
         for frame, share in zip(columns, distribute(content.bullets, len(columns)), strict=True):
-            _fill_frame(frame, share, font_delta=font_delta)
+            _fill_frame(frame, share, font_delta=font_delta, min_pt=min_pt)
     for frame in roles.bodies:
         if frame not in columns:
             _retire(frame)

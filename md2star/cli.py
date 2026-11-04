@@ -436,6 +436,26 @@ def _smart_layout_params() -> list[click.Parameter]:
                 "re-renders the deck and costs one VLM call per slide)."
             ),
         ),
+        click.Option(
+            ["--min-pt"],
+            type=float,
+            default=None,
+            metavar="N",
+            help=(
+                "--smart-layout only: never set slide text under N points (recommended: 30, "
+                "Kawasaki's 10/20/30). Keeps the template's declared sizes when they clear "
+                "N, disables auto-shrink, sends overflowing slides to roomier layouts and "
+                "splits what fits none into '(suite)'/'(cont.)' slides."
+            ),
+        ),
+        click.Option(
+            ["--refresh-catalog"],
+            is_flag=True,
+            help=(
+                "--smart-layout only: rebuild the template's layout catalog (captions "
+                "included) instead of reading the cached one."
+            ),
+        ),
     ]
 
 
@@ -604,8 +624,18 @@ def twin(
 @click.option(
     "--strict", is_flag=True, help="Also fail on `overrun`, which is otherwise an observation."
 )
+@click.option(
+    "--min-pt",
+    type=float,
+    default=None,
+    metavar="N",
+    help=(
+        "Also fail on slide content set under N points (Kawasaki's 10/20/30: pass 30). "
+        "Footer chrome (date / footer / slide-number, fields, one line at the bottom) is exempt."
+    ),
+)
 @click.pass_context
-def audit(ctx: click.Context, deck: str, as_json: bool, strict: bool) -> None:
+def audit(ctx: click.Context, deck: str, as_json: bool, strict: bool, min_pt: float | None) -> None:
     """Report overlaps, off-canvas shapes and unreadable type in any .pptx.
 
     Works on decks md2star did not build: everything it checks is read off the
@@ -618,7 +648,9 @@ def audit(ctx: click.Context, deck: str, as_json: bool, strict: bool) -> None:
         logger.error("md2star audit needs python-pptx: pip install 'md2star[pptx]' (%s)", exc)
         ctx.exit(2)
     else:
-        ctx.exit(audit_run(deck, as_json=as_json, strict=strict))
+        # min_pt only when given, so `run`'s historical call shape is unchanged.
+        extra = {"min_pt": min_pt} if min_pt is not None else {}
+        ctx.exit(audit_run(deck, as_json=as_json, strict=strict, **extra))
 
 
 # The only translated help text in this module, and deliberately so: these two

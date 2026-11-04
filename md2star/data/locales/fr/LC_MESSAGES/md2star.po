@@ -182,6 +182,12 @@ msgstr "emplacement non rempli"
 msgid "%(sizes)s is under the %(floor)gpt legibility floor"
 msgstr "%(sizes)s passe sous le plancher de lisibilité de %(floor)g pt"
 
+msgid "%(sizes)s is under the %(floor)gpt minimum"
+msgstr "%(sizes)s passe sous le minimum de %(floor)g pt"
+
+msgid "md2pptx: --min-pt must be a positive number of points"
+msgstr "md2pptx : --min-pt doit être un nombre de points positif"
+
 msgid "#%(fg)s on #%(bg)s is %(ratio).1f:1, under the %(floor)g:1 floor"
 msgstr "#%(fg)s sur #%(bg)s donne %(ratio).1f:1, sous le plancher de %(floor)g:1"
 

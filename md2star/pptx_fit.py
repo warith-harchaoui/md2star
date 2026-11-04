@@ -118,6 +118,9 @@ TARGET_OCCUPANCY = 0.55
 #: "one image and few words".
 CAPTION_CHARS = 140
 
+#: Vertical gap between two list items, in lines (see :func:`evaluate`).
+PARAGRAPH_GAP_LINES = 0.3
+
 #: Tolerance on the fit verdict. The capacity estimate is approximate, so a
 #: slide that overruns by a few percent is not called impossible; one that
 #: overruns by a third is.
@@ -174,6 +177,13 @@ class ContentMetrics:
     #: Structural, not stylistic: it wants a title-only layout, with no body
     #: box sitting empty underneath it.
     big_statement: bool = False
+    #: Number of ``::: {.column}`` divs: text in columns is spread over the
+    #: layout's body boxes, one flow of text goes into a single one.
+    columns: int = 0
+    #: Visible length of each list item, in order. A bullet is set on lines
+    #: of its own, so its last line is charged whole: ten 75-character bullets
+    #: in a 60-character line need twenty lines, not thirteen.
+    bullet_lengths: list[int] = field(default_factory=list)
 
     @property
     def word_count(self) -> int:
@@ -223,6 +233,9 @@ def measure(title: str, body: str) -> ContentMetrics:
     """
     m = ContentMetrics(title_chars=len(title or ""))
     m.big_statement = bool(re.search(r"\{\.big\}", body))
+    m.columns = len(
+        re.findall(r"(?m)^:{3,}[ \t]*(?:\{[^}]*\.column\b(?!s)[^}]*\}|column\b(?!s))", body)
+    )
 
     # Code fences: count their lines, then remove them so their contents do
     # not count as prose (a fence is laid out verbatim, not wrapped).
@@ -252,6 +265,7 @@ def measure(title: str, body: str) -> ContentMetrics:
 
     bullets = [b.strip() for b in _BULLET_RE.findall(rest)]
     m.bullet_count = len(bullets)
+    m.bullet_lengths = [len(_INLINE_MARKUP_RE.sub("", b)) for b in bullets]
     m.longest_bullet_chars = max((len(b) for b in bullets), default=0)
 
     # Visible prose: headings, attribute spans and inline markup removed.
@@ -329,12 +343,24 @@ def _kinds(layout: object) -> list[str]:
     return [getattr(p, "kind", "") or "" for p in phs]
 
 
-def _capacity_for(layout: object, kinds: frozenset[str], min_pt: float) -> Capacity:
+def _capacity_for(
+    layout: object, kinds: frozenset[str], min_pt: float, *, single: bool = False
+) -> Capacity:
     """Summed capacity of every placeholder on *layout* matching *kinds*.
 
     Summed rather than maxed because a two-column layout genuinely holds the
-    text of both of its boxes.
+    text of both of its boxes — when the text is *in* columns. With *single*,
+    the largest box alone: one flow of text goes into one box, and summing a
+    layout's caption box onto its content box promised room the assembler
+    never uses (observed: a slide "fitting" at 30 pt that needed 2.2x its box).
     """
+    if single:
+        caps = [
+            placeholder_capacity(getattr(p, "emu", None), min_pt=min_pt)
+            for p in getattr(layout, "placeholders", None) or []
+            if (getattr(p, "kind", "") or "") in kinds
+        ]
+        return max(caps, key=lambda c: c.chars, default=Capacity())
     total = Capacity()
     for p in getattr(layout, "placeholders", None) or []:
         if (getattr(p, "kind", "") or "") in kinds:
@@ -344,6 +370,19 @@ def _capacity_for(layout: object, kinds: frozenset[str], min_pt: float) -> Capac
             total.lines += cap.lines
             total.chars_per_line = max(total.chars_per_line, cap.chars_per_line)
     return total
+
+
+def body_capacity(
+    layout: object, min_pt: float = KAWASAKI_MIN_PT, *, single: bool = True
+) -> Capacity:
+    """What *layout*'s body box holds at *min_pt* (its largest one, by default).
+
+    Public face of the summed capacity :func:`evaluate` charges against, so a
+    caller looking for the template's roomiest layout (to split a slide that
+    fits none, see :func:`md2star.pptx_layout.paginate`) measures it the very
+    same way the ranking does.
+    """
+    return _capacity_for(layout, _BODY_KINDS, min_pt, single=single)
 
 
 # ── the verdict ──────────────────────────────────────────────────────────────
@@ -443,7 +482,7 @@ def evaluate(
     """
     report = FitReport()
     kinds = _kinds(layout)
-    body_cap = _capacity_for(layout, _BODY_KINDS, min_pt)
+    body_cap = _capacity_for(layout, _BODY_KINDS, min_pt, single=metrics.columns < 2)
     pic_count = sum(1 for k in kinds if k in _PIC_KINDS)
     has_title = any(k in _TITLE_KINDS for k in kinds)
 
@@ -454,6 +493,15 @@ def evaluate(
     structural_lines = metrics.table_rows + metrics.code_lines
     if structural_lines and body_cap.chars_per_line:
         needed += structural_lines * body_cap.chars_per_line
+    if metrics.bullet_lengths and body_cap.chars_per_line:
+        cpl = body_cap.chars_per_line
+        lines = sum(math.ceil(n / cpl) for n in metrics.bullet_lengths if n)
+        # Plus the gap between items: a designer's list sets a space-before
+        # of about a third of a line (12 pt at 30-40 pt type), which is what
+        # spilled a "fitting" eight-line list into the footer.
+        lines += PARAGRAPH_GAP_LINES * len(metrics.bullet_lengths)
+        by_lines = int(math.ceil(lines * cpl))
+        needed = max(needed, by_lines)
     report.needed_chars = needed
     report.capacity_chars = body_cap.chars
 
@@ -537,6 +585,17 @@ def evaluate(
         elif body_cap.chars > 0:
             score -= 0.25
             report.reasons.append("a big statement would leave this body box empty")
+
+    # Columns want as many body boxes: "Two Content" for two columns, rather
+    # than two narrow strips cut out of one box.
+    if metrics.columns >= 2:
+        boxes = sum(1 for k in kinds if k in _BODY_KINDS)
+        if boxes >= metrics.columns:
+            score += 0.35
+            report.reasons.append(f"{boxes} body boxes for {metrics.columns} columns")
+        else:
+            score -= 0.20
+            report.reasons.append(f"{metrics.columns} columns but {boxes} body box(es)")
 
     # Image-forward and text-sparse: the deck this suite is aiming for.
     if metrics.is_sparse and pic_count and metrics.image_count:

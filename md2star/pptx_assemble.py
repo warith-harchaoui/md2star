@@ -176,15 +176,191 @@ def _bg_hex(layout) -> str | None:
 
 
 def is_dark_layout(layout) -> bool | None:
-    """``True``/``False`` for a resolvable solid background, else ``None``."""
-    hexc = _bg_hex(layout)
-    if not hexc:
+    """``True``/``False`` for a resolvable one-colour background, else ``None``.
+
+    Resolved through :func:`background_rgb`, so a dark background declared on
+    the master (and only inherited by the layout) counts.
+    """
+    rgb = background_rgb(layout)
+    if rgb is None:
         return None
-    r, g, b = (int(hexc[i : i + 2], 16) for i in (1, 3, 5))
     # Standard perceptual luma weights (ITU-R BT.601); 110/255 is a slightly
     # conservative midpoint (below the textbook 128) so a mid-tone background
     # still gets white text, which stays legible more often than the reverse.
-    return (0.299 * r + 0.587 * g + 0.114 * b) < 110
+    return _luma(rgb) < 110
+
+
+# ── template typography and colour, read the way a renderer reads them ──────
+# A placeholder's look is inherited: its own <a:lstStyle>, then the layout
+# placeholder it was cloned from, then the master's, then the master's
+# <p:txStyles> (titleStyle for titles, bodyStyle for body text). A designer
+# who built the template for 30 pt type wrote that 30 somewhere on this chain,
+# and the assembler's job under --min-pt is to *find* it and leave it alone
+# rather than stamp 16 pt over it.
+_A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main"
+_P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main"
+_TITLE_STYLE_KINDS = {"title", "ctrTitle"}
+
+
+def _qa(tag: str) -> str:
+    return f"{{{_A_NS}}}{tag}"
+
+
+def _qp(tag: str) -> str:
+    return f"{{{_P_NS}}}{tag}"
+
+
+def _master_of(shape):
+    """The slide master a slide / layout / master shape ultimately inherits from."""
+    part = shape.part
+    try:
+        if hasattr(part, "slide_layout"):
+            return part.slide_layout.slide_master  # a slide's (or layout's) shape
+        return getattr(part, "slide_master", None)  # a master's own shape
+    except Exception:  # noqa: BLE001 — a detached shape: no inheritance to read
+        return None
+
+
+def _theme_colours(master) -> dict[str, RGBColor]:
+    """The theme's colour scheme, by slot name (``dk1``, ``lt1``, ``accent1``...)."""
+    from pptx.opc.constants import RELATIONSHIP_TYPE as RT  # noqa: PLC0415
+    from pptx.oxml import parse_xml  # noqa: PLC0415
+
+    try:
+        theme = parse_xml(master.part.part_related_by(RT.THEME).blob)
+    except Exception:  # noqa: BLE001 — no theme part: nothing to resolve against
+        return {}
+    out: dict[str, RGBColor] = {}
+    scheme = theme.find(f".//{_qa('clrScheme')}")
+    if scheme is None:
+        return out
+    for slot in scheme:
+        name = slot.tag.split("}")[-1]
+        srgb = slot.find(_qa("srgbClr"))
+        sys_clr = slot.find(_qa("sysClr"))
+        if srgb is not None and srgb.get("val"):
+            out[name] = RGBColor.from_string(srgb.get("val"))
+        elif sys_clr is not None and sys_clr.get("lastClr"):
+            out[name] = RGBColor.from_string(sys_clr.get("lastClr"))
+    return out
+
+
+def _resolve_colour(fill_parent, master) -> RGBColor | None:
+    """The RGB of a ``solidFill`` / ``bgRef`` / gradient's first stop, if knowable.
+
+    A ``schemeClr`` goes through the master's ``clrMap`` (``tx1`` -> ``dk1``)
+    to the theme. Luminance modifiers (``lumMod``...) are ignored: close
+    enough to say "dark or light", which is all the callers ask.
+    """
+    if fill_parent is None:
+        return None
+    srgb = fill_parent.find(f".//{_qa('srgbClr')}")
+    if srgb is not None and srgb.get("val"):
+        return RGBColor.from_string(srgb.get("val"))
+    scheme = fill_parent.find(f".//{_qa('schemeClr')}")
+    if scheme is None or master is None:
+        return None
+    slot = scheme.get("val", "")
+    clr_map = master._element.find(_qp("clrMap"))  # noqa: SLF001
+    if clr_map is not None and clr_map.get(slot):
+        slot = clr_map.get(slot)
+    return _theme_colours(master).get(slot)
+
+
+def _bg_element(part_obj):
+    try:
+        return part_obj._element.cSld.bg  # noqa: SLF001 — python-pptx has no reader for bgRef
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def background_rgb(layout) -> RGBColor | None:
+    """The background a slide on *layout* shows, when it is one colour.
+
+    The layout's own ``<p:bg>`` first, then its master's — the step that was
+    missing: a template whose dark background is declared once on the master
+    (the common case) used to read as "unresolvable", hence light, hence
+    near-black text on a dark slide. A picture background is unknowable and
+    returns ``None``; a gradient is judged by its first stop.
+    """
+    master = getattr(layout, "slide_master", None)
+    for part_obj in (layout, master):
+        if part_obj is None:
+            continue
+        bg = _bg_element(part_obj)
+        if bg is None:
+            continue
+        if bg.find(f".//{_qa('blipFill')}") is not None:
+            return None
+        return _resolve_colour(bg, master)
+    return None
+
+
+def _luma(rgb: RGBColor) -> float:
+    return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]
+
+
+def _style_levels(shape, level: int) -> list:
+    """Every ``lvlNpPr`` that styles *shape*'s paragraphs at *level*, nearest first."""
+    tag = _qa(f"lvl{min(level, 8) + 1}pPr")
+    found = []
+    node = shape
+    seen = 0
+    while node is not None and seen < 4:
+        seen += 1
+        el = node._element  # noqa: SLF001
+        lst = el.find(f".//{_qa('lstStyle')}")
+        if lst is not None and lst.find(tag) is not None:
+            found.append(lst.find(tag))
+        try:
+            node = node._base_placeholder  # noqa: SLF001 — slide -> layout -> master
+        except Exception:  # noqa: BLE001 — a master placeholder has no base
+            node = None
+    master = _master_of(shape)
+    if master is not None:
+        styles = master._element.find(_qp("txStyles"))  # noqa: SLF001
+        if styles is not None:
+            kind = placeholder_kind(shape)
+            which = (
+                "titleStyle"
+                if kind in _TITLE_STYLE_KINDS
+                else "bodyStyle"
+                if shape.is_placeholder
+                else "otherStyle"
+            )
+            sheet = styles.find(_qp(which))
+            if sheet is not None and sheet.find(tag) is not None:
+                found.append(sheet.find(tag))
+    return found
+
+
+def declared_style(shape, level: int = 0) -> tuple[float | None, RGBColor | None, bool]:
+    """The point size and colour *shape* inherits at *level*, from the template.
+
+    Returns
+    -------
+    tuple of (float or None, RGBColor or None, bool)
+        The inherited size (``None`` when nothing on the chain declares one),
+        its colour when resolvable to RGB, and whether a colour is declared at
+        all (a theme colour the reader cannot resolve still counts: the
+        designer chose it, so the assembler should not paint over it).
+    """
+    size: float | None = None
+    colour: RGBColor | None = None
+    declared = False
+    master = None
+    for lvl in _style_levels(shape, level):
+        rpr = lvl.find(_qa("defRPr"))
+        if rpr is None:
+            continue
+        if size is None and rpr.get("sz"):
+            size = int(rpr.get("sz")) / 100.0
+        fill = rpr.find(_qa("solidFill"))
+        if not declared and fill is not None:
+            declared = True
+            master = master or _master_of(shape)
+            colour = _resolve_colour(fill, master)
+    return size, colour, declared
 
 
 def _weight_rank(name: str) -> int:
@@ -279,23 +455,165 @@ def parse_code(body: str) -> str | None:
     return None
 
 
-def fallback_bullets(body: str, cap: int) -> list[str]:
-    """Trimmed bullet text, used when no AI summary was computed for a slide."""
-    body = re.sub(r"```.*?```", "", body, flags=re.DOTALL)  # code/mermaid isn't bullet prose
-    out: list[str] = []
+@dataclass
+class Item:
+    """One paragraph of slide text: its words, list depth, and whether it is a bullet."""
+
+    text: str
+    level: int = 0
+    bullet: bool = True
+
+
+_LIST_ITEM_RE = re.compile(r"^([ \t]*)([-*+]|\d+[.)])[ \t]+(.*)$")
+_LINK_RE = re.compile(r"!?\[([^\]]*)\]\([^)]*\)")
+_SPAN_ATTR_RE = re.compile(r"\[([^\]]*)\]\{[^}]*\}")
+
+
+def _inline(text: str) -> str:
+    """Markdown inline markup -> the words a reader sees."""
+    text = _SPAN_ATTR_RE.sub(r"\1", text)
+    text = _LINK_RE.sub(r"\1", text)
+    text = re.sub(r"\s*\{[^{}]*\}\s*$", "", text)
+    text = re.sub(r"\*\*|__|`", "", text)
+    # Single-character emphasis only where it wraps words, so snake_case and
+    # 2*3 survive.
+    text = re.sub(r"(?<![\w*])[*_](\S(?:[^*_]*\S)?)[*_](?![\w*])", r"\1", text)
+    return _clean(text)
+
+
+def body_items(body: str) -> list[Item]:
+    """Every paragraph of visible text on a slide, in order, nothing capped.
+
+    Headings, tables, fences, images and div markers are not text paragraphs
+    (each has its own branch in :func:`assemble`). List items keep their depth
+    (two spaces or a tab per level); a numbered item keeps its number and gets
+    no bullet glyph; wrapped lines join the paragraph they continue.
+    """
+    body = re.sub(r"(?ms)^[ \t]*(```+|~~~+).*?^[ \t]*\1[ \t]*$", "", body)
+    items: list[Item] = []
+    para: list[str] = []
+    in_list = False
+
+    def flush() -> None:
+        if para:
+            text = _inline(" ".join(para))
+            if text:
+                items.append(Item(text, 0, False))
+            para.clear()
+
     for raw in body.splitlines():
         s = raw.strip()
-        # Skip headings, table rows, isolated images, and bare list-marker
-        # runs (an empty "- " line) — none of these read as a real bullet.
-        if not s or s.startswith(("#", "|", ":::", "![")) or set(s) <= {"*", "-", " "}:
+        if not s:
+            flush()
+            in_list = False
             continue
-        s = _clean(re.sub(r"[*_`>]", "", re.sub(r"^[-*]\s+|^\d+\.\s+", "", s)))
-        if s:
-            # 10-word cap keeps a fallback bullet on one visual line at the
-            # sizes add_text() uses — the AI summary (poc_layout_match-style)
-            # is already this terse; this is only the no-AI safety net.
-            out.append(" ".join(s.split()[:10]))
-    return out[:cap]
+        if s.startswith(("#", "|", ":::")) or _IMAGE_RE.fullmatch(s) or set(s) <= {"*", "-", " "}:
+            flush()
+            in_list = False
+            continue
+        m = _LIST_ITEM_RE.match(raw)
+        if m:
+            flush()
+            indent = len(m.group(1).replace("\t", "  "))
+            marker = m.group(2)
+            text = _inline(m.group(3))
+            if marker[0].isdigit():
+                items.append(Item(f"{marker.rstrip(')').rstrip('.')}. {text}", indent // 2, False))
+            elif text:
+                items.append(Item(text, min(indent // 2, 4), True))
+            in_list = True
+            continue
+        if in_list and items and raw[:1] in (" ", "\t"):
+            items[-1].text = f"{items[-1].text} {_inline(s)}".strip()
+            continue
+        para.append(s[1:].strip() if s.startswith(">") else s)
+    flush()
+    return items
+
+
+def fallback_bullets(body: str, cap: int | None = None) -> list[str]:
+    """The slide's text paragraphs, markup stripped — all of them unless *cap*.
+
+    There used to be a default cap of four bullets of ten words each, applied
+    silently. That was content loss presented as layout; the full text now
+    goes on the slide, and a slide too long for any layout is split into
+    continuation slides upstream (:func:`md2star.pptx_layout.paginate`).
+    """
+    texts = [it.text for it in body_items(body)]
+    return texts if cap is None else texts[:cap]
+
+
+def split_columns(body: str) -> list[str]:
+    """The bodies of a slide's ``::: {.column}`` divs, in order (``[]`` if none)."""
+    columns: list[list[str]] = []
+    stack: list[bool] = []  # True for a column div
+    for line in body.splitlines():
+        s = line.strip()
+        if re.match(r"^:{3,}[ \t]*$", s) and stack:
+            stack.pop()
+            continue
+        if re.match(r"^:{3,}[ \t]*\S", s):
+            is_col = bool(
+                re.match(r"^:{3,}[ \t]*(?:\{[^}]*\.column\b(?!s)[^}]*\}|column\b(?!s))", s)
+            )
+            stack.append(is_col)
+            if is_col:
+                columns.append([])
+            continue
+        if any(stack) and columns:
+            columns[-1].append(line)
+    return ["\n".join(c) for c in columns] if len(columns) >= 2 else []
+
+
+def parse_table(body: str) -> list[list[str]]:
+    """The first Markdown pipe table on the slide, as rows of cell text."""
+    rows: list[list[str]] = []
+    for line in body.splitlines():
+        s = line.strip()
+        if s.startswith("|") and s.endswith("|"):
+            if re.fullmatch(r"[\s|:-]+", s):
+                continue  # the |---|---| separator row is structure, not content
+            rows.append([_inline(c.strip()) for c in s.strip("|").split("|")])
+        elif rows:
+            break
+    return rows
+
+
+def notes_paragraphs(notes: str) -> list[tuple[str, int]]:
+    """Speaker notes as ``(text, level)`` paragraphs, list structure kept.
+
+    The notes pane is read mid-talk, at a glance: one paragraph per bullet,
+    with the bullet drawn as "•" and nested items indented, reads the way the
+    author wrote it — a single blob, or raw "- " markup, does not.
+    """
+    out: list[tuple[str, int]] = []
+    para: list[str] = []
+
+    def flush() -> None:
+        if para:
+            out.append((_inline(" ".join(para)), 0))
+            para.clear()
+
+    for raw in notes.splitlines():
+        s = raw.strip()
+        if not s:
+            flush()
+            continue
+        m = _LIST_ITEM_RE.match(raw)
+        if m:
+            flush()
+            level = len(m.group(1).replace("\t", "  ")) // 2
+            marker = m.group(2)
+            glyph = "•" if not marker[0].isdigit() else marker
+            out.append((f"{glyph} {_inline(m.group(3))}", min(level, 4)))
+            continue
+        if out and not para and raw[:1] in (" ", "\t"):
+            text, level = out[-1]
+            out[-1] = (f"{text} {_inline(s)}", level)
+            continue
+        para.append(s)
+    flush()
+    return [(t, lvl) for t, lvl in out if t]
 
 
 # ── placeholder-aware boxing ──────────────────────────────────────────────────
@@ -448,21 +766,30 @@ def drop_empty_placeholders(slide) -> int:
 # ── shape drawing ────────────────────────────────────────────────────────────
 def add_text(
     slide,
-    blocks: list[tuple[str, int, bool, str]],
+    blocks: list[tuple],
     box: tuple[float, float, float, float] | None = None,
     *,
-    color: RGBColor,
+    color: RGBColor | None,
     center: bool = False,
     middle: bool = False,
     into=None,
+    shrink: bool = True,
+    levels: list[int] | None = None,
+    plain: list[bool] | None = None,
 ) -> None:
     """Overlay a text box. *blocks* = list of (text, pt_size, bold, font).
 
     With *into* set to an existing shape (a cloned placeholder), writes into
     that shape instead of adding a new one, and ignores *box* — the shape's own
-    geometry is the designer's and is already what *box* was derived from. Size,
-    weight, face and colour are still forced per run either way, so inheriting
-    the designer's shape never means inheriting unreadable type.
+    geometry is the designer's and is already what *box* was derived from.
+
+    A ``None`` size, weight, face or *color* is **not written**, so the run
+    inherits it from the template (see :func:`declared_style`): that is how
+    ``--min-pt`` keeps a designer's 30 pt body instead of overwriting it.
+    *shrink* allows the renderer to shrink text to fit its shape; off under
+    ``--min-pt``, where shrinking is exactly what the floor forbids.
+    *levels* sets each paragraph's list depth and *plain* marks paragraphs
+    that must not get the placeholder's bullet glyph (prose, numbered items).
     """
     if into is not None:
         tf = into.text_frame
@@ -471,26 +798,39 @@ def add_text(
         left, top, width, height = (Inches(v) for v in box or (0.0, 0.0, 1.0, 1.0))
         tf = slide.shapes.add_textbox(left, top, width, height).text_frame
     tf.word_wrap = True
-    # Belt-and-braces against overflow: even after the eyeball loop's
-    # font_delta shrink, PowerPoint/LibreOffice auto-shrink the run further
-    # rather than ever clip text off the shape.
-    tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+    # With shrinking allowed: belt-and-braces against overflow, the renderer
+    # auto-shrinks the run rather than clip it. Without: NONE is written
+    # explicitly, overriding a normAutofit the layout's bodyPr may carry.
+    tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE if shrink else MSO_AUTO_SIZE.NONE
     if middle:
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     for i, (text, size, bold, font) in enumerate(blocks):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         p.text = text
-        p.space_after = Pt(6)
+        if levels is not None and i < len(levels) and levels[i]:
+            p.level = levels[i]
+        if plain is not None and i < len(plain) and plain[i]:
+            # An explicit <a:buNone/>: a designer body placeholder bullets
+            # every paragraph, and a sentence is not a list item.
+            ppr = p._p.get_or_add_pPr()  # noqa: SLF001
+            if ppr.find(_qa("buNone")) is None:
+                ppr.append(ppr.makeelement(_qa("buNone"), {}))
+        if into is None or size is not None:
+            p.space_after = Pt(6)
         if center:
             p.alignment = PP_ALIGN.CENTER
         # Set on the RUN, not the paragraph: LibreOffice/PowerPoint read
         # run-level rPr for size/bold/font/colour, so a paragraph-level
         # default here would silently not render in at least one of the two.
-        run = p.runs[0]
-        run.font.size = Pt(size)
-        run.font.bold = bold
-        run.font.name = font
-        run.font.color.rgb = color
+        for run in p.runs:
+            if size is not None:
+                run.font.size = Pt(size)
+            if bold is not None:
+                run.font.bold = bold
+            if font is not None:
+                run.font.name = font
+            if color is not None:
+                run.font.color.rgb = color
 
 
 def _fit(pic, max_w: float, max_h: float, cx: float, area_top: float) -> None:
@@ -524,7 +864,21 @@ def add_image(slide, img: Path, *, box: tuple[float, float, float, float], alt: 
         pic._element._nvXxPr.cNvPr.set("descr", alt)  # noqa: SLF001
 
 
-def add_code(slide, code: str, box: tuple[float, float, float, float], *, font: str) -> None:
+def add_code(
+    slide,
+    code: str,
+    box: tuple[float, float, float, float],
+    *,
+    font: str,
+    size: float = 13,
+    shrink: bool = True,
+) -> None:
+    """A dark rounded panel holding *code*, every line of it.
+
+    It used to keep the first twelve lines and drop the rest unannounced; a
+    long listing now shrinks to fit (or, under ``--min-pt``, overruns and is
+    reported by the audit) instead of being cut.
+    """
     left, top, width, height = box
     rect = slide.shapes.add_shape(
         MSO_SHAPE.ROUNDED_RECTANGLE, Inches(left), Inches(top), Inches(width), Inches(height)
@@ -535,14 +889,48 @@ def add_code(slide, code: str, box: tuple[float, float, float, float], *, font: 
     rect.shadow.inherit = False
     tf = rect.text_frame
     tf.word_wrap = True
+    tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE if shrink else MSO_AUTO_SIZE.NONE
     tf.margin_left = tf.margin_right = Inches(0.25)
-    for i, ln in enumerate(code.splitlines()[:12]):
+    for i, ln in enumerate(code.splitlines()):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         p.text = ln or " "
         run = p.runs[0]
         run.font.name = font
-        run.font.size = Pt(13)
+        run.font.size = Pt(size)
         run.font.color.rgb = _CODE_FG
+
+
+def add_table(
+    slide,
+    rows: list[list[str]],
+    box: tuple[float, float, float, float],
+    *,
+    size: float | None,
+    font: str | None,
+) -> None:
+    """A real PowerPoint table for a Markdown pipe table.
+
+    Tables used to vanish from smart-layout slides: the text parser skipped
+    every ``|`` row and no branch placed them. The template's default table
+    style supplies colours; only the size (and the face) is set here.
+    """
+    if not rows:
+        return
+    ncols = max(len(r) for r in rows)
+    left, top, width, height = box
+    shape = slide.shapes.add_table(
+        len(rows), ncols, Inches(left), Inches(top), Inches(width), Inches(height)
+    )
+    for r, row in enumerate(rows):
+        for c in range(ncols):
+            cell = shape.table.cell(r, c)
+            cell.text = row[c] if c < len(row) else ""
+            for paragraph in cell.text_frame.paragraphs:
+                for run in paragraph.runs:
+                    if size is not None:
+                        run.font.size = Pt(size)
+                    if font is not None:
+                        run.font.name = font
 
 
 # ── assembly ──────────────────────────────────────────────────────────────────
@@ -562,6 +950,11 @@ class AssembleResult:
     #: judge a cloned slide against *the page it was cloned from* and move it
     #: to another one. See :func:`eyeball_slides`.
     pages: dict[int, int] = field(default_factory=dict)
+    #: Slides the eyeball loop's vision judge gave no verdict on (timeout,
+    #: empty or unparseable reply) on its last pass. Their verdict fell back
+    #: to the measured audit alone; listed so "no complaint" is never mistaken
+    #: for "approved".
+    unjudged: list[int] = field(default_factory=list)
 
 
 RenderMermaidFn = Callable[[str], "Path | None"]
@@ -573,12 +966,167 @@ def _finish(slide, s: Slide) -> None:
         # Notes exist precisely so this text is NOT on the slide; the notes
         # pane is the one place it belongs. `notes_slide` creates the notes
         # slide (and a default notes master) on first access.
-        slide.notes_slide.notes_text_frame.text = s.notes
+        # One paragraph per bullet / paragraph, nested items indented: a
+        # telegraphic script stays scannable mid-talk (notes_paragraphs).
+        frame = slide.notes_slide.notes_text_frame
+        paragraphs = notes_paragraphs(s.notes) or [(s.notes.strip(), 0)]
+        frame.text = paragraphs[0][0]
+        frame.paragraphs[0].level = paragraphs[0][1]
+        for text, level in paragraphs[1:]:
+            para = frame.add_paragraph()
+            para.text = text
+            para.level = level
     # Last, so "empty" means "nothing was placed in it by any branch" — and on
     # a Seam-E clone, "nothing the designer wrote survived in it either".
     ghosts = drop_empty_placeholders(slide)
     if ghosts:
         logger.debug("slide %d: dropped %d unfilled placeholder(s)", s.index, ghosts)
+
+
+#: Slide placeholder kinds that take body text (``obj`` is OOXML's generic
+#: content placeholder: "Title and Content"'s big box).
+_BODY_PH_KINDS = {"body", "obj"}
+_SUBTITLE_PH_KINDS = {"subTitle", "body", "obj"}
+
+
+def _area(shape) -> int:
+    try:
+        return int(shape.width or 0) * int(shape.height or 0)
+    except Exception:  # noqa: BLE001 — inherited geometry python-pptx cannot read
+        return 0
+
+
+def _ph_box(shape) -> tuple[float, float, float, float] | None:
+    try:
+        vals = (shape.left, shape.top, shape.width, shape.height)
+    except Exception:  # noqa: BLE001
+        return None
+    if None in vals:
+        return None
+    return tuple(v / EMU_PER_INCH for v in vals)  # type: ignore[return-value]
+
+
+def _hsplit(
+    box: tuple[float, float, float, float], parts: int, gap: float = 0.3
+) -> list[tuple[float, float, float, float]]:
+    """*box* cut into *parts* side-by-side columns with a *gap* (inches)."""
+    left, top, width, height = box
+    each = (width - gap * (parts - 1)) / parts
+    return [(left + k * (each + gap), top, each, height) for k in range(parts)]
+
+
+def _column_boxes(
+    prs: Presentation, info: LayoutInfo | None, n: int
+) -> list[tuple[float, float, float, float]]:
+    """One box per column: the layout's own body boxes when it has *n*, else a split."""
+    if info is not None:
+        boxes = [
+            ph.emu
+            for ph in info.placeholders
+            if ph.kind in _BODY_KINDS | {"obj"} and ph.emu is not None
+        ]
+        if len(boxes) >= n:
+            # The n largest, read left to right: on a "Comparison" layout the
+            # small header boxes lose to the two content boxes under them.
+            biggest = sorted(boxes, key=lambda b: -b[2] * b[3])[:n]
+            return [tuple(v / EMU_PER_INCH for v in b) for b in sorted(biggest, key=lambda b: b[0])]
+    return _hsplit(content_box(prs, info), n)
+
+
+@dataclass
+class _Typeset:
+    """How one slide's text is sized and coloured (see :func:`assemble`)."""
+
+    min_pt: float | None
+    fd: int
+    fg: RGBColor
+
+    def size(self, base: float, declared: float | None, *, inherit_ok: bool) -> float | None:
+        """The size to write, or ``None`` to inherit the template's.
+
+        Without a floor: the assembler's own sizes, as always. With one, the
+        designer's declared size wins whenever it clears the floor — inherited
+        outright when writing into their placeholder untouched, written out
+        when an overlay box cannot inherit it — and nothing goes under it.
+        """
+        if self.min_pt is None:
+            return base + self.fd
+        if declared is not None and declared >= self.min_pt:
+            if inherit_ok and self.fd == 0:
+                return None
+            return max(self.min_pt, declared + self.fd)
+        return max(self.min_pt, base + self.fd)
+
+    def colour(self, declared: tuple, *, inherit_ok: bool) -> RGBColor | None:
+        """The colour to write, or ``None`` to keep the template's.
+
+        A colour the template declares for that text is the designer's and is
+        kept as is: the slide's background alone says nothing of the panel a
+        title may sit on (observed: a "contrast fix" turned a dark title on a
+        light panel white). The audit judges the result. Undeclared, the
+        foreground is computed from the background as before.
+        """
+        _size, rgb, has = declared
+        if has:
+            if inherit_ok:
+                return None
+            return rgb or self.fg
+        return self.fg
+
+
+_NO_STYLE = (None, None, False)
+
+
+def _style_of(shape) -> tuple:
+    if shape is None:
+        return _NO_STYLE
+    try:
+        return declared_style(shape)
+    except Exception:  # noqa: BLE001 — an exotic template must not cost the slide
+        return _NO_STYLE
+
+
+def _layout_ph(layout, kinds: set[str]):
+    for shape in layout.placeholders:
+        if placeholder_kind(shape) in kinds:
+            return shape
+    return None
+
+
+def _write_items(
+    slide,
+    items: list[Item],
+    *,
+    ts: _Typeset,
+    font: str,
+    into=None,
+    box=None,
+    lead: list[tuple] | None = None,
+) -> None:
+    """Body text, into a designer placeholder (``into``) or an overlay *box*."""
+    if into is not None:
+        style = _style_of(into)
+        size = ts.size(16, style[0], inherit_ok=True)
+        add_text(
+            slide,
+            [(it.text, size, None, None if size is None else font) for it in items],
+            color=ts.colour(style, inherit_ok=True),
+            into=into,
+            shrink=ts.min_pt is None,
+            levels=[it.level for it in items],
+            plain=[not it.bullet for it in items],
+        )
+        return
+    style = _style_of(_layout_ph(slide.slide_layout, _BODY_PH_KINDS))
+    size = ts.size(16, style[0], inherit_ok=False)
+    colour = ts.colour(style, inherit_ok=False)
+    blocks = list(lead or [])
+    blocks += [
+        (("   " * it.level) + (f"•  {it.text}" if it.bullet else it.text), size, False, font)
+        for it in items
+    ]
+    if blocks:
+        add_text(slide, blocks, box, color=colour, shrink=ts.min_pt is None)
 
 
 def assemble(
@@ -592,6 +1140,7 @@ def assemble(
     default_layout: str | None = None,
     reference_slides: bool = False,
     avoid_pages: dict[int, list[int]] | None = None,
+    min_pt: float | None = None,
 ) -> AssembleResult:
     """Build a real ``.pptx`` directly on each slide's AI-selected layout.
 
@@ -600,7 +1149,8 @@ def assemble(
     the pick is missing or unknown) and overlay title/body/image/code content
     sized from that layout's own placeholder geometry when the catalog
     recorded one. Per-slide ``overrides`` (written by :func:`eyeball_slides`)
-    bound font size, bullet count and image growth.
+    bound font size and image growth. Every paragraph, table and code line
+    of the slide is placed: nothing is trimmed to make it fit.
 
     With *reference_slides* set, each slide is first offered to **Seam E**
     (:mod:`md2star.pptx_clone`): when the chosen layout has an example page in
@@ -612,6 +1162,13 @@ def assemble(
     *avoid_pages* maps a slide index to example pages it may **not** use —
     what :func:`eyeball_slides` writes after a vision model has judged one of
     them not to be carrying that slide.
+
+    With *min_pt* (the CLI's ``--min-pt``), no slide text is set under that
+    size: body text goes **into** the layout's own body placeholders, keeping
+    the size, colour, face and bullets the designer declared whenever they
+    clear the floor; overlay text uses the declared size or the floor; and
+    nothing is allowed to auto-shrink. Overflow is then the audit's to report
+    and the eyeball loop's to fix by moving or splitting the slide.
 
     Returns
     -------
@@ -656,12 +1213,11 @@ def assemble(
         name = s.chosen_layout if s.chosen_layout in have else fallback_name
         layout = layouts[name]
         info = catalog_by_name.get(name)
-        # A layout with no explicitly resolvable solid fill (``dark is None``)
-        # is, empirically, virtually always a plain white/light layout whose
-        # background comes from the master's default rather than an explicit
-        # override (a real black/gradient/photo background always resolves) —
-        # so treat "unresolvable" as light, not dark. Getting this wrong is a
-        # correctness bug, not a cosmetic one: white-on-white is invisible.
+        # A layout with no resolvable one-colour background (``dark is
+        # None``: a photo, nothing declared anywhere) is treated as light —
+        # the master's own background is now part of the resolution, so this
+        # is the rare case. Getting dark wrong is a correctness bug, not a
+        # cosmetic one: white-on-white is invisible.
         dark = is_dark_layout(layout)
         fg = _WHITE if dark else _NEAR_BLACK
 
@@ -672,13 +1228,12 @@ def assemble(
         # patterns and steal the slide from its actual diagram branch.
         code = parse_code(body) if not mer else None
         img = parse_image(body, image_base_dir) if not mer else None
-        # Cover and closing slides are always title-only, whatever bullet or
-        # table markup the source happens to carry. The rule itself lives on
-        # the slide now (`Slide.title_only`, set by segment), so the stages
-        # that chose this layout were deciding about the same slide this one
-        # is about to build; the index check stays as the fallback for a
-        # hand-built Slide that never went through segmentation.
-        content = is_content(s.features) and not (s.title_only or s.index in (1, n))
+        table = parse_table(body) if "table" in s.features else []
+        # Title-only is decided once, by segment (`Slide.title_only`): a cover,
+        # closing or divider with nothing to place. A slide that carries
+        # bullets is a content slide wherever it sits, so nothing on it is
+        # lost to its position in the deck.
+        title_only = s.title_only
 
         # `or` inside the list, not around it: a one-element list is truthy
         # even when that element is "", so the outer form never fired.
@@ -689,20 +1244,15 @@ def assemble(
             # eyeball-loop verdict) only drops this one slide, never the deck.
             ov = s.overrides or {}
             fd = int(ov.get("font_delta", 0))
-            bcap = max(1, int(ov.get("bullets", 4)))
             igrow = float(ov.get("img_grow", 0.0))
-            # Resolved once, because both seams want the same answers: the
-            # bullets that survived the override cap, and the PNG a Mermaid
-            # fence was rendered to (None when there is no fence, no renderer,
-            # or the render failed — the branches below all key off that).
-            # No AI summary is threaded through the assembler on purpose (that
-            # lives in pptx_layout's selection stage, not here) —
-            # fallback_bullets is the assembler's own, AI-free safety net.
-            bullets = fallback_bullets(body, bcap) if content else []
+            ts = _Typeset(min_pt=min_pt, fd=fd, fg=fg)
+            columns = [body_items(c) for c in split_columns(body)] if not title_only else []
+            items = [] if title_only else body_items(body)
+            bullets = [it.text for it in items]
             mpng = render_mermaid(mer) if (mer and render_mermaid) else None
 
             # ── Seam E: clone the designer's own example page, if one fits ──
-            if clone is not None and info is not None and not code:
+            if clone is not None and info is not None and not code and not table:
                 payload = clone.Content(
                     title=title_lines[0],
                     bullets=bullets,
@@ -721,7 +1271,9 @@ def assemble(
                 )
                 if picked is not None:
                     page, example = picked
-                    cloned_slide = clone.compose(prs, example, payload, font_delta=fd)
+                    cloned_slide = clone.compose(
+                        prs, example, payload, font_delta=fd, min_pt=min_pt
+                    )
                     if cloned_slide is not None:
                         used_pages.add(page)
                         carried_by[s.index] = page
@@ -736,78 +1288,20 @@ def assemble(
 
             # ── Seam D: build on the bare layout (always able to place) ──
             slide = prs.slides.add_slide(layout)
-            # The slide's *own* cloned title placeholder, when the layout has
-            # one. See the reconciliation note above: this is what puts the
-            # title in the outline pane and the screen-reader reading order.
-            title_ph = slide_placeholder(slide, TITLE_KINDS)
-            if content:
-                blocks = [(title_lines[0], 26 + fd, True, title_font)]
-                if title_ph is not None:
-                    # A layout with its own title zone gets the heading there,
-                    # leaving the body box to the bullets alone — which is both
-                    # the designer's intent and what pptx_fit measured when it
-                    # ranked this layout (title capacity and body capacity are
-                    # two separate boxes in that model).
-                    add_text(slide, blocks, color=fg, into=title_ph)
-                    blocks = []
-                blocks += [(f"•  {b}", 16 + fd, False, body_font) for b in bullets]
-                if blocks:
-                    add_text(slide, blocks, content_box(prs, info), color=fg)
-            elif mpng is not None:
-                add_text(
-                    slide,
-                    [(title_lines[0], 20 + fd, True, title_font)],
-                    title_box(prs, info),
-                    color=fg,
-                    into=title_ph,
-                )
-                left, top, width, height = image_box(prs, info)
-                add_image(
-                    slide,
-                    mpng,
-                    box=(left - igrow, top, width + 2 * igrow, height + igrow),
-                    # A rendered diagram's accessible description is the slide's
-                    # own title: nothing else here knows what the graph says.
-                    alt=title_lines[0],
-                )
-            elif img:
-                add_text(
-                    slide,
-                    [(title_lines[0], 20 + fd, True, title_font)],
-                    title_box(prs, info),
-                    color=fg,
-                    into=title_ph,
-                )
-                left, top, width, height = image_box(prs, info)
-                add_image(
-                    slide,
-                    img,
-                    box=(left - igrow, top, width + 2 * igrow, height + igrow),
-                    # Authored alt text first; failing that the slide's title,
-                    # which is at least a true description of what is shown.
-                    alt=parse_alt_text(body) or title_lines[0],
-                )
-            elif code:
-                add_text(
-                    slide,
-                    [(title_lines[0], 22 + fd, True, title_font)],
-                    title_box(prs, info),
-                    color=fg,
-                    into=title_ph,
-                )
-                add_code(slide, code, content_box(prs, info), font=fam.get("family", "Consolas"))
-            else:
-                add_text(
-                    slide,
-                    [(ln, 40 + fd, True, title_font) for ln in title_lines],
-                    title_box(prs, info, divider=True),
-                    color=fg,
-                    center=True,
-                    middle=True,
-                    # A cover or divider is *only* a title: inheriting the
-                    # designer's own title shape is the whole point here.
-                    into=title_ph,
-                )
+            _build(
+                prs,
+                slide,
+                s,
+                info,
+                ts,
+                title=title_lines[0],
+                title_only=title_only,
+                items=items,
+                columns=columns,
+                visual=(mpng, img, code, table),
+                igrow=igrow,
+                fonts=(title_font, body_font, fam.get("family", "Consolas")),
+            )
             _finish(slide, s)
             placed += 1
         except Exception as exc:  # noqa: BLE001 — one bad slide must not sink the deck
@@ -827,6 +1321,212 @@ def assemble(
     return AssembleResult(
         pptx_path=out_path, placed=placed, total=n, cloned=cloned, pages=carried_by
     )
+
+
+def _build(
+    prs,
+    slide,
+    s: Slide,
+    info: LayoutInfo | None,
+    ts: _Typeset,
+    *,
+    title: str,
+    title_only: bool,
+    items: list[Item],
+    columns: list[list[Item]],
+    visual: tuple,
+    igrow: float,
+    fonts: tuple[str, str, str],
+) -> None:
+    """Seam D for one slide: title, then text and/or the one visual it carries."""
+    title_font, body_font, mono = fonts
+    mpng, img, code, table = visual
+    # The slide's *own* cloned title placeholder, when the layout has one. See
+    # the reconciliation note above: this is what puts the title in the
+    # outline pane and the screen-reader reading order.
+    title_ph = slide_placeholder(slide, TITLE_KINDS)
+    t_style = _style_of(title_ph)
+    # Inheriting the designer's whole title look (size, weight, face, colour,
+    # alignment) is what --min-pt asks for; without it the assembler keeps
+    # forcing its own, as it always has.
+    inherit = ts.min_pt is not None and title_ph is not None
+
+    def put_title(base: float, box, *, divider: bool = False) -> None:
+        size = ts.size(base, t_style[0], inherit_ok=title_ph is not None)
+        add_text(
+            slide,
+            [(title, size, None if inherit else True, None if inherit else title_font)],
+            box,
+            color=ts.colour(t_style, inherit_ok=title_ph is not None),
+            center=divider and not inherit,
+            middle=divider and not inherit,
+            into=title_ph,
+            shrink=ts.min_pt is None,
+        )
+
+    if title_only:
+        # A cover, closing or divider: the title, and its subtitle when it has
+        # one — on the layout's own subtitle zone, else just under the title.
+        tbox = title_box(prs, info, divider=True)
+        put_title(40, tbox, divider=True)
+        if s.subtitle:
+            lines = [Item(line, 0, False) for line in s.subtitle.splitlines() if line.strip()]
+            sub_ph = next(
+                (
+                    ph
+                    for ph in slide.placeholders
+                    if placeholder_kind(ph) in _SUBTITLE_PH_KINDS and ph is not title_ph
+                ),
+                None,
+            )
+            if sub_ph is not None:
+                style = _style_of(sub_ph)
+                size = ts.size(20, style[0], inherit_ok=True)
+                add_text(
+                    slide,
+                    [(it.text, size, None, None if size is None else body_font) for it in lines],
+                    color=ts.colour(style, inherit_ok=True),
+                    into=sub_ph,
+                    shrink=ts.min_pt is None,
+                    plain=[True] * len(lines),
+                )
+            else:
+                left, top, width, height = tbox
+                slide_h = prs.slide_height / EMU_PER_INCH
+                below = (
+                    left,
+                    top + height,
+                    width,
+                    max(0.6, min(height * 0.6, slide_h - top - height)),
+                )
+                size = ts.size(20, None, inherit_ok=False)
+                add_text(
+                    slide,
+                    [(it.text, size, False, body_font) for it in lines],
+                    below,
+                    color=ts.fg,
+                    center=True,
+                    shrink=ts.min_pt is None,
+                )
+        return
+
+    has_visual = mpng is not None or img is not None or bool(code) or bool(table)
+    body_phs = sorted(
+        (
+            ph
+            for ph in slide.placeholders
+            if placeholder_kind(ph) in _BODY_PH_KINDS and ph is not title_ph
+        ),
+        key=lambda ph: -_area(ph),
+    )
+    use_ph = ts.min_pt is not None and bool(body_phs)
+    text = bool(items)
+    # Where an overlay goes: the slide's own body placeholder when it has one
+    # (its real geometry), else what the catalog recorded. The catalog reads
+    # the designer's example page, whose biggest text may be the very zone
+    # the title placeholder occupies — observed as a body box laid exactly
+    # over the title on a "Big Number" layout.
+    real = _ph_box(body_phs[0]) if body_phs else None
+    cbox_default = real or content_box(prs, info)
+
+    # ── title ──
+    if title_ph is None and text and not has_visual and not columns:
+        # No title zone: the heading shares the body box, which is what the
+        # fit model measured (pptx_fit: "the heading will share the body box").
+        lead = [(title, ts.size(26, None, inherit_ok=False), True, title_font)]
+        if use_ph:
+            put_title(26, title_box(prs, info))
+            lead = []
+        _write_items(
+            slide,
+            items,
+            ts=ts,
+            font=body_font,
+            into=body_phs[0] if use_ph else None,
+            box=cbox_default,
+            lead=lead,
+        )
+        return
+    base_title = 26 if text else (22 if code else 20)
+    put_title(base_title, title_box(prs, info))
+
+    # ── text regions ──
+    vis_box = None
+    if columns:
+        # Text written outside the column divs (a lead sentence) heads the
+        # first column rather than being lost or laid over the title.
+        inside = {c.text for col in columns for c in col}
+        outside = [it for it in items if it.text not in inside]
+        if outside:
+            columns = [outside + columns[0], *columns[1:]]
+        if use_ph and len(body_phs) >= len(columns):
+            targets = sorted(body_phs[: len(columns)], key=lambda ph: ph.left or 0)
+            for col, ph in zip(columns, targets, strict=False):
+                _write_items(slide, col, ts=ts, font=body_font, into=ph)
+        else:
+            real_cols = sorted(body_phs[: len(columns)], key=lambda ph: ph.left or 0)
+            boxes = (
+                [_ph_box(ph) for ph in real_cols]
+                if len(real_cols) >= len(columns) and all(_ph_box(ph) for ph in real_cols)
+                else _column_boxes(prs, info, len(columns))
+            )
+            for col, box in zip(columns, boxes, strict=False):
+                _write_items(slide, col, ts=ts, font=body_font, box=box)
+    elif text:
+        has_pic = info is not None and any(ph.kind in _IMAGE_KINDS for ph in info.placeholders)
+        if use_ph:
+            target = body_phs[0]
+            if has_visual:
+                # Text and a visual: the designer's body box keeps the left
+                # part, the visual takes the right.
+                full = _ph_box(target)
+                if full is not None:
+                    text_box, vis_box = _hsplit(full, 2)
+                    target.left, target.top = Inches(text_box[0]), Inches(text_box[1])
+                    target.width, target.height = Inches(text_box[2]), Inches(text_box[3])
+            _write_items(slide, items, ts=ts, font=body_font, into=target)
+        else:
+            cbox = cbox_default
+            if has_visual and not ((mpng is not None or img is not None) and has_pic):
+                text_box, vis_box = _hsplit(cbox, 2)
+            else:
+                text_box = cbox
+            _write_items(slide, items, ts=ts, font=body_font, box=text_box)
+    elif use_ph and has_visual:
+        vis_box = _ph_box(body_phs[0])
+
+    # ── the visual ──
+    if mpng is not None or img is not None:
+        left, top, width, height = vis_box or image_box(prs, info)
+        add_image(
+            slide,
+            mpng if mpng is not None else img,
+            box=(left - igrow, top, width + 2 * igrow, height + igrow),
+            # A rendered diagram's accessible description is the slide's own
+            # title: nothing else here knows what the graph says. A picture
+            # keeps its authored alt text when it has one.
+            alt=title if mpng is not None else (parse_alt_text(s.body) or title),
+        )
+    elif code:
+        lines = code.count("\n") + 1
+        if lines > 12:
+            logger.warning("slide %d: %d-line code block; consider splitting it", s.index, lines)
+        add_code(
+            slide,
+            code,
+            vis_box or content_box(prs, info),
+            font=mono,
+            size=ts.size(13, None, inherit_ok=False),
+            shrink=ts.min_pt is None,
+        )
+    elif table:
+        add_table(
+            slide,
+            table,
+            vis_box or content_box(prs, info),
+            size=ts.size(14, None, inherit_ok=False),
+            font=body_font,
+        )
 
 
 # ── target-matching Ralph Eyeball Loop ───────────────────────────────────────
@@ -893,6 +1593,9 @@ _FINDING_FLAGS = {
     # sends the slide down the ladder to a box with a different colour behind
     # it — another of the designer's pages, then another layout.
     "low-contrast": "low_contrast",
+    # Only reported under --min-pt: type under the floor is never fixed by a
+    # font nudge, so it reads as an overflow that is beyond shrinking.
+    "under-min-pt": "overflow",
 }
 
 
@@ -913,6 +1616,8 @@ def _measured_verdict(findings: list, index: int) -> dict | None:
     verdict: dict = {"matches": False, "discrepancies": "; ".join(str(f) for f in mine)}
     for finding in mine:
         verdict[_FINDING_FLAGS[finding.kind]] = True
+    if any(f.kind == "under-min-pt" for f in mine):
+        verdict["beyond_shrinking"] = True
     # An overrun is the one finding that comes with its own answer: the audit
     # has already computed the size that *would* fit. Two things follow, and
     # both are better than the blind nudge a vision model's "it overflows"
@@ -970,12 +1675,26 @@ def _merged_verdict(measured: dict | None, judged: dict | None) -> dict | None:
 SMALLEST_BASE_PT = 16
 
 
-def _overrides_for(verdict: dict) -> dict:
-    # Bounded, one-shot corrections — never a search: -4pt/2-bullets and
-    # +50% image growth are each a single fixed nudge per flagged issue, not
-    # a tuned parameter the loop iterates toward. low_contrast/too_empty are
-    # reported to the caller in ``discrepancies`` but have no safe automatic
-    # fix here (a layout swap, not a font/bullet tweak, is what they need).
+def _overrides_for(
+    verdict: dict, current: dict | None = None, *, min_pt: float | None = None
+) -> dict:
+    """The bounded fix for one verdict, *accumulated* onto the slide's *current* one.
+
+    Bounded, one-shot corrections — never a search: a font step and +50%
+    image growth are each a single fixed nudge per flagged issue, not a tuned
+    parameter the loop iterates toward. low_contrast/too_empty are reported
+    to the caller in ``discrepancies`` but have no safe automatic fix here (a
+    layout swap, not a font tweak, is what they need).
+
+    ``font_delta`` is relative to the slide's **original** sizes. A measured
+    step is computed from the size the slide has *now* (already shrunk by an
+    earlier pass), so it is added to the current delta; replacing it, as the
+    loop used to, undid the first pass's shrink on the second.
+
+    Under *min_pt* no overflow is ever fixed by shrinking: the empty answer
+    sends the slide down the ladder to a roomier layout, or to a split. And no
+    fix ever drops content: the old "keep two bullets" override is gone.
+    """
     from .pptx_audit import LEGIBLE_MIN_PT  # noqa: PLC0415 — one-way, see above
 
     ov: dict = {}
@@ -984,18 +1703,19 @@ def _overrides_for(verdict: dict) -> dict:
         # empty is what lets the caller's ladder move the slide instead.
         return ov
     if verdict.get("overflow"):
+        if min_pt is not None:
+            return ov
         # The measured eye knows the exact step (see _measured_verdict); the
         # model's eye only knows that something overflowed, and -4pt is the
         # nudge it has always earned.
-        delta = int(verdict.get("font_delta", -4))
+        delta = int((current or {}).get("font_delta", 0)) + int(verdict.get("font_delta", -4))
         if SMALLEST_BASE_PT + delta < LEGIBLE_MIN_PT:
-            # The exact correction would make the smallest type on the slide
+            # The correction would make the smallest type on the slide
             # unreadable, which is not a correction. Same answer as
             # `beyond_shrinking`, reached from the other direction: nothing
             # here fixes it, so let the ladder go find a bigger box.
             return ov
         ov["font_delta"] = delta
-        ov["bullets"] = 2
     if verdict.get("image_too_small"):
         ov["img_grow"] = 0.5
     return ov
@@ -1048,6 +1768,7 @@ def eyeball_slides(
     default_layout: str | None = None,
     allow_reselect: bool = True,
     reference_slides: bool = False,
+    min_pt: float | None = None,
 ) -> AssembleResult:
     """Target-matching Ralph Eyeball Loop over an assembled deck.
 
@@ -1071,6 +1792,14 @@ def eyeball_slides(
     truer correction than abandoning the layout they chose. If none of the
     remaining pages can carry the slide, assembly falls back to Seam D on its
     own, which is the safe generic this loop has always wanted.
+
+    A judge that times out or answers nothing is **unknown**, not "matches":
+    the slide is judged on the measured audit alone and listed in
+    :attr:`AssembleResult.unjudged`.
+
+    With *min_pt*, an overflow is never fixed by shrinking: the slide moves to
+    the next layout that holds it at the floor, and when none is left it is
+    split in two (continuation titled "(suite)" / "(cont.)").
 
     *render_deck* renders the assembled output deck itself (default:
     :func:`md2star.pptx_layout.render_deck_pages`, LibreOffice + poppler);
@@ -1096,6 +1825,7 @@ def eyeball_slides(
         default_layout=default_layout,
         reference_slides=reference_slides,
         avoid_pages=refused_pages,
+        min_pt=min_pt,
     )
 
     # One extra pass beyond max_iterations: the loop always re-judges after
@@ -1112,8 +1842,10 @@ def eyeball_slides(
         # The Look step has two eyes. This one measures the file and is always
         # available — no render, no model, no network — so the loop still does
         # real work on a machine where the other one cannot open.
-        measured = audit(out_path)
+        measured = audit(out_path, min_pt=min_pt)
         flagged = 0
+        unjudged: list[int] = []
+        to_split: list[int] = []
         for i in target_indices:
             s = by_index.get(i)
             if s is None:
@@ -1138,20 +1870,26 @@ def eyeball_slides(
                 prompt = _CLONE_JUDGE_PROMPT if i in result.pages else _JUDGE_PROMPT
                 out = chat(prompt, [target_png, candidate_png], _JUDGE_SCHEMA)
                 judged = parse_json_reply(out)
-                if not judged:
-                    # A transport failure or unparseable reply is
-                    # indistinguishable from "matches" to the caller below —
-                    # surfaced here so a verbose run doesn't read as a silent,
-                    # suspiciously perfect deck when the judge never weighed in.
-                    logger.debug("eyeball loop: no verdict for slide %d", s.index)
+                if not judged or "matches" not in judged:
+                    # Timeout, empty or unparseable: UNKNOWN, not "matches".
+                    # The slide is judged on the measured audit alone, and
+                    # said so, rather than reading as a perfect deck.
+                    judged = None
+                    unjudged.append(i)
+                    logger.info(
+                        "eyeball loop: no verdict from the judge for slide %d; "
+                        "using the measured audit only",
+                        s.index,
+                    )
                 verdict = _merged_verdict(verdict, judged)
             if not verdict or verdict.get("matches"):
                 continue
             if iteration < max_iterations:
-                ov = _overrides_for(verdict)
+                ov = _overrides_for(verdict, s.overrides, min_pt=min_pt)
                 if ov:
                     # Merge, not replace: a slide flagged on two different
-                    # passes accumulates both fixes instead of losing the first.
+                    # passes accumulates both fixes instead of losing the first
+                    # (font_delta is already the running total, see above).
                     s.overrides = {**(s.overrides or {}), **ov}
                     flagged += 1
                 else:
@@ -1186,7 +1924,8 @@ def eyeball_slides(
                     # The geometric ranking computed at selection time is
                     # still on the slide, so the next-best host is known
                     # without another model call.
-                    swap = _reselect(s) if allow_reselect else None
+                    # A layout the author named is theirs: never swapped.
+                    swap = _reselect(s) if allow_reselect and not s.pinned else None
                     if swap:
                         s.tried_layouts = [
                             *(getattr(s, "tried_layouts", None) or []),
@@ -1206,6 +1945,9 @@ def eyeball_slides(
                         # wrong on a roomy one.
                         s.overrides = {}
                         flagged += 1
+                    elif min_pt is not None and verdict.get("overflow"):
+                        # No layout holds it at the floor: two slides do.
+                        to_split.append(i)
                     else:
                         # Genuinely nothing left to try. Logged so this gap is
                         # visible instead of reading as "nothing to fix".
@@ -1214,6 +1956,12 @@ def eyeball_slides(
                             s.index,
                             verdict.get("discrepancies", "").strip() or "no discrepancy text",
                         )
+        result.unjudged = unjudged
+        if to_split and iteration < max_iterations:
+            slides, by_index, target_indices, refused_pages = _apply_splits(
+                slides, to_split, target_indices, refused_pages, explicit=indices is not None
+            )
+            flagged += len(to_split)
         if iteration < max_iterations:
             if not flagged:
                 break  # nothing actionable left to fix — stop before a no-op re-assemble
@@ -1227,6 +1975,63 @@ def eyeball_slides(
                 default_layout=default_layout,
                 reference_slides=reference_slides,
                 avoid_pages=refused_pages,
+                min_pt=min_pt,
             )
 
+    result.unjudged = sorted(set(result.unjudged))
     return result
+
+
+def _apply_splits(
+    slides: list[Slide],
+    to_split: list[int],
+    targets: list[int],
+    refused: dict[int, list[int]],
+    *,
+    explicit: bool,
+):
+    """Split each slide of *to_split* in two, in place, and renumber the deck.
+
+    In place (``slides[:] = ...``) because the caller's list is the deck the
+    pipeline reports on. Returns the refreshed index map, target list and
+    refused-page map, all in the new numbering.
+    """
+    from .pptx_layout import _body_blocks, continuation_label, split_slide  # noqa: PLC0415
+
+    label = continuation_label(slides[0].lang if slides else "", " ".join(x.body for x in slides))
+    new: list[Slide] = []
+    old_to_new: dict[int, list[int]] = {}
+    for s in slides:
+        heading, blocks = _body_blocks(s.body)
+        parts = [s]
+        if s.index in to_split and len(blocks) >= 2:
+            half = (len(blocks) + 1) // 2
+            parts = split_slide(s, [blocks[:half], blocks[half:]], heading, label)
+            for p in parts:
+                p.fit_ranked = s.fit_ranked
+                p.tried_layouts = list(s.tried_layouts)
+            logger.warning(
+                "eyeball loop: slide %d (%r) overflows every layout at the floor; split in two",
+                s.index,
+                s.title,
+            )
+        elif s.index in to_split:
+            logger.warning(
+                "eyeball loop: slide %d (%r) overflows at the floor and has one block: shorten it",
+                s.index,
+                s.title,
+            )
+        old_to_new[s.index] = []
+        for p in parts:
+            new.append(p)
+            old_to_new[s.index].append(len(new))
+    for k, p in enumerate(new, start=1):
+        p.index = k
+    slides[:] = new
+    by_index = {p.index: p for p in new}
+    if explicit:
+        targets = [j for i in targets for j in old_to_new.get(i, [])]
+    else:
+        targets = [p.index for p in new]
+    refused = {old_to_new[i][0]: pages for i, pages in refused.items() if i in old_to_new}
+    return slides, by_index, targets, refused

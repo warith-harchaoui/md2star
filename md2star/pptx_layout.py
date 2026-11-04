@@ -43,6 +43,7 @@ Author
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -180,6 +181,26 @@ class Slide:
     #: Layouts the eyeball loop has already moved this slide off, so a later
     #: pass does not send it back somewhere the vision model already rejected.
     tried_layouts: list[str] = field(default_factory=list)
+    #: Heading level that opened the slide: 1 for ``#``, 2 for ``##``, 0 for
+    #: a slide with no heading. An ``#`` past the cover opens a new part of
+    #: the deck, which is a section divider, not another content slide.
+    level: int = 0
+    #: ``{layout="Big Number"}`` on the heading: the exact template layout
+    #: the author asked for. Bypasses every model when the template has it.
+    layout_hint: str | None = None
+    #: A role asked for by class (``{.statement}``, ``{.recap}``, ...), or
+    #: implied by the title ("Key takeaways"); see :data:`CLASS_HINTS`.
+    class_hint: str | None = None
+    #: The one or two lines under a cover's / divider's title: its prose, or
+    #: for the cover the front matter's ``subtitle`` / ``author`` / ``date``.
+    #: Placed on the layout's subtitle zone so a title-only slide keeps them.
+    subtitle: str = ""
+    #: Set when the layout was decided by an explicit hint rather than chosen:
+    #: no model, tie-break or reselection moves a pinned slide.
+    pinned: bool = False
+    #: The deck's ``lang`` (front matter), for the "(suite)" / "(cont.)" label
+    #: of a continuation slide.
+    lang: str = ""
 
 
 # ── deterministic catalog extraction (no AI, always available) ──────────────
@@ -554,7 +575,14 @@ def default_chat(*, kind: str, model: str | None = None) -> ChatFn:
     Routes through ``best_engine_ai_helper.llm.chat`` using md2star's resolved
     brief -> engine descriptor, exactly like :mod:`md2star.reverse_diagrams`.
     Returns ``None`` on any failure so callers degrade gracefully.
+
+    ``MD2STAR_LLM_MODEL`` / ``MD2STAR_VLM_MODEL`` in the environment name the
+    model for that kind and override ``llm.engine.yaml``: the resolved default
+    (gemma3:12b on the reference machine) approves nearly every slide it is
+    shown as a judge, and swapping it should not mean regenerating the engine
+    file. An explicit *model* argument still wins over both.
     """
+    model = model or os.environ.get(f"MD2STAR_{kind.upper()}_MODEL") or None
 
     def _call(
         prompt: str, images: list[bytes] | None, json_schema: dict | None
@@ -648,10 +676,16 @@ def smart_layout_available() -> bool:
     # Both models are required, not either/or: select_layouts() needs the LLM
     # and build_catalog()/visual_confirm() need the VLM, and offering
     # --smart-layout with only one resolved would fail midway through a run.
-    return bool(eng.get("llm", {}).get("model")) and bool(eng.get("vlm", {}).get("model"))
+    llm_model = os.environ.get("MD2STAR_LLM_MODEL") or eng.get("llm", {}).get("model")
+    vlm_model = os.environ.get("MD2STAR_VLM_MODEL") or eng.get("vlm", {}).get("model")
+    return bool(llm_model) and bool(vlm_model)
 
 
 # ── catalog: deterministic geometry + optional VLM captions ─────────────────
+#: Bumped whenever what a cached catalog holds changes meaning, so an old
+#: cache file is never mistaken for this version's.
+CATALOG_VERSION = 2
+
 _CAPTION_SCHEMA = {
     "type": "object",
     "properties": {
@@ -717,7 +751,13 @@ def build_catalog(
         # Content-hashed, not path-hashed: two callers pointing at the same
         # template bytes (e.g. a shared brand asset referenced from different
         # project dirs) share one cached catalog instead of rebuilding it.
-        cache_path = cache_dir("pptx_layout") / f"{osh.hashfile(str(template))}.json"
+        # Versioned, and keyed by the captioning model when one is forced:
+        # captions written by another model, or by an older catalog
+        # extractor, are not this run's catalog. `refresh` (the CLI's
+        # --refresh-catalog) remains the way to force a rebuild outright.
+        vlm = re.sub(r"[^\w.-]+", "_", os.environ.get("MD2STAR_VLM_MODEL", ""))
+        key = f"{osh.hashfile(str(template))}-v{CATALOG_VERSION}" + (f"-{vlm}" if vlm else "")
+        cache_path = cache_dir("pptx_layout") / f"{key}.json"
     if cache_path.exists() and not refresh:
         try:
             raw = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -778,7 +818,6 @@ def _layout_info_dict(info: LayoutInfo) -> dict:
 # ── deck segmentation ────────────────────────────────────────────────────────
 _HR_RE = re.compile(r"(?m)^[ \t]*(\*\*\*+|---+|___+)[ \t]*$")
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
-_HEADING_RE = re.compile(r"(?m)^#{1,2}\s+(.*)$")
 
 #: YAML metadata block, and *only* at the very start of the document — Pandoc's
 #: own rule. It has to be removed before anything else looks at the text: its
@@ -810,10 +849,49 @@ _NOTES_RE = re.compile(
 )
 
 
+#: A column div: ``::: {.column}`` / ``::: column`` (never the ``.columns``
+#: wrapper around them). Pandoc's own two-column markup.
+_COLUMN_OPEN_RE = re.compile(r"^:{3,}[ \t]*(?:\{[^}]*\.column\b(?!s)[^}]*\}|column\b(?!s))")
+_DIV_OPEN_RE = re.compile(r"^:{3,}[ \t]*\S")
+_DIV_CLOSE_RE = re.compile(r"^:{3,}[ \t]*$")
+
+#: Code fences, whose ``# comment`` lines and ``---`` lines are not slide
+#: structure. Both fence characters, any length of three or more.
+_FENCE_SPAN_RE = re.compile(r"(?ms)^[ \t]*(```+|~~~+)[^\n]*\n.*?^[ \t]*\1[ \t]*$")
+_SLIDE_HEADING_RE = re.compile(r"(?m)^(#{1,2})[ \t]+(.*?)[ \t]*$")
+_ATTR_TAIL_RE = re.compile(r"\s*\{([^{}]*)\}\s*$")
+_LAYOUT_ATTR_RE = re.compile(r"""\blayout\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"']+))""")
+
+#: What a ``{.class}`` on a slide heading asks for: an archetype, and the
+#: layout names that mean it in a template that names its layouts plainly
+#: (PowerPoint's own vocabulary, and the course template's). The name wins
+#: when the template has it; the archetype is the fallback.
+CLASS_HINTS: dict[str, tuple[str | None, tuple[str, ...]]] = {
+    "statement": ("big-statement", ("Statement",)),
+    "big": ("big-statement", ("Statement",)),
+    "bignumber": ("big-number", ("Big Number",)),
+    "big-number": ("big-number", ("Big Number",)),
+    "quote": ("quote", ("Quote",)),
+    "recap": (None, ("Recap",)),
+    "agenda": (None, ("Agenda",)),
+    "section": ("section-divider", ("Section Header", "Section")),
+    "closing": ("closing", ("Closing",)),
+    "cover": ("cover", ("Title Slide",)),
+}
+
+#: A slide that closes a sequence by restating it: mapped to a template's
+#: "Recap" layout when it has one. French and English, the course's two.
+_RECAP_TITLE_RE = re.compile(
+    r"^\s*(?:qu['’]est[- ]ce que nous avons appris|ce que nous avons appris"
+    r"|what we(?: have|'ve)? learn(?:ed|t)|key takeaways?)\s*[?!.:]*\s*$",
+    re.IGNORECASE,
+)
+
+
 def _features(body: str) -> list[str]:
     """Detect the structural cues that hint at a layout (regex, no AI)."""
     f: list[str] = []
-    if re.search(r"::: *column", body):
+    if re.search(r"(?m)^:{3,}[ \t]*(?:\{[^}]*\.columns?\b|columns?\b)", body):
         f.append("two-column")
     if re.search(r"!\[.*?\]\(", body):
         f.append("image")
@@ -912,17 +990,107 @@ def split_notes(chunk: str) -> tuple[str, str]:
     return visible, "\n\n".join(n for n in taken if n)
 
 
-def _slide_from_chunk(index: int, chunk: str, *, default_title: str = "") -> Slide | None:
+def _protected_spans(text: str) -> list[tuple[int, int]]:
+    """Character spans whose lines are content, never slide structure.
+
+    A ``# comment`` in a Python fence is not a heading and a ``---`` in a YAML
+    fence is not a slide break; neither is anything in a speaker-notes div.
+    """
+    spans = [m.span() for m in _FENCE_SPAN_RE.finditer(text)]
+    spans += [m.span() for m in _NOTES_RE.finditer(text)]
+    return spans
+
+
+def _inside(pos: int, spans: list[tuple[int, int]]) -> bool:
+    return any(a <= pos < b for a, b in spans)
+
+
+def _chunks(markdown: str) -> list[str]:
+    """Cut a deck into slide-sized chunks, the way Pandoc does.
+
+    Every horizontal rule ends a slide and every ``#`` / ``##`` heading starts
+    one — both, always. This used to be either/or: a single stray ``---``
+    anywhere switched the whole deck to rule-splitting, and every heading
+    after it was folded into whichever slide came before. A heading never
+    splits off the text that precedes it within a chunk when that text has
+    no heading of its own (an image above the title stays with its slide).
+    """
+    spans = _protected_spans(markdown)
+    events: list[tuple[int, int, str]] = []
+    for m in _HR_RE.finditer(markdown):
+        if not _inside(m.start(), spans):
+            events.append((m.start(), m.end(), "hr"))
+    for m in _SLIDE_HEADING_RE.finditer(markdown):
+        if not _inside(m.start(), spans):
+            events.append((m.start(), m.start(), "h"))
+    events.sort()
+    chunks: list[str] = []
+    start, has_heading = 0, False
+    for pos, end, kind in events:
+        if kind == "hr":
+            chunks.append(markdown[start:pos])
+            start, has_heading = end, False
+        else:
+            # Before the chunk's first heading, only a notes div (the script
+            # of the slide that just ended, written after its `---`) is cut
+            # off as a chunk of its own, so it goes back to that slide.
+            lead = markdown[start:pos]
+            notes_only = lead.strip() and not split_notes(_HTML_COMMENT_RE.sub("", lead))[0].strip()
+            if has_heading or notes_only:
+                chunks.append(lead)
+                start = pos
+            has_heading = True
+    chunks.append(markdown[start:])
+    return [c for c in chunks if c.strip()]
+
+
+def parse_heading(line: str) -> tuple[str, list[str], str | None]:
+    """Split a heading's text from its ``{...}`` attributes.
+
+    Returns
+    -------
+    tuple of (str, list of str, str or None)
+        The title, its classes (without the dot), and a ``layout="..."``
+        attribute when one is given.
+
+    Examples
+    --------
+    >>> parse_heading('Growth {.bignumber layout="Big Number"}')
+    ('Growth', ['bignumber'], 'Big Number')
+    """
+    m = _ATTR_TAIL_RE.search(line)
+    if m is None:
+        return line.strip(), [], None
+    attrs = m.group(1)
+    classes = re.findall(r"(?<![\w-])\.([\w-]+)", attrs)
+    lay = _LAYOUT_ATTR_RE.search(attrs)
+    layout = next((g for g in lay.groups() if g), None) if lay else None
+    return line[: m.start()].strip(), classes, layout
+
+
+def _slide_from_chunk(
+    index: int, chunk: str, *, default_title: str = ""
+) -> tuple[Slide | None, str]:
+    """One chunk -> its slide, plus its notes (also when there is no slide).
+
+    A chunk that is *only* notes yields ``(None, notes)``: the caller hangs
+    them on the previous slide instead of losing them, which is what used to
+    happen to a ``::: notes`` written after a slide's closing ``---``.
+    """
     visible, notes = split_notes(_HTML_COMMENT_RE.sub("", chunk))
     visible = visible.strip()
-    # A chunk that was *only* notes still has notes worth keeping, but there is
-    # no slide to hang them on — and inventing an empty slide for them would
-    # put a blank page in the deck. Drop it, as before.
     if not visible:
-        return None
-    m = _HEADING_RE.search(visible)
-    title = re.sub(r"\s*\{\.[^}]*\}\s*$", "", m.group(1)).strip() if m else ""
-    return Slide(
+        return None, notes
+    spans = _protected_spans(visible)
+    m = next(
+        (h for h in _SLIDE_HEADING_RE.finditer(visible) if not _inside(h.start(), spans)), None
+    )
+    title, classes, layout = parse_heading(m.group(2)) if m else ("", [], None)
+    level = len(m.group(1)) if m else 0
+    class_hint = next((c.lower() for c in classes if c.lower() in CLASS_HINTS), None)
+    if class_hint is None and _RECAP_TITLE_RE.match(title):
+        class_hint = "recap"
+    slide = Slide(
         index=index,
         # Front-matter `title:` beats "(untitled)" for a deck whose cover is
         # declared as metadata rather than as an H1 — the Pandoc idiom.
@@ -930,57 +1098,317 @@ def _slide_from_chunk(index: int, chunk: str, *, default_title: str = "") -> Sli
         body=visible,
         notes=notes,
         features=_features(visible),
+        level=level,
+        layout_hint=layout,
+        class_hint=class_hint,
     )
+    return slide, notes
+
+
+#: Features that are something to *place*: a slide carrying one of these is
+#: a content slide wherever it sits in the deck, cover and closing included.
+_PAYLOAD = frozenset(
+    {"bullets", "ordered-list", "table", "image", "mermaid", "code", "two-column", "quote"}
+)
+
+
+def _prose(body: str) -> str:
+    """A title-only slide's own lines of text (its subtitle), markup removed."""
+    lines = []
+    for raw in body.splitlines():
+        s = raw.strip()
+        if not s or s.startswith(("#", ":::", "|", "![")):
+            continue
+        s = re.sub(r"\s*\{[^{}]*\}\s*$", "", s)
+        s = re.sub(r"\*\*|__|`", "", s).strip()
+        if s:
+            lines.append(s)
+    return "\n".join(lines)
+
+
+_BIG_NUMBER_LINE_RE = re.compile(r"(?m)^\s*\*\*([^*\n]{1,12})\*\*\s*$")
+
+
+def _inferred_class(s: Slide) -> str | None:
+    """The role a slide's *form* states, per the course grammar.
+
+    Only unambiguous forms: a short bold figure alone on its line
+    (``**×18**``) is a big number; a blockquote with no list is a quote; a
+    single short sentence and nothing else is a statement. Anything less clear
+    is left to the selection stages.
+    """
+    feats = set(s.features)
+    if feats & {"bullets", "ordered-list", "table", "image", "mermaid", "code", "two-column"}:
+        return None
+    big = _BIG_NUMBER_LINE_RE.search(s.body)
+    if big and re.search(r"\d", big.group(1)):
+        return "bignumber"
+    if "quote" in feats:
+        return "quote"
+    prose = _prose(s.body)
+    if prose and "\n" not in prose and len(prose) <= 140:
+        return "statement"
+    return None
+
+
+def _norm(text: str) -> str:
+    return " ".join(re.sub(r"[^\w]+", " ", text.lower()).split())
 
 
 def segment(markdown: str) -> list[Slide]:
     """Split *markdown* into slides.
 
-    Prefers explicit horizontal-rule slide breaks (``***`` / ``---`` / ``___``
-    on their own line, the common reveal.js/Marp/this-project convention);
-    when the document has none, falls back to splitting on every H1/H2
-    heading, mirroring Pandoc's own default slide-level behaviour.
+    Every horizontal rule (``***`` / ``---`` / ``___`` on its own line) ends a
+    slide and every ``#`` / ``##`` heading starts one, as in Pandoc (see
+    :func:`_chunks`). A leading YAML metadata block is removed first (its
+    closing ``---`` is a horizontal rule to every regex here), and each
+    slide's ``::: notes`` div is lifted off its body into :attr:`Slide.notes`
+    — a chunk holding only notes gives them to the slide before it.
 
-    A leading YAML metadata block is removed first (its closing ``---`` is a
-    horizontal rule to every regex here), and each slide's ``::: notes`` div is
-    lifted off its body into :attr:`Slide.notes`.
+    Nothing is dropped on the way:
+
+    * the cover (and the closing) are title-only **only** when they carry
+      nothing to place; their prose becomes :attr:`Slide.subtitle`, and the
+      cover's subtitle falls back to the front matter's ``subtitle``,
+      ``author`` and ``date``;
+    * a front-matter ``title`` that no slide carries becomes a cover of its
+      own, as Pandoc's title slide does;
+    * an ``#`` heading past the cover with nothing to place is a section
+      divider (:attr:`Slide.class_hint` ``"section"``).
     """
     markdown, meta = split_front_matter(markdown)
-    chunks = _HR_RE.split(markdown)
-    # re.split with a capturing group also yields the separators; drop them.
-    chunks = [
-        c
-        for c in chunks
-        if c not in ("***", "---", "___") and not re.fullmatch(r"\*+|-+|_+", c or "")
-    ]
-    if len(chunks) <= 1:
-        # <=1 chunk means the HR split found no separators at all (a single
-        # leftover chunk is just the whole document) — fall back to headings.
-        # Reconstruct chunks by splitting on each heading line's start offset.
-        starts = [m.start() for m in _HEADING_RE.finditer(markdown)]
-        if len(starts) > 1:
-            chunks = [
-                markdown[a:b] for a, b in zip(starts, starts[1:] + [len(markdown)], strict=True)
-            ]
-        else:
-            chunks = [markdown]
+    lang = meta.get("lang", "")
     slides: list[Slide] = []
-    for chunk in chunks:
+    pending_notes: list[str] = []
+    for chunk in _chunks(markdown):
         # Only the cover can inherit the metadata title: slide 2 onward has its
         # own heading, and a document-level title repeated there would be wrong.
-        s = _slide_from_chunk(
+        s, notes = _slide_from_chunk(
             len(slides) + 1, chunk, default_title=meta.get("title", "") if not slides else ""
         )
-        if s is not None:
-            slides.append(s)
+        if s is None:
+            if not notes:
+                continue
+            if slides:
+                slides[-1].notes = "\n\n".join(n for n in (slides[-1].notes, notes) if n)
+            else:
+                pending_notes.append(notes)
+            continue
+        if pending_notes:
+            s.notes = "\n\n".join([*pending_notes, s.notes] if s.notes else pending_notes)
+            pending_notes = []
+        s.lang = lang
+        slides.append(s)
+
+    meta_title = meta.get("title", "").strip().strip("'\"")
+    cover_lines = [meta.get(k, "").strip().strip("'\"") for k in ("subtitle", "author", "date")]
+    cover_lines = [line for line in cover_lines if line]
+    if meta_title and (not slides or _norm(slides[0].title) != _norm(meta_title)):
+        slides.insert(0, Slide(index=0, title=meta_title, level=1, lang=lang))
+
+    for i, s in enumerate(slides, start=1):
+        s.index = i
     if slides:
-        # The one place this rule is written down. It used to live only in the
-        # assembler, which meant the two stages that choose the layout — the
-        # fit model and the visual tie-break — were deciding for a slide with
-        # bullets while the assembler was about to render a title alone.
-        slides[0].title_only = True
-        slides[-1].title_only = True
+        n = len(slides)
+        for s in slides:
+            payload = bool(_PAYLOAD & set(s.features))
+            edge = s.index in (1, n)
+            divider = s.level == 1 and s.index != 1 and not payload
+            if (edge or divider) and not payload:
+                # The one place this rule is written down, so the fit model,
+                # the tie-break and the assembler all decide about the same
+                # slide: a heading, and its subtitle, nothing else.
+                s.title_only = True
+                s.subtitle = _prose(s.body)
+            if s.class_hint is None and s.layout_hint is None and s.title_only:
+                # A title-only cover, closing or divider has a role, and a
+                # template that names it ("Title Slide", "Closing", "Section
+                # Header") gets it without a model guessing.
+                if s.index == 1:
+                    s.class_hint = "cover"
+                elif s.index == n:
+                    s.class_hint = "closing"
+                elif divider:
+                    s.class_hint = "section"
+            if s.class_hint is None and s.layout_hint is None and not s.title_only:
+                s.class_hint = _inferred_class(s)
+        first = slides[0]
+        if first.title_only and cover_lines:
+            known = {_norm(line) for line in first.subtitle.splitlines()}
+            extra = [line for line in cover_lines if _norm(line) not in known]
+            first.subtitle = "\n".join(x for x in (first.subtitle, *extra) if x)
     return slides
+
+
+def continuation_label(lang: str = "", sample: str = "") -> str:
+    """``"(suite)"`` for a French deck, ``"(cont.)"`` otherwise.
+
+    The deck's ``lang`` decides when it has one; failing that, a count of
+    the commonest French and English function words in *sample* does.
+    """
+    code = (lang or "").lower()[:2]
+    if code:
+        return "(suite)" if code == "fr" else "(cont.)"
+    words = re.findall(r"[a-zà-ÿ']+", sample.lower())
+    fr = sum(
+        w in {"le", "la", "les", "des", "est", "une", "du", "et", "pour", "que"} for w in words
+    )
+    en = sum(
+        w in {"the", "and", "is", "of", "to", "for", "that", "with", "are", "a"} for w in words
+    )
+    return "(suite)" if fr > en else "(cont.)"
+
+
+def _body_blocks(body: str) -> tuple[str, list[str]]:
+    """A slide body as its heading line plus top-level blocks of Markdown.
+
+    A block is a list item with everything indented under it, or a paragraph.
+    Splitting between blocks never cuts a sentence or orphans a sub-bullet.
+    """
+    lines = body.splitlines()
+    heading = ""
+    spans = _protected_spans(body)
+    offset = 0
+    rest: list[str] = []
+    for line in lines:
+        if not heading and _SLIDE_HEADING_RE.match(line) and not _inside(offset, spans):
+            heading = line
+        else:
+            rest.append(line)
+        offset += len(line) + 1
+    blocks: list[list[str]] = []
+    for line in rest:
+        is_item = re.match(r"^(?:[-*+]|\d+[.)])\s+", line)
+        if not line.strip():
+            if blocks and blocks[-1] and blocks[-1][-1].strip():
+                blocks[-1].append("")
+            continue
+        indented = line[:1] in (" ", "\t")
+        if is_item or not blocks or (not indented and not blocks[-1][-1].strip()):
+            blocks.append([line])
+        else:
+            blocks[-1].append(line)
+    return heading, ["\n".join(b).strip() for b in blocks if "\n".join(b).strip()]
+
+
+def split_slide(s: Slide, groups: list[list[str]], heading: str, label: str) -> list[Slide]:
+    """Rebuild *s* as one slide per group of blocks, continuations labelled."""
+    out: list[Slide] = []
+    for k, blocks in enumerate(groups):
+        title = s.title if k == 0 else f"{s.title} {label}"
+        head = heading if k == 0 else f"## {title}"
+        body = "\n\n".join([head, *blocks]) if head else "\n\n".join(blocks)
+        out.append(
+            Slide(
+                index=s.index,
+                title=title,
+                body=body,
+                # The script stays with the slide it was written for.
+                notes=s.notes if k == 0 else "",
+                features=_features(body),
+                level=s.level if k == 0 else 2,
+                layout_hint=s.layout_hint,
+                class_hint=s.class_hint,
+                pinned=s.pinned,
+                chosen_layout=s.chosen_layout,
+                lang=s.lang,
+            )
+        )
+    return out
+
+
+#: Safety factor on the floor when deciding whether a page holds its text.
+PAGINATE_MARGIN = 1.1
+
+
+def paginate(
+    slides: list[Slide],
+    catalog: list[LayoutInfo],
+    *,
+    min_pt: float,
+    canvas: tuple[int, int] | None = None,
+) -> list[Slide]:
+    """Split every slide no layout can hold at *min_pt* into continuations.
+
+    The alternative was what the assembler used to do: keep four bullets of
+    ten words and drop the rest without a word. Here a slide that overruns
+    even the roomiest content layout of the template becomes as many slides as
+    it takes, each titled "<title> (suite)" (or "(cont.)"), split between list
+    items or paragraphs. Content that cannot be split that way — a table, a
+    code block, columns, an image — is kept whole and named in a warning.
+
+    Returns
+    -------
+    list of Slide
+        The deck, renumbered. Unchanged slides are the same objects.
+    """
+    content = [c for c in catalog if c.is_content_layout] or list(catalog)
+    roomy = max(content, key=lambda c: pptx_fit.body_capacity(c, min_pt).chars, default=None)
+    if roomy is None or not pptx_fit.body_capacity(roomy, min_pt).chars:
+        return slides
+    label = continuation_label(slides[0].lang if slides else "", " ".join(s.body for s in slides))
+    out: list[Slide] = []
+
+    def holds(title: str, body: str) -> bool:
+        # Measured a notch above the floor: the character model ignores
+        # paragraph spacing and real glyph widths, and a split that lands
+        # exactly on the estimate was observed spilling into the footer.
+        report = pptx_fit.evaluate(
+            pptx_fit.measure(title, body),
+            roomy,
+            min_pt=min_pt * PAGINATE_MARGIN,
+            strict=True,
+            canvas=canvas,
+        )
+        return not report.overruns
+
+    for s in slides:
+        if s.title_only or holds(s.title, s.body):
+            out.append(s)
+            continue
+        m = pptx_fit.measure(s.title, s.body)
+        if m.table_rows or m.code_lines or m.image_count or "two-column" in s.features:
+            logger.warning(
+                "slide %d (%r) does not fit any layout at %gpt and cannot be split "
+                "automatically (table, code, image or columns): split it by hand",
+                s.index,
+                s.title,
+                min_pt,
+            )
+            out.append(s)
+            continue
+        heading, blocks = _body_blocks(s.body)
+        groups: list[list[str]] = []
+        for block in blocks:
+            # Greedy, in reading order: a block joins the current slide while
+            # that slide still holds at the floor, else it opens the next.
+            # A block that overflows on its own still gets a slide of its own.
+            title = s.title if len(groups) <= 1 else f"{s.title} {label}"
+            if groups and holds(title, "\n\n".join([*groups[-1], block])):
+                groups[-1].append(block)
+            else:
+                groups.append([block])
+        if len(groups) <= 1:
+            logger.warning(
+                "slide %d (%r) does not fit any layout at %gpt and has a single "
+                "block to show: shorten it",
+                s.index,
+                s.title,
+                min_pt,
+            )
+            out.append(s)
+            continue
+        logger.warning(
+            "slide %d (%r) does not fit any layout at %gpt: split into %d slides",
+            s.index,
+            s.title,
+            min_pt,
+            len(groups),
+        )
+        out.extend(split_slide(s, groups, heading, label))
+    for i, s in enumerate(out, start=1):
+        s.index = i
+    return out
 
 
 # ── stage A: LLM text-based selection ────────────────────────────────────────
@@ -1018,9 +1446,48 @@ _SELECT_PROMPT_HEADER = (
     "- an ordered list of steps -> process-steps\n"
     "- normal bullet/paragraph content -> bulleted-content\n"
     "- the final thanks/closing slide -> closing\n"
+    "Each slide states its heading level and its position in the deck: an H1 "
+    "heading past the first slide opens a new part (section-divider), the "
+    "first slide is the cover, the last one the closing.\n"
     "Prefer VARIETY: do not send most slides to one generic layout. Reserve "
     "cover/closing/section-divider for those roles.\n\n"
 )
+
+
+def resolve_hint(s: Slide, catalog: list[LayoutInfo]) -> str | None:
+    """The layout an explicit hint on *s* names in this template, or ``None``.
+
+    ``{layout="Big Number"}`` must name a layout exactly (a case-insensitive
+    match is accepted, and said so); a class (:data:`CLASS_HINTS`) resolves to
+    a layout of the conventional name first and to its archetype second. A
+    hint the template cannot honour is reported and leaves the slide to the
+    ordinary selection: a typo in a hint must not cost the slide its layout.
+    """
+    names = {c.name: c for c in catalog}
+    folded = {c.name.casefold(): c.name for c in catalog}
+    if s.layout_hint:
+        if s.layout_hint in names:
+            return s.layout_hint
+        if s.layout_hint.casefold() in folded:
+            return folded[s.layout_hint.casefold()]
+        logger.warning(
+            "slide %d: {layout=%r} is not a layout of this template (it has: %s)",
+            s.index,
+            s.layout_hint,
+            ", ".join(sorted(names)),
+        )
+    if s.class_hint:
+        archetype, wanted = CLASS_HINTS.get(s.class_hint, (None, ()))
+        for name in wanted:
+            if name.casefold() in folded:
+                return folded[name.casefold()]
+        if archetype:
+            hit = next(
+                (c.name for c in catalog if c.is_content_layout and c.archetype == archetype), None
+            )
+            if hit:
+                return hit
+    return None
 
 
 def _catalog_block(content: list[LayoutInfo], *, min_pt: float | None = None) -> str:
@@ -1060,6 +1527,7 @@ def select_layouts(
     chat: ChatFn | None = None,
     batch: int = 12,
     min_pt: float = pptx_fit.KAWASAKI_MIN_PT,
+    strict: bool = False,
     template: Path | None = None,
     image_base_dir: Path | None = None,
 ) -> None:
@@ -1069,10 +1537,27 @@ def select_layouts(
     each tagged with its archetype so the model matches by role. On any
     transport failure, slides in that batch fall back to the best
     archetype-matching content layout (never left unassigned).
+
+    A slide with an explicit hint (:func:`resolve_hint`) is placed on that
+    layout without asking anyone, and *pinned* there.
+
+    With *strict*, a layout that cannot hold the content at *min_pt* does not
+    fit at all (:func:`md2star.pptx_fit.evaluate`), so an overflowing slide
+    goes to a roomier layout instead of being shrunk on a cramped one. When
+    nothing holds it, the lenient ranking is kept so the slide still lands on
+    the best of what there is.
     """
     content = [c for c in catalog if c.is_content_layout]
     if not content:
         return
+    total = len(slides)
+    for s in slides:
+        hinted = resolve_hint(s, catalog)
+        if hinted is not None:
+            s.chosen_layout = hinted
+            s.chosen_confidence = 1.0
+            s.chosen_why = "explicit hint in the Markdown"
+            s.pinned = True
     # First-seen wins per archetype: catalog order runs most-used layout
     # first (see extract_layouts' final sort), so this favours the
     # template's more common/representative layout for each role.
@@ -1110,9 +1595,23 @@ def select_layouts(
                 metrics.big_statement = True
             s.metrics = metrics
             ordered = pptx_fit.rank(
-                metrics, content, min_pt=min_pt, canvas=canvas, base_dir=image_base_dir
+                metrics,
+                content,
+                min_pt=min_pt,
+                strict=strict,
+                canvas=canvas,
+                base_dir=image_base_dir,
             )
+            if strict and not any(rep.fits for _, rep in ordered):
+                logger.warning(
+                    "slide %d (%r) overflows every layout at %gpt", s.index, s.title, min_pt
+                )
+                ordered = pptx_fit.rank(
+                    metrics, content, min_pt=min_pt, canvas=canvas, base_dir=image_base_dir
+                )
             s.fit_ranked = ordered
+            if s.pinned:
+                continue
             # Offer the geometrically plausible layouts first, by name, so the
             # model is steered by what can actually hold the content rather
             # than by which name reads well.
@@ -1122,8 +1621,11 @@ def select_layouts(
                 for lay, rep in ordered
                 if not rep.fits and rep.reasons
             ][:3]
+            where = "first" if s.index == 1 else "last" if s.index == total else "middle"
             line = (
-                f"[{s.index}] title: {s.title!r} | features: "
+                f"[{s.index}] title: {s.title!r} | heading: "
+                f"{'H' + str(s.level) if s.level else 'none'} | position: "
+                f"{s.index}/{total} ({where}) | features: "
                 f"{', '.join(s.features) or 'plain text'} | "
                 f"content: {pptx_fit.summarise_for_prompt(metrics)}"
             )
@@ -1132,6 +1634,8 @@ def select_layouts(
             if refused:
                 line += f" | cannot hold it: {'; '.join(refused)}"
             listing_lines.append(line)
+        if not listing_lines:
+            continue  # every slide of this batch was pinned by a hint
         listing = "\n".join(listing_lines)
         prompt = (
             f"{_SELECT_PROMPT_HEADER}TEMPLATE LAYOUT CATALOG (content layouts only):\n{cat_txt}\n\n"
@@ -1147,6 +1651,8 @@ def select_layouts(
         choices = (parse_json_reply(out) or {}).get("choices", [])
         by_index = {c.get("index"): c for c in choices}
         for s in group:
+            if s.pinned:
+                continue
             c = by_index.get(s.index) or {}
             # Reject a hallucinated layout name outright — better a sensible
             # archetype fallback than a KeyError deep in the assembler later.
@@ -1204,12 +1710,14 @@ _VISUAL_PROMPT = (
     "candidate layout, in this order: {names}. Look at where each candidate "
     "places its title/body/image regions and judge which one actually suits "
     "this content best, not just which name sounds right.\n\n"
-    "SLIDE:\ntitle: {title!r}\nfeatures: {features}\n\n"
+    "SLIDE:\ntitle: {title!r}\nfeatures: {features}\ncontent: {content}\n\n"
     'Reply as JSON {{"best": <one of {names}>, "why": <<=12 words>}}.'
 )
 
 
-def _alternates_for(s: Slide, catalog_by_name: dict[str, LayoutInfo], k: int) -> list[LayoutInfo]:
+def _alternates_for(
+    s: Slide, catalog_by_name: dict[str, LayoutInfo], k: int, *, any_page: bool = False
+) -> list[LayoutInfo]:
     """Pick up to *k* candidate layouts for the visual tie-break: the current
     pick plus archetype-diverse alternates (so the VLM sees a real choice, not
     near-duplicates).
@@ -1227,8 +1735,12 @@ def _alternates_for(s: Slide, catalog_by_name: dict[str, LayoutInfo], k: int) ->
     fitting = [lay for lay, rep in (getattr(s, "fit_ranked", None) or []) if rep.fits]
     # Only layouts with a rendered example are eligible: without one there is
     # no thumbnail to show the vision model, so it could never be picked.
+    # *any_page* lifts that rule when the caller can render a layout itself
+    # (:func:`default_render_layout`).
     pool = [
-        c for c in (fitting or catalog_by_name.values()) if c.is_content_layout and c.example_pages
+        c
+        for c in (fitting or catalog_by_name.values())
+        if c.is_content_layout and (any_page or c.example_pages)
     ]
     out: list[LayoutInfo] = [chosen] if chosen else []
     seen_archetypes = {chosen.archetype} if chosen else set()
@@ -1257,12 +1769,77 @@ def _alternates_for(s: Slide, catalog_by_name: dict[str, LayoutInfo], k: int) ->
 VISUAL_VARIETY_SHARE = 0.5
 
 
+#: Renders one layout of a template on its own: template path, layout name ->
+#: PNG bytes, or ``None``. What the tie-break shows for a layout the template
+#: never demonstrates on an example page.
+RenderLayoutFn = Callable[[Path, str], "bytes | None"]
+
+
+def _sample_deck(template: Path, layout_name: str, out: Path) -> bool:
+    """Write a one-slide deck of *layout_name*, its placeholders labelled."""
+    try:
+        from pptx import Presentation  # noqa: PLC0415 — optional dependency
+    except ImportError:
+        return False
+    prs = Presentation(str(template))
+    layout = next(
+        (lay for m in prs.slide_masters for lay in m.slide_layouts if lay.name == layout_name),
+        None,
+    )
+    if layout is None:
+        return False
+    ids = prs.slides._sldIdLst  # noqa: SLF001 — python-pptx has no public removal API
+    for sld in list(ids):
+        prs.part.drop_rel(sld.rId)
+        ids.remove(sld)
+    slide = prs.slides.add_slide(layout)
+    for ph in slide.placeholders:
+        kind = ph.placeholder_format.type
+        if ph.has_text_frame:
+            # The words are only there so the regions show: a vision model
+            # comparing compositions needs to see where text would go.
+            ph.text_frame.text = "Title" if "TITLE" in str(kind) else "Body text\nSecond point"
+    prs.save(str(out))
+    return True
+
+
+def default_render_layout() -> RenderLayoutFn:
+    """Build the real one-layout renderer (python-pptx + LibreOffice + poppler)."""
+    cache: dict[tuple[str, str], bytes | None] = {}
+
+    def _render(template: Path, layout_name: str) -> bytes | None:
+        key = (osh.hashfile(str(template)), layout_name)
+        if key not in cache:
+            with tempfile.TemporaryDirectory() as d:
+                sample = Path(d) / "layout-sample.pptx"
+                pages = (
+                    _render_all_pages(sample) if _sample_deck(template, layout_name, sample) else {}
+                )
+                cache[key] = pages.get(1)
+        return cache[key]
+
+    return _render
+
+
+def _content_summary(s: Slide, limit: int = 400) -> str:
+    """What the slide will actually show, in a few hundred characters."""
+    if s.title_only:
+        return s.subtitle[:limit] or "(none)"
+    text = re.sub(r"```.*?```", "[code]", s.body, flags=re.DOTALL)
+    text = _SLIDE_HEADING_RE.sub("", text)
+    text = " / ".join(line.strip() for line in text.splitlines() if line.strip())
+    measured = pptx_fit.summarise_for_prompt(s.metrics) if s.metrics is not None else ""
+    out = f"{text[:limit]}{'…' if len(text) > limit else ''}"
+    return f"{out} ({measured})" if measured else out
+
+
 def visual_confirm(
     slides: list[Slide],
     catalog: list[LayoutInfo],
     *,
     chat: ChatFn | None = None,
     render: RenderFn | None = None,
+    render_layout: RenderLayoutFn | None = None,
     template: Path | None = None,
     k: int = 3,
     only_low_confidence: bool = False,
@@ -1294,10 +1871,13 @@ def visual_confirm(
     if template is None:
         return
     render = render or default_render()
+    render_layout = render_layout or default_render_layout()
     chat = chat or default_chat(kind="vlm")
     catalog_by_name = {c.name: c for c in catalog}
 
     for s in slides:
+        if s.pinned:
+            continue  # the author named this layout; no model second-guesses it
         if only_low_confidence:
             conf = s.chosen_confidence
             # A missing confidence (transport failure -> archetype fallback)
@@ -1305,16 +1885,18 @@ def visual_confirm(
             # case where the text stage had the least signal to go on.
             if conf is not None and conf >= confidence_threshold:
                 continue
-        candidates = _alternates_for(s, catalog_by_name, k)
+        candidates = _alternates_for(s, catalog_by_name, k, any_page=True)
         if len(candidates) < 2:
             continue  # nothing to tie-break against
         images: list[bytes] = []
         usable: list[LayoutInfo] = []
         for c in candidates:
+            # The designer's own page when there is one; otherwise the layout
+            # rendered on its own. Skipping a page-less candidate used to
+            # drop the CURRENT pick from the comparison, so the tie-break
+            # could only ever override it.
             page = c.rep_page
-            if page is None:
-                continue
-            png = render(template, page)
+            png = render(template, page) if page is not None else render_layout(template, c.name)
             if png is None:
                 continue
             # images/usable stay index-aligned: the prompt's "in this order"
@@ -1323,6 +1905,8 @@ def visual_confirm(
             usable.append(c)
         if len(usable) < 2:
             continue  # a render/no-example gap left too few options to compare
+        if s.chosen_layout and s.chosen_layout not in {c.name for c in usable}:
+            continue  # the current pick could not be shown: no fair comparison
         names = [c.name for c in usable]
         prompt = _VISUAL_PROMPT.format(
             names=", ".join(names),
@@ -1336,6 +1920,7 @@ def visual_confirm(
                 if s.title_only
                 else ", ".join(s.features) or "plain text"
             ),
+            content=_content_summary(s),
         )
         out = chat(prompt, images, _VISUAL_SCHEMA)
         data = parse_json_reply(out)

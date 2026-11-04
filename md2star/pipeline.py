@@ -358,6 +358,11 @@ class ConvertOptions:
         ``smart_layout`` only — skip the VLM visual tie-break.
     eyeball_iterations : int
         ``smart_layout`` only — bounded revision passes after assembly.
+    min_pt : float or None
+        ``smart_layout`` only — the smallest type allowed on a slide
+        (Kawasaki's 30). ``None`` keeps the historical sizing.
+    refresh_catalog : bool
+        ``smart_layout`` only — rebuild the cached layout catalog.
     """
 
     input: str
@@ -382,6 +387,8 @@ class ConvertOptions:
     reference_slides: bool = False
     no_visual_confirm: bool = False
     eyeball_iterations: int = 0
+    min_pt: float | None = None
+    refresh_catalog: bool = False
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -495,6 +502,10 @@ def convert(fmt: str, opts: ConvertOptions, pandoc_args: Sequence[str] = ()) -> 
     #     _convert_smart_layout refuses a non-pptx fmt out loud.
     if opts.smart_layout:
         return _convert_smart_layout(fmt, in_path, out_path, processed, opts)
+    if opts.min_pt is not None or opts.refresh_catalog:
+        # The Pandoc path sizes text from the reference doc; these two flags
+        # only steer the smart-layout assembler.
+        logger.warning("md2pptx: --min-pt / --refresh-catalog only apply to --smart-layout")
     if opts.reference_slides:
         # Said out loud rather than ignored: the Pandoc path has no notion of
         # the template's example pages, so a run that asked for them and got a
@@ -684,8 +695,10 @@ def _convert_smart_layout(
     from .pptx_assemble import assemble, eyeball_slides  # noqa: PLC0415
     from .pptx_layout import (  # noqa: PLC0415
         build_catalog,
+        paginate,
         segment,
         select_layouts,
+        slide_size,
         smart_layout_available,
         visual_confirm,
     )
@@ -703,13 +716,34 @@ def _convert_smart_layout(
     if not slides:
         raise InvalidInputError(_("md2pptx: no slides found in %(path)s") % {"path": in_path})
 
+    if opts.lang:
+        for s in slides:
+            s.lang = s.lang or opts.lang
+
     logger.info("smart-layout: cataloging %s", template)
-    catalog = build_catalog(template)
+    catalog = build_catalog(template, refresh=opts.refresh_catalog)
+    min_pt = opts.min_pt
+    if min_pt is not None and min_pt <= 0:
+        raise InvalidInputError(_("md2pptx: --min-pt must be a positive number of points"))
+    # Nothing is dropped to make a slide fit: what no layout holds at the
+    # floor becomes continuation slides. Without --min-pt the floor is the
+    # legibility one (12pt), so only an absurdly long slide is split.
+    slides = paginate(
+        slides, catalog, min_pt=min_pt if min_pt is not None else 12.0, canvas=slide_size(template)
+    )
     logger.info("smart-layout: selecting layouts for %d slides", len(slides))
     # The template gives the canvas for the compositional checks; the source
     # directory is where relative image paths resolve, so the aspect check can
-    # read real dimensions rather than guess from a count.
-    select_layouts(slides, catalog, template=template, image_base_dir=in_path.parent)
+    # read real dimensions rather than guess from a count. With --min-pt the
+    # ranking is strict: a layout that cannot hold the slide at the floor is
+    # out, so an overflowing slide goes somewhere roomier.
+    select_layouts(
+        slides,
+        catalog,
+        template=template,
+        image_base_dir=in_path.parent,
+        **({"min_pt": min_pt, "strict": True} if min_pt is not None else {}),
+    )
     if not opts.no_visual_confirm:
         logger.info("smart-layout: visual tie-break")
         visual_confirm(slides, catalog, template=template)
@@ -726,6 +760,7 @@ def _convert_smart_layout(
             image_base_dir=in_path.parent,
             render_mermaid=render_mermaid,
             reference_slides=reference_slides,
+            min_pt=min_pt,
         )
     else:
         result = assemble(
@@ -736,6 +771,7 @@ def _convert_smart_layout(
             image_base_dir=in_path.parent,
             render_mermaid=render_mermaid,
             reference_slides=reference_slides,
+            min_pt=min_pt,
         )
     # Never `_("")`: the empty msgid is a catalogue's own metadata header, and
     # translating it would hand the user the Content-Type of the .mo file.
@@ -768,7 +804,7 @@ def _convert_smart_layout(
     # the canvas, or needs type nobody can read. See md2star/pptx_audit.py.
     from .pptx_audit import audit, log_findings, summarise  # noqa: PLC0415
 
-    findings = audit(result.pptx_path)
+    findings = audit(result.pptx_path, min_pt=min_pt)
     log_findings(findings)
     print(summarise(findings, slides=result.total))
     return 0

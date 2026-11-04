@@ -228,7 +228,8 @@ class TestPlaceholderReconciliation:
         pa.assemble(slides, catalog, default_template, out)
         prs = pptx.Presentation(str(out))
         texts = [sh.text_frame.text for sh in prs.slides[0].shapes if sh.has_text_frame]
-        assert texts == ["Only"]
+        # The title, then the cover's own line as its subtitle: kept, not lost.
+        assert texts == ["Only", "body"]
 
     def test_an_empty_title_is_still_named(
         self, tmp_path: Path, default_template: Path, catalog
@@ -240,7 +241,7 @@ class TestPlaceholderReconciliation:
         out = tmp_path / "untitled.pptx"
         pa.assemble(slides, catalog, default_template, out)
         prs = pptx.Presentation(str(out))
-        assert [sh.text_frame.text for sh in prs.slides[0].shapes] == ["(untitled)"]
+        assert [sh.text_frame.text for sh in prs.slides[0].shapes] == ["(untitled)", "body"]
 
 
 # ── speaker notes ────────────────────────────────────────────────────────────
@@ -361,7 +362,8 @@ class TestEyeballLoop:
         )
         assert result.placed == 1
         assert slides[0].overrides.get("font_delta") == -4
-        assert slides[0].overrides.get("bullets") == 2
+        # No fix ever drops content: the old "keep two bullets" cap is gone.
+        assert "bullets" not in slides[0].overrides
         # First pass flags+fixes, second pass's judge call reports a match -> stop.
         assert calls["judge"] == 2
 
@@ -574,6 +576,6 @@ class TestTheLoopsOtherEye:
         )
         assert result.placed == 3
         assert slides[1].overrides.get("font_delta") == -4
-        assert slides[1].overrides.get("bullets") == 2
+        assert "bullets" not in slides[1].overrides
         # The slides nobody measured a defect on were left alone.
         assert slides[0].overrides == {} and slides[2].overrides == {}
