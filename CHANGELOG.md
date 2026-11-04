@@ -6,7 +6,56 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **`--min-pt N` on `md2pptx --smart-layout`** (recommended: 30, Kawasaki's
+  10/20/30). The 30 pt floor was used to choose layouts and never to render
+  them (titles 26 pt, bullets 16, code 13, plus auto-shrink). Now no slide text
+  is set under N: body text goes into the layout's own placeholders and keeps
+  the size, colour and bullets the template declares when they clear N;
+  auto-shrink is off; ranking is strict, so an overflowing slide goes to a
+  roomier layout; the eyeball loop moves or splits a slide instead of
+  shrinking it. Unset, sizing is unchanged.
+- **`md2star audit --min-pt N`**: a new `under-min-pt` finding for content
+  under N, footer chrome exempt. Inherited placeholder sizes are now resolved
+  through layout and master, so text left to the template is measured too.
+- **Explicit layout hints**: `{layout="Exact Name"}` and `{.statement}`,
+  `{.bignumber}`, `{.quote}`, `{.recap}`, `{.agenda}`, `{.section}`,
+  `{.closing}` place a slide without any model; recap titles go to `Recap`; an
+  `#` past the cover is a section divider; the course grammar's forms (a bold
+  figure alone, a blockquote, a single short sentence) are recognised. Heading
+  level and position now reach the selection prompt.
+- **`--refresh-catalog`**, and `MD2STAR_LLM_MODEL` / `MD2STAR_VLM_MODEL` to
+  choose the models without regenerating `llm.engine.yaml`.
+
 ### Fixed
+
+- **Smart-layout no longer drops content.** Gone: the four-bullet, ten-word
+  cap; the eyeball fix that kept two bullets; the cover and closing losing
+  their body to their position; notes after a slide's `---` vanishing; every
+  bullet of a two-column slide landing in the first box; tables never placed;
+  code cut at twelve lines; an image dropped when the slide also had bullets.
+  A slide no layout holds becomes "(suite)" / "(cont.)" continuations, with a
+  warning naming it. The cover keeps its subtitle, and front-matter
+  `subtitle` / `author` / `date`; a front-matter title no slide carries
+  becomes the cover, as in Pandoc.
+- **Slide splitting follows Pandoc**: every `---` and every `#`/`##` starts a
+  slide (a single stray `---` used to fold all later headings into one slide),
+  and a `#` in a code fence is not a heading.
+- **Eyeball loop**: `font_delta` accumulates across passes instead of being
+  replaced; a judge that times out or answers nothing is "unknown" (listed in
+  `AssembleResult.unjudged`), never "matches"; the visual tie-break always
+  shows the current pick (rendering the bare layout when the template has no
+  example page) and the slide's actual text.
+- **Speaker notes keep their bullets**, one paragraph per item, nested items
+  indented.
+- **Dark backgrounds declared on the master** are detected, and a colour the
+  template declares for a text zone is kept rather than overwritten.
+- The fit model charges each bullet its whole last line and the gap between
+  items, and measures one flow of text against one box (not the sum of all
+  boxes), which had a "fitting" slide spilling into the footer.
+- The audit's contrast check reads a filled shape (a code panel) as its own
+  text's backdrop.
 
 - **`md2pptx --reference-doc` replaced the first Section Header with a date
   slide.** With `title` in the front matter, the Lua filter still took the

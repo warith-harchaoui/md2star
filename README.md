@@ -528,6 +528,32 @@ Cloning sharpens both ends of this seam:
 - A Pandoc `::: notes` block reaches the notes pane rather than the slide.
 - Markdown alt text reaches each picture's accessible description.
 
+### Kawasaki decks: `--min-pt 30`, hints, nothing dropped
+
+`--min-pt N` turns the 30 pt target into a floor for the deck itself, not only
+for choosing layouts:
+
+- body text goes **into** the layout's own placeholders and keeps the size,
+  colour, face and bullets the template declares when they clear N; nothing
+  is set under N and nothing auto-shrinks;
+- a layout that cannot hold a slide at N does not fit it, so the slide goes to
+  a roomier one; what no layout holds becomes continuation slides titled
+  "(suite)" / "(cont.)"; the eyeball loop moves or splits, never shrinks;
+- `md2star audit deck.pptx --min-pt 30` fails on content under 30 pt (footer
+  chrome excepted: date / footer / slide-number, fields, a single bottom line).
+
+Nothing is dropped any more, with or without the flag: every bullet and word
+reaches the slide, tables and long code included; the cover keeps its
+subtitle (front matter `subtitle`, `author`, `date`); notes written after a
+slide's `---` stay with it; both columns of `:::: {.columns}` are filled.
+
+Explicit hints bypass the models: `## Title {layout="Big Number"}` names a
+layout exactly; `{.statement}`, `{.bignumber}`, `{.quote}`, `{.recap}`,
+`{.agenda}`, `{.section}`, `{.closing}` name a role; a "What we have learned"
+/ "Qu'est-ce que nous avons appris" slide goes to `Recap`; an `#` past the
+cover is a section divider. `MD2STAR_LLM_MODEL` / `MD2STAR_VLM_MODEL` pick the
+models, `--refresh-catalog` rebuilds the cached layout catalog.
+
 ### The closing audit
 
 Every run ends with a **deterministic layout audit** of the file just written:

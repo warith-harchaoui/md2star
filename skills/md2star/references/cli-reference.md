@@ -12,7 +12,7 @@ more than the defaults (branding, citations, offline, phase control).
 | `md2pdf f.md`  | `md2star pdf f.md`  | `.pdf`  | Pandoc + LibreOffice (`soffice`) |
 | —              | `md2star gui`       | browser editor | LibreOffice for live preview |
 | —              | `md2star twin f.pdf` | editable Markdown twin | `[ocr]` extra |
-| —              | `md2star audit d.pptx [--json] [--strict]` | layout defects, exit 1 on one | `[pptx]` extra |
+| —              | `md2star audit d.pptx [--json] [--strict] [--min-pt N]` | layout defects, exit 1 on one | `[pptx]` extra |
 | —              | `md2star doctor [--json]` | environment report | — |
 | —              | `md2star templates {list,path}` | template introspection | — |
 | —              | `md2star cache-dir` / `clear-cache` | cache management | — |
@@ -45,6 +45,20 @@ more than the defaults (branding, citations, offline, phase control).
   background.
 - `--no-visual-confirm` — skip the VLM visual tie-break (cheaper).
 - `--eyeball-iterations N` — N bounded revision passes after assembly.
+- `--min-pt N` — never set slide text under N points (Kawasaki: pass `30`).
+  Keeps the template's declared sizes when they clear N, disables auto-shrink,
+  ranks layouts strictly (overflowing slides go roomier) and splits what no
+  layout holds into "(suite)"/"(cont.)" continuation slides. Default: unset.
+- `--refresh-catalog` — rebuild the cached layout catalog (captions included).
+- Layout hints in the Markdown bypass the models: `## T {layout="Big Number"}`
+  (exact layout name), `{.statement}` `{.bignumber}` `{.quote}` `{.recap}`
+  `{.agenda}` `{.section}` `{.closing}`; a "What we have learned" /
+  "Qu'est-ce que nous avons appris" title maps to a `Recap` layout; an `#` past
+  the cover is a section divider.
+- Environment: `MD2STAR_LLM_MODEL` / `MD2STAR_VLM_MODEL` override the models of
+  `llm.engine.yaml` for layout selection and the eyeball judge.
+- `md2star audit --min-pt N` — also fail on content text under N pt (footer
+  chrome exempt).
 
 ## Pandoc passthrough
 

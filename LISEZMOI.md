@@ -556,6 +556,35 @@ Le clonage aiguise cette jonction des deux côtés :
 - Le texte alternatif Markdown arrive dans la description accessible de chaque
   image.
 
+### Decks Kawasaki : `--min-pt 30`, indices, rien de perdu
+
+`--min-pt N` fait de la cible de 30 pt un plancher pour le deck lui-même, pas
+seulement pour le choix des mises en page :
+
+- le corps va **dans** les espaces réservés de la mise en page et garde la
+  taille, la couleur, la police et les puces que le modèle déclare quand elles
+  passent N ; rien sous N, aucun rétrécissement automatique ;
+- une mise en page qui ne tient pas la diapositive à N ne convient pas, elle
+  part vers une plus vaste ; ce qu'aucune ne tient devient des diapositives
+  « (suite) » / « (cont.) » ; la boucle de l'oeil déplace ou coupe, elle ne
+  rétrécit jamais ;
+- `md2star audit deck.pptx --min-pt 30` échoue sur du contenu sous 30 pt (hors
+  pied de page : date, pied, numéro, champs, une ligne seule en bas).
+
+Plus rien n'est perdu, avec ou sans l'option : chaque puce et chaque mot
+arrive sur la diapositive, tableaux et code long compris ; la couverture garde
+son sous-titre (`subtitle`, `author`, `date` du front matter) ; des notes
+écrites après le `---` d'une diapositive restent avec elle ; les deux colonnes
+de `:::: {.columns}` sont remplies.
+
+Les indices explicites court-circuitent les modèles : `## Titre {layout="Big
+Number"}` nomme une mise en page exactement ; `{.statement}`, `{.bignumber}`,
+`{.quote}`, `{.recap}`, `{.agenda}`, `{.section}`, `{.closing}` nomment un rôle ;
+« Qu'est-ce que nous avons appris » / « What we have learned » va sur `Recap` ;
+un `#` après la couverture est un intercalaire. `MD2STAR_LLM_MODEL` /
+`MD2STAR_VLM_MODEL` choisissent les modèles, `--refresh-catalog` reconstruit le
+catalogue en cache.
+
 ### L'audit de clôture
 
 Chaque exécution se termine par un **audit de disposition déterministe** du
