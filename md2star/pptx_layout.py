@@ -1740,6 +1740,10 @@ _VISUAL_PROMPT = (
 )
 
 
+def _body_boxes(layout: LayoutInfo) -> int:
+    return sum(1 for p in layout.placeholders if p.kind in ("body", "obj", "subTitle"))
+
+
 def _alternates_for(
     s: Slide, catalog_by_name: dict[str, LayoutInfo], k: int, *, any_page: bool = False
 ) -> list[LayoutInfo]:
@@ -1762,10 +1766,16 @@ def _alternates_for(
     # no thumbnail to show the vision model, so it could never be picked.
     # *any_page* lifts that rule when the caller can render a layout itself
     # (:func:`default_render_layout`).
+    # A slide in columns is only offered layouts with a body box per column:
+    # asked to compare, a vision model moved two-column slides onto
+    # one-box layouts as "primarily text-based".
+    columns = getattr(getattr(s, "metrics", None), "columns", 0) or 0
     pool = [
         c
         for c in (fitting or catalog_by_name.values())
-        if c.is_content_layout and (any_page or c.example_pages)
+        if c.is_content_layout
+        and (any_page or c.example_pages)
+        and (columns < 2 or _body_boxes(c) >= columns)
     ]
     out: list[LayoutInfo] = [chosen] if chosen else []
     seen_archetypes = {chosen.archetype} if chosen else set()

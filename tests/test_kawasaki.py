@@ -623,3 +623,38 @@ def test_a_pinned_slide_is_paginated_against_its_own_layout() -> None:
     out = pl.paginate(slides, [small, roomy], min_pt=30)
     assert [s.title for s in out][1:3] == ["Au programme", "Au programme (suite)"]
     assert all(s.class_hint == "agenda" for s in out[1:3])
+
+
+def test_the_tie_break_keeps_column_slides_on_column_layouts() -> None:
+    one = pl.LayoutInfo(name="One", example_pages=[1])
+    one.placeholders = [pl.Placeholder(idx=1, kind="body", emu=(0, 0, 10, 10))]
+    two = pl.LayoutInfo(name="Two", archetype="two-column-split", example_pages=[2])
+    two.placeholders = [pl.Placeholder(idx=i, kind="body", emu=(0, 0, 10, 10)) for i in (1, 2)]
+    s = pl.Slide(index=2, title="T", chosen_layout="Two")
+    s.metrics = pf.ContentMetrics(columns=2)
+    names = [c.name for c in pl._alternates_for(s, {"One": one, "Two": two}, 3)]
+    assert names == ["Two"]
+
+
+def test_text_never_lies_under_a_demo_picture_zone(tmp_path, default_template) -> None:
+    from PIL import Image
+
+    Image.new("RGB", (400, 300), (200, 30, 30)).save(tmp_path / "p.png")
+    catalog = pl.extract_layouts(default_template)
+    info = next(c for c in catalog if c.name == "Title Only")
+    # A designer demo page put a picture on the left half of "Title Only".
+    info.placeholders.append(
+        pl.Placeholder(idx=9, kind="pic", emu=(548640, 1800000, 5000000, 4000000))
+    )
+    slides = pl.segment("# D\n\n## T\n\n![x](p.png)\n\nSome words here\n\n## E\n")
+    slides[1].chosen_layout = "Title Only"
+    out = tmp_path / "pic.pptx"
+    pa.assemble(slides, catalog, default_template, out, image_base_dir=tmp_path)
+    slide = pptx.Presentation(str(out)).slides[1]
+    pic = next(sh for sh in slide.shapes if sh.shape_type == 13)
+    text = next(
+        sh for sh in slide.shapes if sh.has_text_frame and "Some words" in sh.text_frame.text
+    )
+    a = (pic.left, pic.top, pic.width, pic.height)
+    b = (text.left, text.top, text.width, text.height)
+    assert not pa._intersects(a, b)

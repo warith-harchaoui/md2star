@@ -1015,6 +1015,13 @@ def _hsplit(
     return [(left + k * (each + gap), top, each, height) for k in range(parts)]
 
 
+def _intersects(a: tuple[float, ...], b: tuple[float, ...]) -> bool:
+    """Whether two (left, top, width, height) boxes share any area."""
+    return min(a[0] + a[2], b[0] + b[2]) > max(a[0], b[0]) and min(a[1] + a[3], b[1] + b[3]) > max(
+        a[1], b[1]
+    )
+
+
 def _column_boxes(
     prs: Presentation, info: LayoutInfo | None, n: int
 ) -> list[tuple[float, float, float, float]]:
@@ -1487,7 +1494,12 @@ def _build(
             _write_items(slide, items, ts=ts, font=body_font, into=target)
         else:
             cbox = cbox_default
-            if has_visual and not ((mpng is not None or img is not None) and has_pic):
+            picture = mpng is not None or img is not None
+            # The layout's own picture zone is used only when it leaves the
+            # text box alone: a demo page's picture region laid over a
+            # full-width default text box put a painting on the words.
+            clear = picture and has_pic and not _intersects(cbox, image_box(prs, info))
+            if has_visual and not clear:
                 text_box, vis_box = _hsplit(cbox, 2)
             else:
                 text_box = cbox
