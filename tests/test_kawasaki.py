@@ -858,3 +858,172 @@ class TestPicturesInColumns:
         assert _inside(_rect(pic), zone)
         assert pic.height >= 0.8 * zone[3]
         assert not [f for f in au.audit(out) if f.kind in ("overlap", "ghost-placeholder")]
+
+
+# ── the full-bleed photo page, code listings, margins ────────────────────────
+@pytest.fixture
+def photo_template(tmp_path: Path) -> Path:
+    """The stock template whose "Picture with Caption" became a "Photo" page:
+    a picture placeholder over the whole slide and an ink band at its foot."""
+    prs = pptx.Presentation()
+    layout = prs.slide_layouts.get_by_name("Picture with Caption")
+    layout.name = "Photo"
+    for ph in layout.placeholders:
+        kind = ph.placeholder_format.type
+        if "PICTURE" in str(kind):
+            ph.left, ph.top, ph.width, ph.height = 0, 0, prs.slide_width, prs.slide_height
+        elif "TITLE" in str(kind):
+            ph.left, ph.top = Inches(0.5), Inches(6.2)
+            ph.width, ph.height = Inches(9), Inches(0.8)
+    from pptx.enum.shapes import MSO_SHAPE
+
+    # python-pptx draws no shape on a layout: draw it on a scratch slide, move it
+    scratch = prs.slides.add_slide(prs.slide_layouts[6])
+    band = scratch.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, Inches(6), prs.slide_width, Inches(1.5))
+    band.name = "band"
+    layout.shapes._spTree.insert(2, band._element)  # under the title, as designed
+    rid = prs.slides._sldIdLst[-1].rId
+    prs.part.drop_rel(rid)
+    prs.slides._sldIdLst.remove(prs.slides._sldIdLst[-1])
+    path = tmp_path / "photo.pptx"
+    prs.save(str(path))
+    return path
+
+
+class TestPhotoPage:
+    @pytest.fixture
+    def wide(self, tmp_path: Path) -> Path:
+        from PIL import Image
+
+        Image.new("RGB", (1600, 600), (120, 90, 40)).save(tmp_path / "wide.png")
+        return tmp_path
+
+    def test_the_photo_hint_resolves_to_the_photo_layout(self, photo_template) -> None:
+        catalog = pl.extract_layouts(photo_template)
+        s = pl.segment("# D\n\n## Une chambre {.photo}\n\n![](wide.png)\n\n## E\n")[1]
+        assert s.class_hint == "photo"
+        assert pl.resolve_hint(s, catalog) == "Photo"
+
+    def test_the_picture_fills_the_page_cropped_never_letterboxed(
+        self, wide, photo_template
+    ) -> None:
+        catalog = pl.extract_layouts(photo_template)
+        slides = pl.segment(
+            "# D\n\n## Une chambre photographique {.photo}\n\n![Une chambre](wide.png)\n\n## E\n"
+        )
+        pl.select_layouts(slides, catalog, chat=lambda *a, **k: None, template=photo_template)
+        assert slides[1].chosen_layout == "Photo"
+        out = wide / "photo-out.pptx"
+        pa.assemble(slides, catalog, photo_template, out, image_base_dir=wide, min_pt=30)
+        prs = pptx.Presentation(str(out))
+        slide = prs.slides[1]
+        pics = [sh for sh in slide.shapes if sh.element.tag == qn("p:pic")]
+        assert len(pics) == 1
+        pic = pics[0]
+        assert pic.is_placeholder  # INTO the placeholder, not beside it
+        assert (pic.width, pic.height) == (prs.slide_width, prs.slide_height)
+        assert pic.crop_left > 0 and pic.crop_right > 0  # cover: cropped, centred
+        assert pic.crop_left == pytest.approx(pic.crop_right, abs=1e-3)
+        names = [sh.name for sh in slide.shapes]
+        # the designer's band is drawn above the photo, the title above it
+        assert names.index("band") > names.index(pic.name)
+        title = next(sh for sh in slide.shapes if sh.has_text_frame and sh.text_frame.text)
+        assert "Une chambre" in title.text_frame.text
+        assert names.index(title.name) > names.index("band")
+        assert not [f for f in au.audit(out) if f.kind in ("overlap", "ghost-placeholder")]
+
+    def test_a_lone_image_without_the_hint_never_lands_on_the_photo_page(
+        self, wide, photo_template
+    ) -> None:
+        """Its picture box is the whole slide, so "where the image comes out
+        largest" sent every figure there, under the band."""
+        catalog = pl.extract_layouts(photo_template)
+        slides = pl.segment("# D\n\n## Une figure\n\n![](wide.png)\n\n## E\n")
+        pl.select_layouts(
+            slides,
+            catalog,
+            chat=lambda *a, **k: {"choices": [{"index": 2, "layout_name": "Photo"}]},
+            template=photo_template,
+            image_base_dir=wide,
+        )
+        assert slides[1].chosen_layout != "Photo"
+        assert pl.is_photo_layout(next(c for c in catalog if c.name == "Photo"))
+
+
+class TestCodeListings:
+    MD = (
+        "# D\n\n## Un bloc\n\n```default\ndef f(x):\n    return x + 1\n```\n\n"
+        "## Des lignes\n\n| `git add .`\n| `git push`\n\n## E\n"
+    )
+
+    def test_a_line_block_of_inline_code_is_a_listing(self) -> None:
+        s = pl.segment(self.MD)[2]
+        assert "code" in s.features
+        assert pa.parse_code(s.body) == "git add .\ngit push"
+        assert pa.parse_code(pl.segment(self.MD)[1].body) == "def f(x):\n    return x + 1"
+
+    def test_a_line_block_of_words_keeps_each_line(self) -> None:
+        items = pa.body_items("| Un vélo pour l'esprit\n| Un agent")
+        assert [it.text for it in items] == ["Un vélo pour l'esprit", "Un agent"]
+
+    def test_a_listing_goes_to_one_box_on_the_left_in_monospace(
+        self, tmp_path, default_template, catalog, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("MD2STAR_MONO_FONT", "Satoshi")
+        slides = pl.segment(self.MD)
+        pl.select_layouts(slides, catalog, chat=lambda *a, **k: None, template=default_template)
+        assert slides[1].chosen_layout == slides[2].chosen_layout
+        info = next(c for c in catalog if c.name == slides[1].chosen_layout)
+        assert pl._body_boxes(info) == 1
+        out = tmp_path / "code.pptx"
+        pa.assemble(slides, catalog, default_template, out, min_pt=30)
+        prs = pptx.Presentation(str(out))
+        for k, lines in ((1, 2), (2, 2)):
+            panel = next(
+                sh
+                for sh in prs.slides[k].shapes
+                if sh.has_text_frame and not sh.is_placeholder and sh.text_frame.text.strip()
+            )
+            paras = panel.text_frame.paragraphs
+            assert len(paras) == lines  # one paragraph per source line
+            for p in paras:
+                assert p.alignment == pptx.enum.text.PP_ALIGN.LEFT
+                for r in p.runs:
+                    assert r.font.name == "Satoshi" and r.font.size.pt >= 30
+
+    def test_without_the_variable_the_listing_is_monospace(
+        self, tmp_path, default_template, catalog, monkeypatch
+    ) -> None:
+        monkeypatch.delenv("MD2STAR_MONO_FONT", raising=False)
+        slides = pl.segment(self.MD)
+        slides[1].chosen_layout = "Title and Content"
+        out = tmp_path / "code2.pptx"
+        pa.assemble(slides, catalog, default_template, out)
+        panel = next(
+            sh
+            for sh in pptx.Presentation(str(out)).slides[1].shapes
+            if sh.has_text_frame and not sh.is_placeholder
+        )
+        assert panel.text_frame.paragraphs[0].runs[0].font.name == "Consolas"
+
+
+def test_a_figure_keeps_the_slide_margins(tmp_path, default_template) -> None:
+    """A figure on a "Title Only" page whose picture zone spans the slide ran
+    edge to edge; it keeps the template's side margin."""
+    from PIL import Image
+
+    Image.new("RGB", (2000, 500), "white").save(tmp_path / "f.png")
+    catalog = pl.extract_layouts(default_template)
+    info = next(c for c in catalog if c.name == "Title Only")
+    info.placeholders = [
+        pl.Placeholder(idx=0, kind="title", emu=(457200, 274638, 8229600, 1143000)),
+        pl.Placeholder(idx=9, kind="pic", emu=(0, 1600200, 9144000, 4525963)),
+    ]
+    slides = pl.segment("# D\n\n## Une figure\n\n![](f.png)\n\n## E\n")
+    slides[1].chosen_layout = "Title Only"
+    out = tmp_path / "m.pptx"
+    pa.assemble(slides, catalog, default_template, out, image_base_dir=tmp_path, min_pt=30)
+    prs = pptx.Presentation(str(out))
+    (pic,) = _pictures(prs.slides[1])
+    assert pic.left >= Inches(0.5) - 2
+    assert pic.left + pic.width <= prs.slide_width - Inches(0.5) + 2

@@ -642,6 +642,8 @@ def audit(
                 findings += _check_bounds(index, shape, box, size)
                 if shape.element.tag == _PIC_TAG:
                     pictures.append((shape, box))
+            if shape.element.tag == _PIC_TAG:
+                continue  # a picture, filled into its placeholder or not: no text to judge
             if not shape.has_text_frame or not shape.text_frame.text.strip():
                 # An EMPTY placeholder is the ghost the assembler should have
                 # removed; an empty plain shape is a designer's decoration, and

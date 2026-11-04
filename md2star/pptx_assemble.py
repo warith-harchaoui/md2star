@@ -55,6 +55,7 @@ Author
 
 from __future__ import annotations
 
+import os
 import re
 import zipfile
 from collections import Counter
@@ -79,6 +80,7 @@ from .pptx_layout import (
     column_regions,
     default_chat,
     default_render,
+    is_photo_layout,
     parse_json_reply,
     render_deck_pages,
     split_columns,
@@ -452,11 +454,24 @@ def parse_mermaid(body: str) -> str | None:
 
 
 def parse_code(body: str) -> str | None:
-    """First non-Mermaid fenced block (the slide's primary code sample, if any)."""
+    """First non-Mermaid fenced block (the slide's primary code sample, if any).
+
+    Failing a fence, a Pandoc line block whose every line is inline code
+    (``| `git push` ``) is a listing too: one source line per line.
+    """
     for m in re.finditer(r"```(\w*)\s*\n(.*?)```", body, re.DOTALL):
         if m.group(1).lower() != "mermaid":
-            return m.group(2).strip()
+            return m.group(2).strip("\n")
+    lines = [_LINE_BLOCK_CODE_RE.match(ln) for ln in body.splitlines() if _LINE_BLOCK_RE.match(ln)]
+    if lines and all(lines):
+        return "\n".join(m.group(1) for m in lines)
     return None
+
+
+#: A Pandoc line-block line (``| text``), not a pipe-table row (``| a | b |``).
+_LINE_BLOCK_RE = re.compile(r"^[ \t]*\|[ \t]+(?!.*\|[ \t]*$)(.*)$")
+#: A line-block line that is nothing but inline code.
+_LINE_BLOCK_CODE_RE = re.compile(r"^[ \t]*\|[ \t]+`([^`]*)`[ \t]*$")
 
 
 @dataclass
@@ -510,6 +525,15 @@ def body_items(body: str) -> list[Item]:
         if not s:
             flush()
             in_list = False
+            continue
+        block = _LINE_BLOCK_RE.match(raw)
+        if block and not _LINE_BLOCK_CODE_RE.match(raw):
+            # A line block of words: each line is its own paragraph, as Pandoc
+            # renders it. One of inline code is a listing (parse_code).
+            flush()
+            in_list = False
+            if _inline(block.group(1)):
+                items.append(Item(_inline(block.group(1)), 0, False))
             continue
         if s.startswith(("#", "|", ":::")) or _IMAGE_RE.fullmatch(s) or set(s) <= {"*", "-", " "}:
             flush()
@@ -915,9 +939,12 @@ def add_code(
     tf.word_wrap = True
     tf.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE if shrink else MSO_AUTO_SIZE.NONE
     tf.margin_left = tf.margin_right = Inches(0.25)
+    tf.vertical_anchor = MSO_ANCHOR.TOP
     for i, ln in enumerate(code.splitlines()):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
         p.text = ln or " "
+        # A shape centres its text by default; a listing reads from the left.
+        p.alignment = PP_ALIGN.LEFT
         run = p.runs[0]
         run.font.name = font
         run.font.size = Pt(size)
@@ -1295,7 +1322,20 @@ def assemble(
             mpng = render_mermaid(mer) if (mer and render_mermaid) else None
 
             # ── Seam E: clone the designer's own example page, if one fits ──
-            if clone is not None and info is not None and not code and not table and not col_pics:
+            photo = info is not None and any(
+                ph.kind == "pic"
+                and ph.emu
+                and ph.emu[2] * ph.emu[3] >= _FULL_BLEED * canvas[0] * canvas[1]
+                for ph in info.placeholders
+            )
+            if (
+                clone is not None
+                and info is not None
+                and not code
+                and not table
+                and not col_pics
+                and not photo
+            ):
                 payload = clone.Content(
                     title=title_lines[0],
                     bullets=bullets,
@@ -1344,7 +1384,14 @@ def assemble(
                 col_pics=col_pics,
                 visual=(mpng, img, code, table),
                 igrow=igrow,
-                fonts=(title_font, body_font, fam.get("family", "Consolas")),
+                # Code in a monospace face: MD2STAR_MONO_FONT when a house style
+                # names one (it may forbid a second face, code included), else
+                # the template's own. "family" is its text face, not a mono.
+                fonts=(
+                    title_font,
+                    body_font,
+                    os.environ.get("MD2STAR_MONO_FONT") or fam.get("mono") or "Consolas",
+                ),
             )
             _finish(slide, s)
             placed += 1
@@ -1457,6 +1504,14 @@ def _build(
                 )
         return
 
+    hero = _full_bleed_picture(prs, slide)
+    if hero is not None and (img is not None or mpng is not None):
+        # A photo layout: the picture fills the page, cropped to cover and
+        # never letterboxed, and the title sits in the designer's band.
+        _photo_slide(slide, s, hero, mpng if mpng is not None else img, items, title)
+        put_title(26, title_box(prs, info))
+        return
+
     has_visual = mpng is not None or img is not None or bool(code) or bool(table)
     body_phs = sorted(
         (
@@ -1554,6 +1609,16 @@ def _build(
         # "Picture with Caption" is the small caption box beside the empty
         # picture zone (observed: a 4:3 photo at 3.3 x 2.6 in).
         vis_box = _lone_picture_box(prs, slide, info, mpng if mpng is not None else img)
+    elif code and not table:
+        # A listing alone: one box, the whole stage under a full-width title
+        # when the layout has one (a "Comparison" page's first column left
+        # the listing in a half-width panel beside an empty one).
+        stage = stage_region(info, (prs.slide_width, prs.slide_height))
+        vis_box = (
+            tuple(v / EMU_PER_INCH for v in stage)
+            if stage is not None
+            else (_ph_box(body_phs[0]) if body_phs else None)
+        )
     elif use_ph and has_visual:
         vis_box = _ph_box(body_phs[0])
 
@@ -1563,7 +1628,7 @@ def _build(
         add_image(
             slide,
             mpng if mpng is not None else img,
-            box=(left - igrow, top, width + 2 * igrow, height + igrow),
+            box=_within_margins(prs, info, (left - igrow, top, width + 2 * igrow, height + igrow)),
             # A rendered diagram's accessible description is the slide's own
             # title: nothing else here knows what the graph says. A picture
             # keeps its authored alt text when it has one.
@@ -1589,6 +1654,125 @@ def _build(
             size=ts.size(14, None, inherit_ok=False),
             font=body_font,
         )
+
+
+#: Share of the canvas a picture placeholder must cover to make a photo layout.
+_FULL_BLEED = 0.8
+
+#: Words a title over a photograph should not exceed: the band holds one line.
+PHOTO_TITLE_WORDS = 6
+
+
+def _full_bleed_picture(prs, slide):
+    """The slide's picture placeholder covering the page, or ``None``."""
+    canvas = prs.slide_width * prs.slide_height
+    for ph in slide.placeholders:
+        if placeholder_kind(ph) != "pic" or not hasattr(ph, "insert_picture"):
+            continue
+        if _area(ph) >= _FULL_BLEED * canvas:
+            return ph
+    return None
+
+
+def _photo_slide(slide, s: Slide, hero, pic: Path, items: list[Item], title: str) -> None:
+    """Fill a full-bleed picture placeholder with *pic*, cropped to cover, centred.
+
+    ``insert_picture`` crops the image to the placeholder's aspect around its
+    centre, which is exactly "cover": the page is filled and nothing is
+    letterboxed. Words other than the title have no place on a photograph;
+    they go to the speaker notes rather than being lost.
+    """
+    placed = hero.insert_picture(str(pic))
+    placed._element._nvXxPr.cNvPr.set(  # noqa: SLF001 — see add_image
+        "descr", parse_alt_text(s.body) or title
+    )
+    last = _raise_layout_overlays(slide, placed)
+    title_ph = slide_placeholder(slide, TITLE_KINDS)
+    if title_ph is not None:
+        # The title paints last: over the photo and over the band that holds it.
+        last.addnext(title_ph.element)
+    if len(title.split()) > PHOTO_TITLE_WORDS:
+        logger.warning(
+            "slide %d: a photo title of %d words; the band holds %d",
+            s.index,
+            len(title.split()),
+            PHOTO_TITLE_WORDS,
+        )
+    # The image's own alt text is not a body: it is the picture's description.
+    words = "\n".join(it.text for it in body_items(_IMAGE_RE.sub("", s.body)))
+    if words:
+        logger.warning(
+            "slide %d: a photo slide carries no body; its words go to the notes", s.index
+        )
+        if words not in (s.notes or ""):
+            s.notes = f"{words}\n\n{s.notes}" if s.notes else words
+
+
+_R_ATTRS = (
+    "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}embed",
+    "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}link",
+    "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id",
+)
+
+
+def _raise_layout_overlays(slide, picture):
+    """Copy the layout's own decoration over a full-bleed picture.
+
+    A slide's shapes always paint above its layout's, so a photograph filling
+    the page hides the designer's band, logo and footer drawn on the layout:
+    the title ends up white on the photo with nothing under it. Those
+    non-placeholder shapes are copied onto the slide, right above the picture,
+    so the band is where the designer put it.
+    """
+    import copy  # noqa: PLC0415
+
+    layout = slide.slide_layout
+    anchor = picture.element
+    half = picture.top + picture.height // 2
+    for shape in layout.shapes:
+        if shape.is_placeholder or shape.top is None or shape.height is None:
+            continue
+        if shape.top + shape.height // 2 < half:
+            # Only what sits in the lower half (the band and what it holds):
+            # a running header over a photograph is not readable anyway.
+            continue
+        element = copy.deepcopy(shape.element)
+        for node in element.iter():
+            for attr in _R_ATTRS:
+                old = node.get(attr)
+                if old is None:
+                    continue
+                try:
+                    rel = layout.part.rels[old]
+                except KeyError:
+                    continue
+                new = (
+                    slide.part.relate_to(rel.target_ref, rel.reltype, is_external=True)
+                    if rel.is_external
+                    else slide.part.relate_to(rel.target_part, rel.reltype)
+                )
+                node.set(attr, new)
+        anchor.addnext(element)
+        anchor = element
+    return anchor
+
+
+#: Side margin kept when the template's title does not say where its own is.
+_SIDE_MARGIN_IN = 0.6
+
+
+def _within_margins(prs, info: LayoutInfo | None, box):
+    """*box* cut back to the slide's side margins: a figure never runs edge to edge.
+
+    The margin is the template's own, read off its title's left edge (0.6 in
+    on the course template), and kept on both sides.
+    """
+    slide_w = prs.slide_width / EMU_PER_INCH
+    tleft = title_box(prs, info)[0]
+    margin = tleft if 0.2 <= tleft <= 1.5 else _SIDE_MARGIN_IN
+    left, top, width, height = box
+    lo, hi = max(left, margin), min(left + width, slide_w - margin)
+    return (lo, top, hi - lo, height) if hi - lo > 1.0 else box
 
 
 def _caption_height(items: list[Item], width: float, size: float) -> float:
@@ -1920,6 +2104,8 @@ def _reselect(s: Slide) -> str | None:
             continue
         if layout.name == current or layout.name in tried:
             continue
+        if is_photo_layout(layout):
+            continue  # a photo page is the author's to ask for ({.photo})
         return layout.name
     return None
 

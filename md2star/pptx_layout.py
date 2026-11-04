@@ -877,6 +877,7 @@ CLASS_HINTS: dict[str, tuple[str | None, tuple[str, ...]]] = {
     "section": ("section-divider", ("Section Header", "Section")),
     "closing": ("closing", ("Closing",)),
     "cover": ("cover", ("Title Slide",)),
+    "photo": ("photo-hero", ("Photo",)),
 }
 
 #: A slide that closes a sequence by restating it: mapped to a template's
@@ -902,8 +903,10 @@ def _features(body: str) -> list[str]:
     # more useful signal for layout selection (a diagram, not "some code").
     if "```mermaid" in body:
         f.append("mermaid")
-    elif re.search(r"^```", body, re.MULTILINE):
-        f.append("code")
+    elif re.search(r"^```", body, re.MULTILINE) or re.search(
+        r"(?m)^[ \t]*\|[ \t]+`[^`]*`[ \t]*$", body
+    ):
+        f.append("code")  # a fence, or a line block of inline code
     if re.search(r"\{\.big\}", body):
         f.append("big-statement")
     # ordered-list before bullets for the same reason: check the more
@@ -1588,7 +1591,8 @@ def select_layouts(
     # template's more common/representative layout for each role.
     by_archetype: dict[str, str] = {}
     for c in content:
-        by_archetype.setdefault(c.archetype, c.name)
+        if not is_photo_layout(c):
+            by_archetype.setdefault(c.archetype, c.name)
     names = {c.name for c in content}
     fallback = by_archetype.get("bulleted-content", content[0].name)
     # Layouts that carry a role are only placed by a hint or by their role
@@ -1596,6 +1600,12 @@ def select_layouts(
     reserved = {
         c.name for c in content if c.archetype in ("cover", "closing", "section-divider")
     } | {n for n in names if n.lower() in ("recap", "agenda", "closing")}
+    # A full-bleed photo page covers its title with the picture unless the
+    # author asked for exactly that ({.photo}); measured as "the largest
+    # picture box", it would take every lone image of the deck.
+    reserved |= {
+        c.name for c in content if is_photo_layout(c, slide_size(template) if template else None)
+    }
     cat_txt = _catalog_block(content, min_pt=min_pt)
     # The canvas lets the compositional checks ask where a box falls *on the
     # slide*; the image directory lets the aspect check read real dimensions.
@@ -1655,11 +1665,17 @@ def select_layouts(
                 [c for c in content if c.name not in reserved],
                 base_dir=image_base_dir,
                 canvas=canvas,
-            ) or largest_picture_layout(metrics, content, base_dir=image_base_dir)
+            ) or largest_picture_layout(
+                metrics, [c for c in content if c.name not in reserved], base_dir=image_base_dir
+            )
+            if biggest is None and not s.title_only:
+                # A listing goes into one box: on a page of two panels the
+                # second is left standing empty beside it.
+                biggest = code_layout(s.features, [c for c in content if c.name not in reserved])
             if biggest is not None:
                 s.chosen_layout = biggest
                 s.chosen_confidence = 1.0
-                s.chosen_why = "the layout where the image comes out largest"
+                s.chosen_why = "the layout where its picture or listing comes out largest"
                 s.pinned = True
                 continue
             # Offer the geometrically plausible layouts first, by name, so the
@@ -1747,7 +1763,7 @@ def select_layouts(
                 alt = next(
                     (lay for lay, rep in s.fit_ranked if rep.fits and lay.name not in reserved),
                     None,
-                )
+                ) or next((lay for lay, _ in s.fit_ranked if lay.name not in reserved), None)
                 if alt is not None:
                     why = f"{name} is reserved for its role; {why}"
                     name = alt.name
@@ -2188,4 +2204,47 @@ def largest_columns_layout(
         )
         if best is None or smallest > best[0]:
             best = (smallest, lay.name)
+    return best[1] if best else None
+
+
+#: Share of the canvas a picture box must cover for its layout to be a photo page.
+PHOTO_SHARE = 0.8
+
+
+def is_photo_layout(info, canvas: tuple[int, int] | None = None) -> bool:
+    """Whether *info* is a full-bleed photo page ("Photo"): reserved for ``{.photo}``."""
+    if (getattr(info, "name", "") or "").casefold() == "photo":
+        return True
+    phs = [p for p in (getattr(info, "placeholders", None) or []) if getattr(p, "emu", None)]
+    if canvas is None:
+        # No slide size: a picture box anchored at the page's corner and
+        # spanning everything else on the layout is the full-bleed one.
+        if not phs:
+            return False
+        canvas = (
+            max(p.emu[0] + p.emu[2] for p in phs),
+            max(p.emu[1] + p.emu[3] for p in phs),
+        )
+        phs = [p for p in phs if p.emu[0] <= 0 and p.emu[1] <= 0]
+    area = canvas[0] * canvas[1]
+    return any(p.kind == "pic" and p.emu[2] * p.emu[3] >= PHOTO_SHARE * area for p in phs if area)
+
+
+def code_layout(features: list[str], content) -> str | None:
+    """The layout with one big body box, for a slide that is a code listing.
+
+    ``None`` unless the slide is code and nothing else that wants a box of its
+    own (columns, a table, a picture, a diagram).
+    """
+    if "code" not in features or {"two-column", "table", "image", "mermaid"} & set(features):
+        return None
+    best: tuple[int, str] | None = None
+    for lay in content:
+        phs = [p for p in getattr(lay, "placeholders", None) or [] if p.emu is not None]
+        bodies = [p.emu for p in phs if p.kind in ("body", "obj")]
+        if len(bodies) != 1 or any(p.kind == "pic" for p in phs):
+            continue
+        area = bodies[0][2] * bodies[0][3]
+        if best is None or area > best[0]:
+            best = (area, lay.name)
     return best[1] if best else None
