@@ -69,6 +69,7 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.util import Inches, Pt
 
+from .linebreak import break_lines
 from .logging import get_logger
 from .pptx_layout import (
     ChatFn,
@@ -757,6 +758,7 @@ def add_text(
     shrink: bool = True,
     levels: list[int] | None = None,
     plain: list[bool] | None = None,
+    face: str | None = None,
 ) -> None:
     """Overlay a text box. *blocks* = list of (text, pt_size, bold, font).
 
@@ -771,13 +773,23 @@ def add_text(
     ``--min-pt``, where shrinking is exactly what the floor forbids.
     *levels* sets each paragraph's list depth and *plain* marks paragraphs
     that must not get the placeholder's bullet glyph (prose, numbered items).
+
+    Every paragraph's lines are broken by :mod:`md2star.linebreak` when the
+    box's width and the text's size are known: never after « de » or « the »,
+    never before a lone « : », never between a number and its unit. *face* is
+    the family measured when a block inherits its font (``None``: 0.55 em).
     """
     if into is not None:
         tf = into.text_frame
         tf.clear()  # a cloned placeholder arrives with one empty paragraph
+        try:
+            box_w = into.width / EMU_PER_INCH if into.width else None
+        except Exception:  # noqa: BLE001 — inherited geometry python-pptx cannot read
+            box_w = None
     else:
         left, top, width, height = (Inches(v) for v in box or (0.0, 0.0, 1.0, 1.0))
         tf = slide.shapes.add_textbox(left, top, width, height).text_frame
+        box_w = (box or (0.0, 0.0, 1.0, 1.0))[2]
     tf.word_wrap = True
     # With shrinking allowed: belt-and-braces against overflow, the renderer
     # auto-shrinks the run rather than clip it. Without: NONE is written
@@ -787,9 +799,11 @@ def add_text(
         tf.vertical_anchor = MSO_ANCHOR.MIDDLE
     for i, (text, size, bold, font) in enumerate(blocks):
         p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
-        p.text = text
-        if levels is not None and i < len(levels) and levels[i]:
-            p.level = levels[i]
+        level = levels[i] if levels is not None and i < len(levels) else 0
+        bulleted = into is not None and not (plain is not None and i < len(plain) and plain[i])
+        p.text = _broken(text, size, box_w, into, level, bulleted, bold, font or face, tf)
+        if level:
+            p.level = level
         if plain is not None and i < len(plain) and plain[i]:
             # An explicit <a:buNone/>: a designer body placeholder bullets
             # every paragraph, and a sentence is not a list item.
@@ -812,6 +826,35 @@ def add_text(
                 run.font.name = font
             if color is not None:
                 run.font.color.rgb = color
+
+
+#: Text-frame insets PowerPoint applies when a body declares none (0.1 in each
+#: side), and the indent a bulleted placeholder paragraph takes per level.
+_DEFAULT_INSET_IN = 0.1
+_BULLET_INDENT_IN = 0.4
+
+
+def _broken(text, size, box_w, into, level, bulleted, bold, family, tf) -> str:
+    """*text* with semantic line breaks for its box, or unchanged when unknowable."""
+    if not text or box_w is None:
+        return text
+    pt = size
+    if pt is None and into is not None:
+        try:
+            pt = declared_style(into, level)[0]
+        except Exception:  # noqa: BLE001 — an unreadable chain: leave the wrapping to the renderer
+            pt = None
+    if not pt:
+        return text
+    body_pr = tf._txBody.find(_qa("bodyPr"))  # noqa: SLF001
+    insets = 0.0
+    for side in ("lIns", "rIns"):
+        raw = body_pr.get(side) if body_pr is not None else None
+        insets += int(raw) / EMU_PER_INCH if raw is not None else _DEFAULT_INSET_IN
+    usable = box_w - insets - (_BULLET_INDENT_IN * (level + 1) if bulleted else 0.0)
+    if usable <= 0.5:
+        return text
+    return break_lines(text, pt, usable * 72, family=family, bold=bool(bold))
 
 
 def _fit(pic, max_w: float, max_h: float, cx: float, area_top: float) -> None:
@@ -1103,6 +1146,7 @@ def _write_items(
             shrink=ts.min_pt is None,
             levels=[it.level for it in items],
             plain=[not it.bullet for it in items],
+            face=font,
         )
         return
     style = _style_of(_layout_ph(slide.slide_layout, _BODY_PH_KINDS))
@@ -1363,6 +1407,7 @@ def _build(
             middle=divider and not inherit,
             into=title_ph,
             shrink=ts.min_pt is None,
+            face=title_font,
         )
 
     if title_only:
@@ -1390,6 +1435,7 @@ def _build(
                     into=sub_ph,
                     shrink=ts.min_pt is None,
                     plain=[True] * len(lines),
+                    face=body_font,
                 )
             else:
                 left, top, width, height = tbox
