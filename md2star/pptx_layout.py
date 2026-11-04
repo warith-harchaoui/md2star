@@ -1591,6 +1591,11 @@ def select_layouts(
         by_archetype.setdefault(c.archetype, c.name)
     names = {c.name for c in content}
     fallback = by_archetype.get("bulleted-content", content[0].name)
+    # Layouts that carry a role are only placed by a hint or by their role
+    # (first/last slide, a level-1 heading), never by the model's taste.
+    reserved = {
+        c.name for c in content if c.archetype in ("cover", "closing", "section-divider")
+    } | {n for n in names if n.lower() in ("recap", "agenda", "closing")}
     cat_txt = _catalog_block(content, min_pt=min_pt)
     # The canvas lets the compositional checks ask where a box falls *on the
     # slide*; the image directory lets the aspect check read real dimensions.
@@ -1636,6 +1641,17 @@ def select_layouts(
                 )
             s.fit_ranked = ordered
             if s.pinned:
+                continue
+            # A figure is placed by measurement, not by vote: one image and a
+            # few words go wherever that image, fitted to its own aspect, comes
+            # out largest. A wide figure in a half-width picture box is shrunk
+            # to a third of the slide, and no caption or tie-break notices.
+            biggest = largest_picture_layout(metrics, content, base_dir=image_base_dir)
+            if biggest is not None:
+                s.chosen_layout = biggest
+                s.chosen_confidence = 1.0
+                s.chosen_why = "the layout where the image comes out largest"
+                s.pinned = True
                 continue
             # Offer the geometrically plausible layouts first, by name, so the
             # model is steered by what can actually hold the content rather
@@ -1714,6 +1730,18 @@ def select_layouts(
                     )
                     name = best.name
                     why = f"geometry overrode the model ({reason})"
+            if name in reserved:
+                # A role layout (cover, divider, closing, recap, agenda) is the
+                # author's to give: the model put an ordinary list on the dark
+                # recap page three times in one deck, and the room reads every
+                # such page as "this is what to remember".
+                alt = next(
+                    (lay for lay, rep in s.fit_ranked if rep.fits and lay.name not in reserved),
+                    None,
+                )
+                if alt is not None:
+                    why = f"{name} is reserved for its role; {why}"
+                    name = alt.name
             s.chosen_layout = name
             s.chosen_confidence = c.get("confidence")
             s.chosen_why = why
@@ -1982,3 +2010,36 @@ def visual_confirm(
             )
             s.chosen_layout = best
             s.chosen_why = str(data.get("why", "")) or s.chosen_why
+
+
+def largest_picture_layout(metrics, content, *, base_dir: Path | None = None) -> str | None:
+    """Name of the layout whose picture box shows a lone image largest, or ``None``.
+
+    Applies only to a slide that is one image and few words, with a readable
+    image file. Each candidate's first picture region is scored by the area
+    the image takes once fitted to its own aspect inside that box; the largest
+    wins. ``None`` (no image, too much text, unreadable file, no picture box)
+    leaves the slide to the ordinary ranking.
+    """
+    if metrics.image_count != 1 or not metrics.is_sparse or not metrics.image_paths:
+        return None
+    resolved = pptx_fit._resolve(metrics.image_paths[0], base_dir)
+    aspect = pptx_fit._image_aspect(resolved) if resolved else None
+    if not aspect:
+        return None
+    best: tuple[float, str] | None = None
+    for lay in content:
+        for ph in getattr(lay, "placeholders", None) or []:
+            if (getattr(ph, "kind", "") or "") not in pptx_fit._PIC_KINDS or not getattr(
+                ph, "emu", None
+            ):
+                continue
+            _, _, bw, bh = ph.emu
+            if bw <= 0 or bh <= 0:
+                continue
+            w = min(bw, bh * aspect)
+            area = w * (w / aspect)
+            if best is None or area > best[0]:
+                best = (area, lay.name)
+            break
+    return best[1] if best else None

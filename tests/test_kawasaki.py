@@ -658,3 +658,27 @@ def test_text_never_lies_under_a_demo_picture_zone(tmp_path, default_template) -
     a = (pic.left, pic.top, pic.width, pic.height)
     b = (text.left, text.top, text.width, text.height)
     assert not pa._intersects(a, b)
+
+
+def test_lone_figure_goes_where_it_comes_out_largest(tmp_path):
+    """A wide figure is pinned to the full-width picture box, not the half-width one."""
+    from types import SimpleNamespace
+
+    from PIL import Image
+
+    from md2star import pptx_fit
+    from md2star.pptx_layout import largest_picture_layout
+
+    img = tmp_path / "fig.png"
+    Image.new("RGB", (870, 300), "white").save(img)
+    metrics = pptx_fit.measure("La matrice des coûts", f"![]({img.name})")
+
+    def lay(name, w, h):
+        ph = SimpleNamespace(kind="pic", emu=(0, 0, w, h))
+        return SimpleNamespace(name=name, placeholders=[ph])
+
+    content = [lay("Picture with Caption", 4_600_000, 5_300_000), lay("Title Only", 11_000_000, 3_900_000)]
+    assert largest_picture_layout(metrics, content, base_dir=tmp_path) == "Title Only"
+    # too many words: the ordinary ranking decides
+    wordy = pptx_fit.measure("t", f"![]({img.name})\n\n" + "mot " * 40)
+    assert largest_picture_layout(wordy, content, base_dir=tmp_path) is None
