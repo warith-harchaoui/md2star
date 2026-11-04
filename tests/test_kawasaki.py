@@ -1027,3 +1027,26 @@ def test_a_figure_keeps_the_slide_margins(tmp_path, default_template) -> None:
     (pic,) = _pictures(prs.slides[1])
     assert pic.left >= Inches(0.5) - 2
     assert pic.left + pic.width <= prs.slide_width - Inches(0.5) + 2
+
+
+def test_one_flow_of_text_avoids_layouts_with_empty_body_boxes():
+    """Two bullets go on a one-box layout, not into the left card of a comparison."""
+    from types import SimpleNamespace
+
+    from md2star import pptx_fit
+
+    metrics = pptx_fit.measure("Rappel", "- vrais cas\n- ennemi : l'oubli")
+
+    def lay(name, n_body):
+        phs = [SimpleNamespace(kind="title", emu=(0, 0, 9_000_000, 900_000), pt=40.0)]
+        phs += [
+            SimpleNamespace(kind="body", emu=(0, 1_500_000 + i, 4_000_000, 3_000_000), pt=30.0)
+            for i in range(n_body)
+        ]
+        return SimpleNamespace(name=name, placeholders=phs, archetype="bulleted-content")
+
+    one, four = lay("Title and Content", 1), lay("Comparison", 4)
+    r1 = pptx_fit.evaluate(metrics, one, min_pt=30)
+    r4 = pptx_fit.evaluate(metrics, four, min_pt=30)
+    assert r1.score > r4.score
+    assert any("would stay empty" in r for r in r4.reasons)

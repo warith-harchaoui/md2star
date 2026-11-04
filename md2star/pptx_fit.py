@@ -596,6 +596,17 @@ def evaluate(
         else:
             score -= 0.20
             report.reasons.append(f"{metrics.columns} columns but {boxes} body box(es)")
+    elif not metrics.image_count:
+        # One flow of text on a layout with several body boxes fills the first
+        # and leaves the others as empty cards: two bullets in the left card of
+        # a comparison, an empty right card beside them. A hole the reader sees,
+        # like an empty picture box, so it costs as much.
+        boxes = sum(1 for k in kinds if k in _BODY_KINDS)
+        if boxes > 1:
+            score -= 0.60
+            report.reasons.append(
+                f"one flow of text, {boxes} body boxes: {boxes - 1} would stay empty"
+            )
 
     # Image-forward and text-sparse: the deck this suite is aiming for.
     if metrics.is_sparse and pic_count and metrics.image_count:
