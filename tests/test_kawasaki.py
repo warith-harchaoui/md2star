@@ -839,3 +839,22 @@ class TestPicturesInColumns:
         assert pic.left + pic.width <= words.left
         assert abs(pic.width / pic.height - 16 / 9) < 0.03
         assert not [f for f in au.audit(out) if f.kind == "overlap"]
+
+    def test_a_lone_picture_fills_the_picture_zone(self, images, default_template, catalog):
+        """A 4:3 photo alone under its title on "Picture with Caption", with
+        --min-pt: it went into the small caption box beside the empty picture
+        placeholder."""
+        slides = pl.segment("# D\n\n## Une image\n\n![](four3.png)\n\n## E\n")
+        slides[1].chosen_layout = "Picture with Caption"
+        out = images / "lone.pptx"
+        pa.assemble(slides, catalog, default_template, out, image_base_dir=images, min_pt=30)
+        slide = pptx.Presentation(str(out)).slides[1]
+        (pic,) = _pictures(slide)
+        zone = next(
+            ph.emu
+            for ph in next(c for c in catalog if c.name == "Picture with Caption").placeholders
+            if ph.kind == "pic"
+        )
+        assert _inside(_rect(pic), zone)
+        assert pic.height >= 0.8 * zone[3]
+        assert not [f for f in au.audit(out) if f.kind in ("overlap", "ghost-placeholder")]

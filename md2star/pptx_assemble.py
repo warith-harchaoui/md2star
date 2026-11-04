@@ -81,6 +81,7 @@ from .pptx_layout import (
     parse_json_reply,
     render_deck_pages,
     split_columns,
+    stage_region,
 )
 
 logger = get_logger(__name__)
@@ -1501,6 +1502,12 @@ def _build(
             else:
                 text_box = cbox
             _write_items(slide, items, ts=ts, font=body_font, box=text_box)
+    elif mpng is not None or img is not None:
+        # A picture and nothing else: it takes the largest picture area the
+        # slide offers. The body box was its home under --min-pt, which on
+        # "Picture with Caption" is the small caption box beside the empty
+        # picture zone (observed: a 4:3 photo at 3.3 x 2.6 in).
+        vis_box = _lone_picture_box(prs, slide, info, mpng if mpng is not None else img)
     elif use_ph and has_visual:
         vis_box = _ph_box(body_phs[0])
 
@@ -1606,6 +1613,46 @@ def _picture_columns(
             )
             height -= cap
         add_image(slide, pic, box=(left, top, width, height), alt=alt or title)
+
+
+def _lone_picture_box(prs, slide, info: LayoutInfo | None, pic: Path):
+    """The box where a slide's only picture comes out largest, in inches.
+
+    Candidates: the slide's own picture placeholders, the catalog's picture
+    zone, the stage under a full-width title, the body boxes. Each is scored by
+    the area the picture takes once fitted to its own aspect; none may cross
+    the title. ``None`` falls back to :func:`image_box`.
+    """
+    title_ph = slide_placeholder(slide, TITLE_KINDS)
+    tbox = _ph_box(title_ph) if title_ph is not None else None
+    cands = [
+        _ph_box(ph)
+        for ph in slide.placeholders
+        if placeholder_kind(ph) in _IMAGE_KINDS | _BODY_PH_KINDS and ph is not title_ph
+    ]
+    cands.append(_placeholder_box_in(info, _IMAGE_KINDS))
+    stage = stage_region(info, (prs.slide_width, prs.slide_height))
+    if stage is not None:
+        cands.append(tuple(v / EMU_PER_INCH for v in stage))
+    cands = [c for c in cands if c and not (tbox and _intersects(c, tbox))]
+    if not cands:
+        return None
+    try:
+        from PIL import Image  # noqa: PLC0415 — pillow ships with python-pptx
+
+        with Image.open(pic) as im:
+            aspect = im.width / im.height
+    except Exception:  # noqa: BLE001 — unreadable: the biggest box, by area
+        aspect = None
+
+    def shown(box) -> float:
+        w, h = box[2], box[3]
+        if not aspect:
+            return w * h
+        fw = min(w, h * aspect)
+        return fw * fw / aspect
+
+    return max(cands, key=shown)
 
 
 # ── target-matching Ralph Eyeball Loop ───────────────────────────────────────
