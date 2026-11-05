@@ -6,6 +6,26 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Photo credits.** An image's Pandoc title is its credit:
+  `![](photo.jpg "Courtesy of https://...")` prints the title small over the
+  placed picture, white on a translucent dark plate in the theme's body face,
+  bottom right inside its frame (top right on a full-bleed photo whose title
+  band holds the bottom, or wherever it covers no words). 11 pt, down to 9 pt,
+  then two lines broken after a « / »: the URL is never shortened. On
+  `--smart-layout` (lone picture, picture in a column, full-bleed Photo page,
+  cloned example page) and on the plain Pandoc path. The shape is named
+  `md2star-credit`; `md2star audit` exempts it from `illegible-type`,
+  `under-min-pt`, `overrun` and `overlap`, as it does a footer. The title is
+  no longer the picture's alt text on the Pandoc path.
+
+### Fixed
+
+- An image title holding a URL lost a slash (`https:/`) when the image's path
+  was made absolute, and a titled image was skipped by the sizing and
+  downscaling passes: every image pass now rewrites the path alone.
+
 ## [3.12.0] - 2026-11-04
 
 ### Added

@@ -70,7 +70,10 @@ from pptx.enum.shapes import MSO_SHAPE
 from pptx.enum.text import MSO_ANCHOR, MSO_AUTO_SIZE, PP_ALIGN
 from pptx.util import Inches, Pt
 
+from .linebreak import WIDTH_MARGIN as _WIDTH_MARGIN
 from .linebreak import break_lines
+from .linebreak import face as _face_metrics
+from .linebreak import width as _text_width
 from .logging import get_logger
 from .pptx_layout import (
     ChatFn,
@@ -446,6 +449,29 @@ def parse_alt_text(body: str) -> str:
     """
     m = _IMAGE_RE.search(body)
     return m.group(1).strip() if m else ""
+
+
+#: The quoted title after an image's path: ``x.jpg "Courtesy of https://..."``.
+_IMAGE_TITLE_RE = re.compile(r"""^\S+\s+(?:"(.*)"|'(.*)'|\((.*)\))\s*$""", re.DOTALL)
+
+
+def image_title(target: str) -> str:
+    """The Pandoc title of one image target (``path "title"``), or ``""``."""
+    m = _IMAGE_TITLE_RE.match(target.strip())
+    if not m:
+        return ""
+    return next((g for g in m.groups() if g is not None), "").strip()
+
+
+def parse_image_credit(body: str) -> str:
+    """The first image's Markdown title: its photo credit (``""`` when none).
+
+    ``![](photo.jpg "Courtesy of https://...")`` puts the credit where Pandoc
+    keeps an image title. It is printed small over the picture
+    (:func:`add_credit`), never used as the picture's description.
+    """
+    m = _IMAGE_RE.search(body)
+    return image_title(m.group(2)) if m else ""
 
 
 def parse_mermaid(body: str) -> str | None:
@@ -894,7 +920,15 @@ def _fit(pic, max_w: float, max_h: float, cx: float, area_top: float) -> None:
     pic.top = Inches(area_top) + (Inches(max_h) - pic.height) // 2
 
 
-def add_image(slide, img: Path, *, box: tuple[float, float, float, float], alt: str = "") -> None:
+def add_image(
+    slide,
+    img: Path,
+    *,
+    box: tuple[float, float, float, float],
+    alt: str = "",
+    credit: str = "",
+):
+    """Contain-fit *img* in *box* (inches); *credit* goes over it (:func:`add_credit`)."""
     left, top, width, height = box
     cx = left + width / 2
     pic = slide.shapes.add_picture(str(img), Inches(left), Inches(top))
@@ -910,6 +944,204 @@ def add_image(slide, img: Path, *, box: tuple[float, float, float, float], alt: 
         # otherwise announce "chart dot png" — worse than silence, and a
         # default no caller asked for.
         pic._element._nvXxPr.cNvPr.set("descr", alt)  # noqa: SLF001
+    if credit:
+        add_credit(slide, pic, credit)
+    return pic
+
+
+#: Name every photo credit carries, so :mod:`md2star.pptx_audit` knows the
+#: small type over a picture is deliberate (a credit, like a footer).
+CREDIT_NAME = "md2star-credit"
+#: Credit sizes tried in turn, largest first: a long URL comes down to 9 pt,
+#: then breaks after a « / » onto a second line rather than being cut.
+CREDIT_SIZES = (11.0, 10.0, 9.0)
+_CREDIT_MARGIN_IN = 0.1  # from the picture's edge
+_CREDIT_PAD_X_IN = 0.07
+_CREDIT_PAD_Y_IN = 0.03
+_CREDIT_ALPHA = 60000  # the dark plate's opacity, in 1/1000 %
+
+
+def _theme_body_font(slide) -> str | None:
+    """The theme's minor (body) Latin typeface, e.g. ``Satoshi``."""
+    from pptx.opc.constants import RELATIONSHIP_TYPE as RT  # noqa: PLC0415
+    from pptx.oxml import parse_xml  # noqa: PLC0415
+
+    try:
+        master = slide.slide_layout.slide_master
+        theme = parse_xml(master.part.part_related_by(RT.THEME).blob)
+    except Exception:  # noqa: BLE001 — no theme: the renderer's default face
+        return None
+    latin = theme.find(f".//{_qa('minorFont')}/{_qa('latin')}")
+    face = latin.get("typeface") if latin is not None else None
+    return face if face and not face.startswith("+") else None
+
+
+def credit_lines(text: str, max_w_pt: float, family: str | None) -> tuple[float, list[str]]:
+    """The size and lines a credit is set in, inside *max_w_pt* points.
+
+    One line at the largest of :data:`CREDIT_SIZES` that fits; failing that,
+    two lines at the smallest, broken after the « / » that balances them best.
+    The URL is never shortened: a credit that has lost part of its address is
+    no longer a credit.
+    """
+    metrics = _face_metrics(family) if family else None
+    for size in CREDIT_SIZES:
+        if _text_width(text, size, metrics) <= max_w_pt:
+            return size, [text]
+    size = CREDIT_SIZES[-1]
+    cuts = [i + 1 for i, ch in enumerate(text) if ch == "/" and 0 < i + 1 < len(text)]
+    # Not inside "https://": a line ending in "https:/" reads as a broken address.
+    scheme = text.find("://")
+    cuts = [c for c in cuts if scheme < 0 or c > scheme + 3] or cuts
+    if not cuts:
+        return size, [text]
+    best = min(
+        cuts,
+        key=lambda c: max(
+            _text_width(text[:c], size, metrics), _text_width(text[c:], size, metrics)
+        ),
+    )
+    return size, [text[:best], text[best:]]
+
+
+def _box_emu(shape) -> tuple[int, int, int, int] | None:
+    try:
+        vals = (shape.left, shape.top, shape.width, shape.height)
+    except Exception:  # noqa: BLE001 — inherited geometry python-pptx cannot read
+        return None
+    return None if None in vals else tuple(int(v) for v in vals)  # type: ignore[return-value]
+
+
+def _obstacles(slide, picture) -> list[tuple[int, int, int, int]]:
+    """Boxes a credit must not cover: words and the designer's bands, not pictures."""
+    out = []
+    for shape in slide.shapes:
+        if shape is picture or shape.element is picture.element or shape.name == CREDIT_NAME:
+            continue
+        if shape.element.tag.endswith("}pic"):
+            continue
+        has_words = shape.has_text_frame and shape.text_frame.text.strip()
+        if shape.is_placeholder and not has_words:
+            continue  # an empty placeholder is swept before the deck is saved
+        box = _box_emu(shape)
+        if box is not None:
+            out.append(box)
+    return out
+
+
+def add_credit(slide, picture, text: str, *, family: str | None = None):
+    """Print *text* small in a corner of *picture*, on a dark translucent plate.
+
+    Bottom right inside the picture's frame, a small margin in; top right when
+    that corner would cover the title, a caption or a band the designer drew
+    (a full-bleed photo's title band sits at the bottom). White on a 60 %
+    black plate reads on any photograph. The shape is named
+    :data:`CREDIT_NAME`: the audit exempts it from the type-size floors and
+    from the picture-over-text overlap, both of which are its very design.
+    Returns the text box, or ``None`` when there is nothing to credit.
+    """
+    text = " ".join((text or "").split())
+    box = _box_emu(picture)
+    if not text or box is None:
+        return None
+    try:
+        prs = slide.part.package.presentation_part.presentation
+        sw, sh = int(prs.slide_width), int(prs.slide_height)
+        # The visible part of the picture: a full-bleed frame may run off the page.
+        x0, y0 = max(box[0], 0), max(box[1], 0)
+        x1, y1 = min(box[0] + box[2], sw), min(box[1] + box[3], sh)
+        box = (x0, y0, x1 - x0, y1 - y0)
+    except Exception:  # noqa: BLE001 — no presentation to clip against
+        pass
+    family = family or _theme_body_font(slide)
+    margin = int(Inches(_CREDIT_MARGIN_IN))
+    pad_x, pad_y = int(Inches(_CREDIT_PAD_X_IN)), int(Inches(_CREDIT_PAD_Y_IN))
+    max_w_pt = (box[2] - 2 * margin - 2 * pad_x) / 12700
+    size, lines = credit_lines(text, max_w_pt, family)
+    metrics = _face_metrics(family) if family else None
+    # The plate hugs the words: measured without linebreak's safety margin,
+    # which is there to decide where a line breaks, not how wide a box is.
+    text_w = max(_text_width(line, size, metrics) for line in lines) / _WIDTH_MARGIN
+    w = int(text_w * 12700) + 2 * pad_x + int(Pt(2))
+    h = int(len(lines) * size * 1.2 * 12700) + 2 * pad_y
+    right = box[0] + box[2] - margin - w
+    left_x = box[0] + margin
+    bottom = box[1] + box[3] - margin - h
+    top_y = box[1] + margin
+    corners = [(right, bottom), (right, top_y), (left_x, bottom), (left_x, top_y)]
+    blocked = _obstacles(slide, picture)
+
+    def clear(x: int, y: int) -> bool:
+        return not any(_intersects((x, y, w, h), o) for o in blocked)
+
+    x, y = next(((cx, cy) for cx, cy in corners if clear(cx, cy)), corners[0])
+    tb = slide.shapes.add_textbox(max(x, box[0]), y, min(w, box[2]), h)
+    tb.name = CREDIT_NAME
+    fill = tb.fill
+    fill.solid()
+    fill.fore_color.rgb = RGBColor(0, 0, 0)
+    clr = tb.fill._xPr.find(f".//{_qa('srgbClr')}")  # noqa: SLF001
+    if clr is not None:
+        clr.append(clr.makeelement(_qa("alpha"), {"val": str(_CREDIT_ALPHA)}))
+    tb.line.fill.background()
+    tf = tb.text_frame
+    tf.word_wrap = False
+    tf.auto_size = MSO_AUTO_SIZE.NONE
+    tf.vertical_anchor = MSO_ANCHOR.MIDDLE
+    tf.margin_left = tf.margin_right = pad_x
+    tf.margin_top = tf.margin_bottom = pad_y
+    for i, line in enumerate(lines):
+        p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
+        p.alignment = PP_ALIGN.RIGHT
+        p.space_after = Pt(0)
+        p.space_before = Pt(0)
+        run = p.add_run()
+        run.text = line
+        run.font.size = Pt(size)
+        run.font.bold = False
+        run.font.italic = False
+        if family:
+            run.font.name = family
+        run.font.color.rgb = _WHITE
+    return tb
+
+
+def credit_pictures(pptx_path: Path | str, markdown: str) -> int:
+    """Credit the pictures of a deck Pandoc wrote; returns how many were credited.
+
+    Pandoc's PPTX writer puts an image's title into the picture's ``descr``
+    (its alt text, followed by the image's path) and prints nothing. Every picture whose ``descr`` is one of
+    *markdown*'s image titles gets :func:`add_credit`, and its ``descr`` goes
+    back to the authored alt text: the credit is printed, not read out as the
+    picture's description.
+    """
+    alts: dict[str, str] = {}
+    for m in _IMAGE_RE.finditer(markdown):
+        title = " ".join(image_title(m.group(2)).split())
+        if title:
+            alts.setdefault(title, m.group(1).strip())
+    if not alts:
+        return 0
+    prs = Presentation(str(pptx_path))
+    done = 0
+    for slide in prs.slides:
+        for shape in list(slide.shapes):
+            if not shape.element.tag.endswith("}pic"):
+                continue
+            c_nv_pr = shape._element._nvXxPr.cNvPr  # noqa: SLF001
+            descr = " ".join((c_nv_pr.get("descr") or "").split())
+            # Pandoc writes the title, then a blank line and the image's path.
+            title = max(
+                (t for t in alts if descr == t or descr.startswith(t + " ")), key=len, default=None
+            )
+            if title is None:
+                continue
+            c_nv_pr.set("descr", alts[title])
+            if add_credit(slide, shape, title) is not None:
+                done += 1
+    if done:
+        prs.save(str(pptx_path))
+    return done
 
 
 def add_code(
@@ -1310,10 +1542,12 @@ def assemble(
             # A picture inside a column belongs to that column: it is placed in
             # the column's box, never as the slide's one full-width visual.
             col_pics = [
-                (parse_image(c, image_base_dir), parse_alt_text(c)) if not mer else (None, "")
+                (parse_image(c, image_base_dir), parse_alt_text(c), parse_image_credit(c))
+                if not mer
+                else (None, "", "")
                 for c in raw_cols
             ]
-            if any(p for p, _ in col_pics):
+            if any(p for p, _, _ in col_pics):
                 img = None
             else:
                 col_pics = []
@@ -1343,6 +1577,7 @@ def assemble(
                     # Authored alt text first; failing that the slide's title,
                     # which is at least a true description of what is shown.
                     alt=parse_alt_text(body) or title_lines[0],
+                    credit="" if mpng else parse_image_credit(body),
                 )
                 picked = clone.pick_example(
                     examples,
@@ -1426,7 +1661,7 @@ def _build(
     items: list[Item],
     columns: list[list[Item]],
     visual: tuple,
-    col_pics: list[tuple[Path | None, str]] | None = None,
+    col_pics: list[tuple[Path | None, str, str]] | None = None,
     igrow: float,
     fonts: tuple[str, str, str],
 ) -> None:
@@ -1508,8 +1743,11 @@ def _build(
     if hero is not None and (img is not None or mpng is not None):
         # A photo layout: the picture fills the page, cropped to cover and
         # never letterboxed, and the title sits in the designer's band.
-        _photo_slide(slide, s, hero, mpng if mpng is not None else img, items, title)
+        placed = _photo_slide(slide, s, hero, mpng if mpng is not None else img, items, title)
         put_title(26, title_box(prs, info))
+        if mpng is None:
+            # Last, so it knows where the title and its band ended up.
+            add_credit(slide, placed, parse_image_credit(s.body), family=body_font)
         return
 
     has_visual = mpng is not None or img is not None or bool(code) or bool(table)
@@ -1633,6 +1871,7 @@ def _build(
             # title: nothing else here knows what the graph says. A picture
             # keeps its authored alt text when it has one.
             alt=title if mpng is not None else (parse_alt_text(s.body) or title),
+            credit="" if mpng is not None else parse_image_credit(s.body),
         )
     elif code:
         lines = code.count("\n") + 1
@@ -1674,7 +1913,7 @@ def _full_bleed_picture(prs, slide):
     return None
 
 
-def _photo_slide(slide, s: Slide, hero, pic: Path, items: list[Item], title: str) -> None:
+def _photo_slide(slide, s: Slide, hero, pic: Path, items: list[Item], title: str):
     """Fill a full-bleed picture placeholder with *pic*, cropped to cover, centred.
 
     ``insert_picture`` crops the image to the placeholder's aspect around its
@@ -1706,6 +1945,7 @@ def _photo_slide(slide, s: Slide, hero, pic: Path, items: list[Item], title: str
         )
         if words not in (s.notes or ""):
             s.notes = f"{words}\n\n{s.notes}" if s.notes else words
+    return placed
 
 
 _R_ATTRS = (
@@ -1788,7 +2028,7 @@ def _picture_columns(
     info: LayoutInfo | None,
     ts: _Typeset,
     columns: list[list[Item]],
-    col_pics: list[tuple[Path | None, str]],
+    col_pics: list[tuple[Path | None, str, str]],
     body_phs: list,
     use_ph: bool,
     font: str,
@@ -1818,7 +2058,7 @@ def _picture_columns(
     style = _style_of(_layout_ph(slide.slide_layout, _BODY_PH_KINDS))
     size = ts.size(16, style[0], inherit_ok=False) or 16
     colour = ts.colour(style, inherit_ok=False)
-    for col, (pic, alt), box, ph in zip(columns, col_pics, boxes, targets, strict=False):
+    for col, (pic, alt, credit), box, ph in zip(columns, col_pics, boxes, targets, strict=False):
         if pic is None:
             if col:
                 _write_items(
@@ -1842,7 +2082,7 @@ def _picture_columns(
                 shrink=ts.min_pt is None,
             )
             height -= cap
-        add_image(slide, pic, box=(left, top, width, height), alt=alt or title)
+        add_image(slide, pic, box=(left, top, width, height), alt=alt or title, credit=credit)
 
 
 def _lone_picture_box(prs, slide, info: LayoutInfo | None, pic: Path):

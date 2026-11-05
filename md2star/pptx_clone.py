@@ -72,6 +72,7 @@ from .pptx_assemble import (
     EMU_PER_INCH,
     LATENT_KINDS,
     TITLE_KINDS,
+    add_credit,
     add_image,
     is_ornament,
     placeholder_kind,
@@ -125,6 +126,7 @@ class Content:
     bullets: list[str] = field(default_factory=list)
     image: Path | None = None
     alt: str = ""
+    credit: str = ""
 
 
 @dataclass
@@ -595,7 +597,7 @@ def _retire(shape) -> None:
     shape.text_frame.clear()
 
 
-def _replace_picture(slide, picture, image: Path, alt: str) -> None:
+def _replace_picture(slide, picture, image: Path, alt: str, credit: str = "") -> None:
     """Swap the designer's stand-in photo for *image*, inside its own slot.
 
     Their frame is kept as the *box*, not as the frame: contain-fitting into it
@@ -614,13 +616,16 @@ def _replace_picture(slide, picture, image: Path, alt: str) -> None:
     parent = element.getparent()
     position = list(parent).index(element)
     parent.remove(element)
-    add_image(slide, image, box=box, alt=alt)
+    pic = add_image(slide, image, box=box, alt=alt)
     # Stacking order is composition: the designer may have text over this
     # photo, and ``add_picture`` appends, which would bury it. Put the new
     # picture back exactly where the old one sat in the shape tree.
     placed = list(parent)[-1]
     parent.remove(placed)
     parent.insert(position, placed)
+    if credit:
+        # Appended, so it paints over the photo and whatever the designer laid on it.
+        add_credit(slide, pic, credit)
 
 
 # ── the seam ─────────────────────────────────────────────────────────────────
@@ -735,7 +740,7 @@ def compose(prs, example, content: Content, *, font_delta: int = 0, min_pt: floa
 
     spare = roles.pictures
     if content.image is not None and roles.pictures:
-        _replace_picture(slide, roles.pictures[0], content.image, content.alt)
+        _replace_picture(slide, roles.pictures[0], content.image, content.alt, content.credit)
         spare = roles.pictures[1:]
     for picture in spare:
         # A content slot with nothing of ours to put in it: the designer's

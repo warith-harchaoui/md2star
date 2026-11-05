@@ -65,6 +65,23 @@ _IMG_PATH_RE = re.compile(r"(!\[[^\]]*\]\()([^)]+)(\))")
 # Schemes we must never touch when absolutizing — they are not filesystem paths.
 _URL_PREFIXES = ("http://", "https://", "//", "data:", "file://")
 
+# The optional Pandoc title after an image's path: ``x.jpg "Courtesy of https://..."``.
+_TARGET_TITLE_RE = re.compile(r"""^(.*?)(\s+(?:"[^"]*"|'[^']*'))?\s*$""", re.DOTALL)
+
+
+def split_image_target(target: str) -> tuple[str, str]:
+    """``'x.jpg "A title"'`` -> ``('x.jpg', ' "A title"')``; no title -> ``(target, '')``.
+
+    Every pass that rewrites an image's path rewrites the path alone: a title
+    holding a URL (a photo credit) went through ``os.path.normpath`` with it,
+    which turned ``https://`` into ``https:/``, and made every titled image
+    look like a missing file to the sizing passes.
+    """
+    m = _TARGET_TITLE_RE.match(target)
+    if not m or not m.group(2) or not m.group(1).strip():
+        return target, ""
+    return m.group(1), m.group(2)
+
 
 def _hash_path(path: str) -> str:
     """Stable 12-char hex digest of an absolute path; used as a cache key."""
@@ -176,8 +193,8 @@ def fix_image_widths(content: str) -> str:
         str
             The image reference with :func:`image_size_attr` appended.
         """
-        prefix, src = match.group(1), match.group(2)
-        return f"{prefix}({src}){image_size_attr(src)}"
+        prefix, (src, title) = match.group(1), split_image_target(match.group(2))
+        return f"{prefix}({src}{title}){image_size_attr(src)}"
 
     result_lines: list[str] = []
     for line in content.split("\n"):
@@ -239,9 +256,9 @@ def resize_images_in_markdown_tables(content: str, base_dir: str = ".") -> str:
                     file returned by :func:`resize_image_for_cell`.
                 """
                 alt = m.group(1)
-                src = m.group(2)
+                src, title = split_image_target(m.group(2))
                 resized = resize_image_for_cell(src, base_dir)
-                return f"![{alt}]({resized})"
+                return f"![{alt}]({resized}{title})"
 
             line = _CELL_IMG_RE.sub(_resize_match, line)
         result_lines.append(line)
@@ -274,12 +291,14 @@ def absolutize_image_paths(content: str, base_dir: str) -> str:
             The reference with the path made absolute, or the original match
             unchanged for URLs and already-absolute paths.
         """
-        prefix, src, suffix = match.group(1), match.group(2), match.group(3)
+        prefix, suffix = match.group(1), match.group(3)
+        src, title = split_image_target(match.group(2))
         # Leave URLs and already-absolute paths alone; only relatives need work.
         if src.startswith(_URL_PREFIXES) or os.path.isabs(src):
             return match.group(0)
-        # normpath collapses ../ and duplicate separators for a clean abs path.
-        return f"{prefix}{os.path.normpath(os.path.join(abs_base, src))}{suffix}"
+        # normpath collapses ../ and duplicate separators for a clean abs path
+        # (of the path only: the title may be a URL, see split_image_target).
+        return f"{prefix}{os.path.normpath(os.path.join(abs_base, src))}{title}{suffix}"
 
     # Track fenced code so example snippets with relative paths aren't rewritten.
     out_lines: list[str] = []
@@ -584,7 +603,8 @@ def process_image_assets(content: str, base_dir: str, max_px: int = 1600) -> str
         str
             The reference reassembled with the :func:`_process_src` result.
         """
-        return f"{m.group(1)}{_process_src(m.group(2))}{m.group(3)}"
+        src, title = split_image_target(m.group(2))
+        return f"{m.group(1)}{_process_src(src)}{title}{m.group(3)}"
 
     def _html_rewrite(m: re.Match) -> str:
         """Normalise the ``src`` of one HTML ``<img src="src">`` tag.
@@ -651,7 +671,9 @@ def download_remote_images(content: str, out_dir: str) -> str:  # noqa: ARG001
             original match unchanged when the download fails.
         """
         prefix = match.group(1)  # ![alt]
-        url = match.group(2)  # https://...
+        url, title = split_image_target(match.group(2))  # https://..., ' "credit"'
+        if not url.startswith(("http://", "https://")):
+            return match.group(0)
         attrs = match.group(3) or ""  # {width=85%} or empty
 
         url_hash = osh.hash_string(url, 12)
@@ -691,6 +713,6 @@ def download_remote_images(content: str, out_dir: str) -> str:  # noqa: ARG001
                 logger.warning(f"md2star warning: Failed to download image {url}: {e}")
                 return match.group(0)
 
-        return f"{prefix}({local_path}){attrs}"
+        return f"{prefix}({local_path}{title}){attrs}"
 
     return _REMOTE_IMG_RE.sub(_download_and_replace, content)

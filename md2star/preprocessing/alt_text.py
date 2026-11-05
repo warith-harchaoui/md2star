@@ -46,6 +46,7 @@ from best_engine_ai_helper import llm
 from .._engine import engine
 from ..cache import cache_dir
 from ..logging import get_logger
+from .images import split_image_target
 from .language import get_language_metadata
 
 # Module logger — child of the root "md2star" logger (configured by the CLI).
@@ -316,7 +317,7 @@ def fill_empty_alt_text(
         """
         # Called once per empty-alt image. Any early return keeps the original
         # ``![](src)`` so a single un-processable image never breaks the doc.
-        src = match.group(2)
+        src, title = split_image_target(match.group(2))
         # Remote/data URIs can't be read off disk to feed the vision model.
         if src.startswith(_URL_PREFIXES):
             return match.group(0)
@@ -361,7 +362,7 @@ def fill_empty_alt_text(
         # Escape any closing-bracket the model produced — would break the
         # Markdown image syntax otherwise.
         alt_clean = alt.replace("]", "\\]")
-        return f"![{alt_clean}]({src})"
+        return f"![{alt_clean}]({src}{title})"
 
     # Walk line by line tracking fenced code blocks so we never rewrite an
     # ``![]()`` that's really a code sample. Only prose lines get _process.

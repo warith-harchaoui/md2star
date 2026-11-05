@@ -42,6 +42,10 @@ render, no network:
     Footer chrome is not content: date / footer / slide-number placeholders,
     any shape holding a field (``<a:fld>``, e.g. the page number), and a
     single line of text in the bottom 12 % of the slide are exempt.
+    A photo credit (a shape named ``md2star-credit``, see
+    :func:`md2star.pptx_assemble.add_credit`) is exempt from this, from
+    ``illegible-type``, ``overrun`` and ``overlap``: it is small and over its
+    picture by design. Its contrast is still judged.
 ``overrun``
     The text needs more room than its box gives it at the size it declares.
     Reported with the size that *would* fit, because PowerPoint's auto-shrink
@@ -84,7 +88,13 @@ from .logging import get_logger
 # (it is what writes placeholders), the audit only reads it. Should the eyeball
 # loop ever want to consume this module, it must import it inside the function
 # — as md2star/cli.py does — rather than at module scope.
-from .pptx_assemble import LATENT_KINDS, declared_style, is_ornament, placeholder_kind
+from .pptx_assemble import (
+    CREDIT_NAME,
+    LATENT_KINDS,
+    declared_style,
+    is_ornament,
+    placeholder_kind,
+)
 from .pptx_fit import AVG_CHAR_WIDTH_EM, EMU_PER_PT, FIT_SLACK, LINE_SPACING
 
 logger = get_logger(__name__)
@@ -657,6 +667,13 @@ def audit(
                             shape.name,
                         )
                     )
+                continue
+            if shape.name == CREDIT_NAME:
+                # A photo credit (pptx_assemble.add_credit): small on purpose,
+                # over its picture on purpose, like a footer. Only whether a
+                # reader can still see it is judged.
+                if box is not None:
+                    findings += _check_contrast(index, slide, shape, box)
                 continue
             findings += _check_type(index, shape)
             if min_pt is not None:

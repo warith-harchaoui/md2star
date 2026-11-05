@@ -616,6 +616,12 @@ def convert(fmt: str, opts: ConvertOptions, pandoc_args: Sequence[str] = ()) -> 
             strip_trailing_line_breaks(str(docx_path))
         except Exception as exc:
             logger.warning(f"md2star warning: line-break tidy failed ({exc}); deck is complete.")
+        try:
+            from .pptx_assemble import credit_pictures  # noqa: PLC0415 — pptx path only
+
+            credit_pictures(docx_path, processed)
+        except Exception as exc:  # noqa: BLE001 — a missing credit never sinks the deck
+            logger.warning(f"md2star warning: photo credits failed ({exc}); deck is complete.")
 
     # 6. PDF-only: shell out to headless LibreOffice. The intermediate
     #    DOCX is correct as-is for Word, but the bundled template's
