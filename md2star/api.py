@@ -487,22 +487,30 @@ async def audit_deck(
     }
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     """Entry point for the ``md2star-api`` console script.
 
     Boots the FastAPI app with ``uvicorn`` in single-worker mode. Meant for
     local / container usage; behind a real load balancer, run ``uvicorn`` /
-    ``gunicorn`` directly against :data:`md2star.api.app`.
+    ``gunicorn`` directly against :data:`md2star.api.app`. A click command, so
+    ``--help`` answers instead of starting the server.
     """
-    import uvicorn
+    import click
 
     # Host/port are env-overridable so the same image runs unchanged across
     # environments (0.0.0.0 to be reachable from outside a container).
-    host = os.environ.get("MD2STAR_HOST", "0.0.0.0")
-    port = int(os.environ.get("MD2STAR_PORT", "8000"))
-    # Single worker: conversions shell out to Pandoc/LibreOffice, so scale by
-    # running several processes behind a load balancer, not in-process workers.
-    uvicorn.run(app, host=host, port=port, workers=1)
+    @click.command(context_settings={"help_option_names": ["-h", "--help"]})
+    @click.option("--host", envvar="MD2STAR_HOST", default="0.0.0.0", show_default=True)
+    @click.option("--port", envvar="MD2STAR_PORT", default=8000, type=int, show_default=True)
+    def serve(host: str, port: int) -> None:
+        """Serve the md2star HTTP API."""
+        import uvicorn
+
+        # Single worker: conversions shell out to Pandoc/LibreOffice, so scale by
+        # running several processes behind a load balancer, not in-process workers.
+        uvicorn.run(app, host=host, port=port, workers=1)
+
+    serve.main(args=argv, prog_name="md2star-api")
 
 
 if __name__ == "__main__":  # pragma: no cover

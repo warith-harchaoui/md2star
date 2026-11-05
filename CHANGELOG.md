@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **`md2star-api --help` and `md2star-mcp --help` started a server.** Both
+  entry points read their bind from `MD2STAR_HOST` / `MD2STAR_PORT` and ignored
+  their arguments, so `--help` bound `0.0.0.0:8000` and never returned. They
+  are now click commands: `--help` prints the usage, `--host` / `--port` are
+  accepted, and a plain run behaves as before (same variables, same
+  `0.0.0.0:8000` default). `tests/test_every_command_answers_help.py` runs
+  every console script with `--help` under a timeout.
+- **The two trigger catalogues said different things.** `TRIGGERS.md` and the
+  skill's `references/triggers.md` were organised differently, each with
+  phrasings and SKIP clauses the other lacked. They are now one text, written
+  to both paths, and `scripts/check_triggers.py` fails when they differ. The
+  merged catalogue also names `templates`, `cache-dir` and `clear-cache`, and
+  sends alt text and captions to the sprezzature-accessibility and
+  sprezzature-audio skills instead of retired ones.
+
 ## [3.13.2] - 2026-11-05
 
 ### Fixed

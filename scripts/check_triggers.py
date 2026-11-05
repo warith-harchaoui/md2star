@@ -184,6 +184,16 @@ def check(verbose: bool = False) -> list[str]:
     if not _SKILL_TRIGGERS.exists():
         failures.append("skills/md2star/references/triggers.md missing")
 
+    # Mirrored, not merely both present. Two catalogues that have drifted are
+    # worse than one, because each audience believes the one it reads.
+    if _ROOT_TRIGGERS.exists() and _SKILL_TRIGGERS.exists():
+        root = _ROOT_TRIGGERS.read_text(encoding="utf-8").strip()
+        mirror = _SKILL_TRIGGERS.read_text(encoding="utf-8").strip()
+        if root != mirror:
+            failures.append(
+                "TRIGGERS.md and skills/md2star/references/triggers.md have drifted apart"
+            )
+
     return failures
 
 
