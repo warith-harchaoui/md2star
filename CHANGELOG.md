@@ -6,14 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.13.0] - 2026-11-05
+
 ### Added
 
 - **Photo credits.** An image's Pandoc title is its credit:
   `![](photo.jpg "Courtesy of https://...")` prints the title small over the
   placed picture, white on a translucent dark plate in the theme's body face,
   bottom right inside its frame (top right on a full-bleed photo whose title
-  band holds the bottom, or wherever it covers no words). 11 pt, down to 9 pt,
-  then two lines broken after a « / »: the URL is never shortened. On
+  band holds the bottom, or wherever it covers no words), in italics. A URL
+  prints as its site alone (`Courtesy of nga.gov`); the full address becomes
+  the link on both the credit and the picture, so a click lands on the source.
+  10 pt, down to 9 pt, then two lines broken after a « / ». On
   `--smart-layout` (lone picture, picture in a column, full-bleed Photo page,
   cloned example page) and on the plain Pandoc path. The shape is named
   `md2star-credit`; `md2star audit` exempts it from `illegible-type`,
@@ -25,6 +29,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - An image title holding a URL lost a slash (`https:/`) when the image's path
   was made absolute, and a titled image was skipped by the sizing and
   downscaling passes: every image pass now rewrites the path alone.
+- `--skip-phase`'s help listed twelve phases by hand when the pipeline has
+  thirteen (`grid_normalize` was missing): it now reads them from `PHASES`.
 
 ## [3.12.0] - 2026-11-04
 
