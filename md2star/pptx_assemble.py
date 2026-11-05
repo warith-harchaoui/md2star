@@ -986,7 +986,11 @@ def credit_lines(text: str, max_w_pt: float, family: str | None) -> tuple[float,
     """The size and lines a credit is set in, inside *max_w_pt* points.
 
     One line at the largest of :data:`CREDIT_SIZES` that fits; failing that,
-    two lines at the smallest, broken after the « / » that balances them best.
+    two lines at the smallest, broken after the « / » or the « , » that
+    balances them best. A credit that names its author and licence before the
+    site (« Courtesy of James S. Davis, US Navy, 1984, public domain,
+    commons.wikimedia.org ») has no « / » left once the address is cut to its
+    site: without the comma it stayed on one line, wider than the picture.
     It measures and breaks whatever text it is given. The address is cut to
     its site by :func:`short_credit` before this is called; the full address
     survives as the link, so the printed credit can stay short.
@@ -1000,15 +1004,17 @@ def credit_lines(text: str, max_w_pt: float, family: str | None) -> tuple[float,
     # Not inside "https://": a line ending in "https:/" reads as a broken address.
     scheme = text.find("://")
     cuts = [c for c in cuts if scheme < 0 or c > scheme + 3] or cuts
+    cuts += [i + 1 for i, ch in enumerate(text) if ch == "," and 0 < i + 1 < len(text)]
     if not cuts:
         return size, [text]
     best = min(
         cuts,
         key=lambda c: max(
-            _text_width(text[:c], size, metrics), _text_width(text[c:], size, metrics)
+            _text_width(text[:c].rstrip(), size, metrics),
+            _text_width(text[c:].lstrip(), size, metrics),
         ),
     )
-    return size, [text[:best], text[best:]]
+    return size, [text[:best].rstrip(), text[best:].lstrip()]
 
 
 def _box_emu(shape) -> tuple[int, int, int, int] | None:

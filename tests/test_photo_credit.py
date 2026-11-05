@@ -126,6 +126,13 @@ class TestLines:
         assert "…" not in "".join(lines)
         assert not lines[0].endswith("https:/") and not lines[0].endswith("https://")
 
+    def test_a_credit_without_a_slash_breaks_after_a_comma(self) -> None:
+        text = "Courtesy of James S. Davis, US Navy, 1984, public domain, commons.wikimedia.org"
+        size, lines = pa.credit_lines(text, 200, "Satoshi")
+        assert size == pa.CREDIT_SIZES[-1] and len(lines) == 2
+        assert lines[0].endswith(",") and not lines[1].startswith(" ")
+        assert " ".join(lines) == text
+
     def test_a_medium_credit_shrinks_before_breaking(self) -> None:
         big = pa.CREDIT_SIZES[0]
         w = pa._text_width(URL, big, pa._face_metrics("Satoshi"))

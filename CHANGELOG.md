@@ -15,6 +15,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   measured in its own face at its printed size against the band's width; the
   warning says it breaks onto a second line. `PHOTO_TITLE_WORDS` is gone.
   `tests/test_pptx_assemble.py::TestPhotoTitleFits` holds both sides.
+- **A long photo credit ran off the picture.** A credit breaks onto two lines
+  only after a « / », and a credit that names its author and licence before
+  the site (« Courtesy of James S. Davis, US Navy, 1984, public domain,
+  commons.wikimedia.org ») has none once the address is cut to its site: it
+  stayed on one line, wider than a portrait set in a column, and its start
+  was clipped. It now also breaks after a « , », whichever balances the two
+  lines best. `tests/test_photo_credit.py::TestLines` holds the case.
 
 ## [3.13.1] - 2026-11-05
 
