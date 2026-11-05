@@ -579,3 +579,36 @@ class TestTheLoopsOtherEye:
         assert "bullets" not in slides[1].overrides
         # The slides nobody measured a defect on were left alone.
         assert slides[0].overrides == {} and slides[2].overrides == {}
+
+
+# ── an unbulleted paragraph in a bulleted placeholder ────────────────────────
+class TestPlainParagraphIndent:
+    """A paragraph marked *plain* drops the bullet AND the layout's hanging
+    indent: the layout sets marL/indent for a bullet, and without one a wrapped
+    line steps right of the first."""
+
+    def _body(self):
+        prs = pptx.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[1])  # Title and Content
+        return slide, slide.placeholders[1]
+
+    def test_plain_paragraph_has_no_hanging_indent(self) -> None:
+        slide, body = self._body()
+        pa.add_text(
+            slide,
+            [("A sentence, not a list item.", None, None, None)],
+            into=body,
+            color=None,
+            plain=[True],
+        )
+        ppr = body.text_frame.paragraphs[0]._p.pPr  # noqa: SLF001
+        assert ppr is not None and ppr.find(pa._qa("buNone")) is not None  # noqa: SLF001
+        assert ppr.get("marL") == "0" and ppr.get("indent") == "0"
+
+    def test_bulleted_paragraph_keeps_the_layout_indent(self) -> None:
+        slide, body = self._body()
+        pa.add_text(
+            slide, [("A list item.", None, None, None)], into=body, color=None, plain=[False]
+        )
+        ppr = body.text_frame.paragraphs[0]._p.pPr  # noqa: SLF001
+        assert ppr is None or (ppr.get("marL") is None and ppr.get("indent") is None)

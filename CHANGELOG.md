@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.13.1] - 2026-11-05
+
+### Fixed
+
+- **A paragraph without a bullet kept the layout's hanging indent.** On
+  `--smart-layout`, a prose paragraph written into a designer's body
+  placeholder got an explicit `<a:buNone/>` but kept the layout's
+  `marL` / `indent`, which are set for a bullet: a wrapped line stepped right
+  of the first. Such a paragraph now writes `marL="0"` and `indent="0"`; a
+  bulleted paragraph still inherits the layout's indent.
+  `tests/test_pptx_assemble.py::TestPlainParagraphIndent` holds both, and was
+  checked red against the code without the fix.
+
 ## [3.13.0] - 2026-11-05
 
 ### Added

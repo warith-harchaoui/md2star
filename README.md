@@ -21,7 +21,7 @@ diagrams, image embedding, table widths, PPTX slide isolation. You stay
 in Markdown and never open Word to fix layout.
 
 md2star is battle-tested: it ships on PyPI, its CI runs green on every push,
-and its tagged releases follow semantic versioning — currently v3.13.0, one of
+and its tagged releases follow semantic versioning — currently v3.13.1, one of
 the longest release histories in the [AI Helpers](https://github.com/warith-harchaoui/ai-helpers)
 suite. It builds on two sibling packages from that suite: `os-helper`
 (shared filesystem and logging primitives) and `best-engine-ai-helper` (the
