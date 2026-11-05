@@ -889,7 +889,7 @@ par-dessus sa propre source : c'est donc refusé.
 ```text
 md2star: md2docx : …/doc.md est à la fois l'entrée et la sortie
   Écrire le fichier converti par-dessus sa propre source détruirait le document.
-  Donnez un --output différent, ou retirez --output pour écrire à côté de la
+  Donnez un --output différent ; sans --output, le fichier est écrit à côté de la
   source avec la bonne extension.
 ```
 

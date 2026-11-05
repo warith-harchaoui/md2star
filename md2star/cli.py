@@ -54,6 +54,7 @@ from .i18n import gettext as _
 from .logging import configure as configure_logging
 from .logging import get_logger
 from .pipeline import ConvertOptions, convert
+from .preprocessing.pipeline import PHASES
 
 # Module logger — a dotted child of the root "md2star" logger, so it inherits
 # the handler + level installed by ``configure_logging`` at CLI startup.
@@ -321,11 +322,12 @@ def _shared_params() -> list[click.Parameter]:
             ["--skip-phase"],
             multiple=True,
             metavar="NAME",
+            # Read from PHASES rather than typed out: the hand-written list
+            # had drifted to twelve phases while the pipeline knew thirteen.
             help=(
-                "Skip a preprocessing phase. Repeatable. Known phases: lint, "
-                "remote_images, html_tables, html_images, absolutize, image_assets, "
-                "language, line_pass, table_resize, table_normalize, image_widths, "
-                "pptx_isolation."
+                "Skip a preprocessing phase. Repeatable. Known phases: "
+                + ", ".join(sorted(PHASES))
+                + "."
             ),
         ),
         click.Option(

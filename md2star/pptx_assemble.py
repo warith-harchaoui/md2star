@@ -982,8 +982,9 @@ def credit_lines(text: str, max_w_pt: float, family: str | None) -> tuple[float,
 
     One line at the largest of :data:`CREDIT_SIZES` that fits; failing that,
     two lines at the smallest, broken after the « / » that balances them best.
-    The URL is never shortened: a credit that has lost part of its address is
-    no longer a credit.
+    It measures and breaks whatever text it is given. The address is cut to
+    its site by :func:`short_credit` before this is called; the full address
+    survives as the link, so the printed credit can stay short.
     """
     metrics = _face_metrics(family) if family else None
     for size in CREDIT_SIZES:
