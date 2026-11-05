@@ -16,65 +16,32 @@ concurrency:
 
 jobs:
   # ──────────────────────────────────────────────────────────────────
-  # Les trois gardes statiques dans UN coureur : ruff, la densite de
-  # commentaires, shellcheck. Ils tournaient dans trois jobs separes, donc
-  # trois checkouts et deux installations de Python pour lancer trois
-  # commandes qui durent quelques secondes chacune. L'installation coutait
-  # plus cher que le travail.
+  # UN coureur pour tout ce qu'un push doit prouver : ruff, la densite de
+  # commentaires (plancher 15 %, c'est elle qui a rendu cc3cde7 rouge),
+  # shellcheck, la suite unitaire avec sa couverture, puis le smoke des
+  # commandes. Ils vivaient dans quatre jobs, donc quatre checkouts et
+  # quatre installations pour des commandes de quelques secondes chacune.
+  #
+  # Les tests `slow` (LibreOffice + kreuzberg) ne tournent pas ici : le job
+  # `ocr round-trip identity` les execute pour de vrai au tag, et le hook
+  # .githooks/pre-push les lance tous (`-m ""`) avant chaque push.
   # ──────────────────────────────────────────────────────────────────
   gate:
-    name: ruff + commentaires + shellcheck
+    name: lint + tests + cli smoke (py3.12)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
           cache: pip
-      - name: Outils
-        # ruff epingle : une installation libre l'a deja fait changer de
-        # comportement sur les blocs de code Markdown du jour au lendemain.
-        run: python -m pip install "ruff==0.15.21" "click>=8.1,<9"
-      - name: ruff
-        run: ruff check md2star/ tests/ scripts/
-      - name: Densite de commentaires
-        run: python scripts/audit_comments.py md2star
-      - name: shellcheck
-        run: |
-          shellcheck --version
-          shellcheck scripts/install.sh scripts/uninstall.sh scripts/test.sh scripts/vendor_gui.sh scripts/brew.sh
-
-  pytest:
-    name: pytest / py${{ matrix.python-version }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        # Super-light gate: one Python for the unit suite. The full
-        # multi-version sweep runs locally before push; the 3-OS integration
-        # matrix and the coverage / ocr-roundtrip jobs still exercise breadth.
-        python-version: ["3.12"]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: ${{ matrix.python-version }}
-          cache: pip
       - name: Install pandoc (required by tests/test_lua_filter.py)
         run: |
           set -euo pipefail
-          # Same reasoning as the ffmpeg step the rest of the suite now uses:
-          # every `apt-get update` talks to azure.archive.ubuntu.com, and when
-          # that mirror goes quiet the job just sits there. It cost this
-          # workflow `integration / ubuntu-latest` 12m51s in the last green run
-          # and killed the ocr job outright on dc29b43, at its 25-minute
-          # ceiling, with nothing wrong in the repository.
-          #
-          # 3.7.0.2 is not a new choice of version: it is exactly what apt was
-          # resolving to here (pandoc 3.7.0.2+ds-1, read out of the run log), so
-          # this changes where pandoc comes from and nothing about what it does.
+          # Never apt: every `apt-get update` talks to azure.archive.ubuntu.com,
+          # and when that mirror goes quiet the job just sits there. 3.7.0.2 is
+          # exactly what apt used to resolve here, so only the source changed.
           ver=3.7.0.2
           mkdir -p "$HOME/pandoc"
           curl -fsSL --retry 5 --retry-all-errors \
@@ -85,16 +52,36 @@ jobs:
           # GITHUB_PATH only reaches later steps, so prove it here by full path.
           "$HOME/pandoc/bin/pandoc" --version | head -1
       - name: Install md2star + dev deps
+        # ruff epingle : une installation libre l'a deja fait changer de
+        # comportement sur les blocs de code Markdown du jour au lendemain.
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-      # Coverage is measured here rather than in a job of its own. The two
-      # were installing the same toolchain and running the same tests, one
-      # of them twice over for the flags -- and the separate `coverage` job
-      # appeared in no `needs:` list, so the threshold in pyproject's
-      # [tool.coverage.report] gated nothing that `publish` waited on.
-      # Folded in here it costs no second install, and it actually blocks.
-      - run: python -m pytest tests/ -v --cov --cov-report=term-missing
+          python -m pip install -e ".[dev]" "ruff==0.15.21"
+      - name: ruff
+        run: ruff check md2star/ tests/ scripts/
+      - name: Densite de commentaires
+        run: python scripts/audit_comments.py md2star
+      - name: shellcheck
+        run: |
+          shellcheck --version
+          shellcheck scripts/install.sh scripts/uninstall.sh scripts/test.sh scripts/vendor_gui.sh scripts/brew.sh
+      # Coverage is measured here, in the job that blocks: the threshold in
+      # pyproject's [tool.coverage.report] is a gate, not a report.
+      - name: pytest (unitaire, avec couverture)
+        run: python -m pytest tests/ -q -m "not slow" --durations=10 --cov --cov-report=term-missing:skip-covered
+      # CLI smoke: the four console scripts plus `md2star doctor` start
+      # cleanly. Catches packaging / entry-point regressions.
+      - name: cli smoke
+        run: |
+          set -euo pipefail
+          md2star --help > /dev/null
+          md2star --version
+          md2star doctor
+          md2star doctor --json > /tmp/doctor.json
+          python -c "import json; j=json.load(open('/tmp/doctor.json')); assert 'features' in j and 'core_failing' in j, j; print('doctor JSON shape OK')"
+          md2docx --help > /dev/null
+          md2pptx --help > /dev/null
+          md2pdf --help > /dev/null
 
   # ──────────────────────────────────────────────────────────────────
   # OCR round-trip identity — ACTUALLY RUN the md → docx → pdf → text
@@ -107,6 +94,8 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   ocr-roundtrip:
     name: ocr round-trip identity
+    # Chaine de release : tag v* (ou lancement manuel), jamais un push de branche.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -193,58 +182,6 @@ jobs:
           fi
 
   # ──────────────────────────────────────────────────────────────────
-  # CLI smoke — minimal sanity that the four console scripts plus
-  # `md2star doctor` start cleanly. Catches packaging / entry-point
-  # regressions before they reach end users.
-  # ──────────────────────────────────────────────────────────────────
-  cli-smoke:
-    name: cli smoke
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-          cache: pip
-      - name: Install pandoc (so doctor reports a real version)
-        run: |
-          set -euo pipefail
-          # Same reasoning as the ffmpeg step the rest of the suite now uses:
-          # every `apt-get update` talks to azure.archive.ubuntu.com, and when
-          # that mirror goes quiet the job just sits there. It cost this
-          # workflow `integration / ubuntu-latest` 12m51s in the last green run
-          # and killed the ocr job outright on dc29b43, at its 25-minute
-          # ceiling, with nothing wrong in the repository.
-          #
-          # 3.7.0.2 is not a new choice of version: it is exactly what apt was
-          # resolving to here (pandoc 3.7.0.2+ds-1, read out of the run log), so
-          # this changes where pandoc comes from and nothing about what it does.
-          ver=3.7.0.2
-          mkdir -p "$HOME/pandoc"
-          curl -fsSL --retry 5 --retry-all-errors \
-               --speed-limit 100000 --speed-time 30 --max-time 300 \
-               "https://github.com/jgm/pandoc/releases/download/${ver}/pandoc-${ver}-linux-amd64.tar.gz" \
-            | tar -xz --strip-components=1 -C "$HOME/pandoc"
-          echo "$HOME/pandoc/bin" >> "$GITHUB_PATH"
-          # GITHUB_PATH only reaches later steps, so prove it here by full path.
-          "$HOME/pandoc/bin/pandoc" --version | head -1
-      - name: Install md2star
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-      - run: md2star --help
-      - run: md2star --version
-      - run: md2star doctor
-      - name: md2star doctor --json (shape check)
-        run: |
-          md2star doctor --json > /tmp/doctor.json
-          python -c "import json; j=json.load(open('/tmp/doctor.json')); assert 'features' in j and 'core_failing' in j, j; print('doctor JSON shape OK')"
-      - run: md2docx --help
-      - run: md2pptx --help
-      - run: md2pdf --help
-
-  # ──────────────────────────────────────────────────────────────────
   # Build the wheel + sdist via hatch. Catches packaging regressions
   # (force-include duplicates, missing data files, classifier typos)
   # and uploads the artifacts so releases can grab them from the
@@ -252,9 +189,11 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   build:
     name: build wheel + sdist
+    # Chaine de release : tag v* (ou lancement manuel), jamais un push de branche.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [gate, pytest]
+    needs: [gate]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -287,6 +226,8 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   wheel-install-smoke:
     name: wheel install smoke
+    # Chaine de release : tag v* (ou lancement manuel), jamais un push de branche.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: build
@@ -348,6 +289,8 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   pip-audit:
     name: pip-audit
+    # Chaine de release : tag v* (ou lancement manuel), jamais un push de branche.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -383,6 +326,8 @@ jobs:
   # ──────────────────────────────────────────────────────────────────
   integration:
     name: integration / ${{ matrix.os }}
+    # Chaine de release : tag v* (ou lancement manuel), jamais un push de branche.
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
@@ -395,11 +340,12 @@ jobs:
         # reads like somebody pressed cancel. The two other repos in the
         # suite with a three-OS matrix were already on macos-latest and were
         # green throughout. Do not re-pin a dated macOS image.
-        # Les trois OS sur demande ou sur pull request ; sur un push, ubuntu
-        # seul. Trois coureurs a chaque commit pour une difference de
-        # plateforme qui bouge quelques fois par an, c'est le genre de depense
-        # qu'on ne remarque que sur la facture.
-        os: ${{ github.event_name == 'push' && fromJSON('["ubuntu-latest"]') || fromJSON('["ubuntu-latest","macos-latest","windows-latest"]') }}
+        # Les trois OS sur lancement manuel ; au tag, ubuntu seul. Trois
+        # coureurs pour une difference de plateforme qui bouge quelques fois
+        # par an, c'est le genre de depense qu'on ne remarque que sur la facture.
+        # Sur un push de branche ce job ne tourne pas du tout : le hook
+        # .githooks/pre-push lance scripts/test.sh avant chaque push.
+        os: ${{ github.event_name == 'workflow_dispatch' && fromJSON('["ubuntu-latest","macos-latest","windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
@@ -477,7 +423,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_TO_PYPI == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [gate, pytest, ocr-roundtrip, cli-smoke, build, integration]
+    needs: [gate, ocr-roundtrip, build, integration, pip-audit]
     environment:
       name: pypi
       url: https://pypi.org/project/md2star/

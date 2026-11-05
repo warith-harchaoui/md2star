@@ -127,6 +127,23 @@ for sha in $SHAS; do
     python -m pytest -q -m "" $TIMEOUT_ARGS || {
       echo "[pre-push] tests failed - push aborted."; exit 1;
     }
+
+    # The end-to-end conversion suite left CI's push run (it now runs at the
+    # tag), so it runs here. The md2docx / md2pptx on PATH may belong to an
+    # install of some other checkout, so two shims pin the CLI to the commit
+    # being pushed: PYTHONPATH puts this worktree's md2star first.
+    echo "[pre-push]   integration suite (scripts/test.sh)..."
+    SHIMS="$(mktemp -d "${TMPDIR:-/tmp}/prepush-shims-XXXXXX")"
+    for cmd in md2docx md2pptx; do
+      printf '#!/bin/sh\nexec python -c "import sys; from md2star.cli import %s_main as m; sys.argv[0] = \\"%s\\"; sys.exit(m())" "$@"\n' \
+        "$cmd" "$cmd" > "$SHIMS/$cmd"
+      chmod +x "$SHIMS/$cmd"
+    done
+    PYTHONPATH="$PWD${PYTHONPATH:+:$PYTHONPATH}" PATH="$SHIMS:$PATH" bash scripts/test.sh || {
+      rm -rf "$SHIMS"
+      echo "[pre-push] integration suite failed - push aborted (rerun: bash scripts/test.sh)."; exit 1;
+    }
+    rm -rf "$SHIMS"
   ) || exit 1
 
   cleanup
