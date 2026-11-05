@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.13.3] - 2026-11-05
+
 ### Fixed
 
 - **`md2star-api --help` and `md2star-mcp --help` started a server.** Both
