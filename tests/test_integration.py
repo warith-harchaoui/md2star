@@ -217,6 +217,10 @@ class TestRemoteImagesPolicy:
 # ─────────────────────────────────────────────────────────────────────
 
 
+# slow: on a runner without a cached mermaid-cli, mmdc is fetched through npx
+# first, which made this one test 18 of the push CI's 51 seconds. It runs in
+# the pre-push hook (`-m ""`) on every push all the same.
+@pytest.mark.slow
 @needs_pandoc
 @needs_node
 class TestMermaid:

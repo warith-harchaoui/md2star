@@ -228,7 +228,7 @@ addopts = "-ra"
 # opt-out. `slow` tags tests that shell out to LibreOffice / kreuzberg (the OCR
 # round-trip); skip them with `pytest -m "not slow"` for a millisecond suite.
 markers = [
-    "slow: end-to-end test that renders via LibreOffice and/or runs kreuzberg OCR",
+    "slow: end-to-end test that renders via LibreOffice, kreuzberg OCR or mermaid-cli (skipped by the push CI)",
     "ai_eval: quality eval of the opt-in Ollama passes; needs a local daemon, skips in CI",
 ]
 
