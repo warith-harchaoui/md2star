@@ -1796,7 +1796,17 @@ def _build(
         # A photo layout: the picture fills the page, cropped to cover and
         # never letterboxed, and the title sits in the designer's band.
         placed = _photo_slide(slide, s, hero, mpng if mpng is not None else img, items, title)
-        put_title(26, title_box(prs, info))
+        tbox = title_box(prs, info)
+        put_title(26, tbox)
+        printed = ts.size(26, t_style[0], inherit_ok=title_ph is not None) or t_style[0] or 26
+        box_w = (
+            title_ph.width / EMU_PER_INCH if title_ph is not None and title_ph.width else tbox[2]
+        )
+        if not _photo_title_fits(title, printed, box_w, title_font):
+            logger.warning(
+                "slide %d: a photo title wider than its band; it breaks onto a second line",
+                s.index,
+            )
         if mpng is None:
             # Last, so it knows where the title and its band ended up.
             add_credit(slide, placed, parse_image_credit(s.body), family=body_font)
@@ -1950,8 +1960,20 @@ def _build(
 #: Share of the canvas a picture placeholder must cover to make a photo layout.
 _FULL_BLEED = 0.8
 
-#: Words a title over a photograph should not exceed: the band holds one line.
-PHOTO_TITLE_WORDS = 6
+#: Inches of a text frame's default left and right insets, together.
+_FRAME_INSETS_IN = 0.2
+
+
+def _photo_title_fits(title: str, size: float, box_w_in: float, family: str | None) -> bool:
+    """Whether *title* prints on one line of a photo's title band.
+
+    The band holds one line. Words are a poor proxy for that: « ? », « « » and
+    « ; » each count as a word, while « Le port ignore d'où vient la caisse »
+    and « Pre-mortem: the agent has already failed » differ by a third in
+    width. So the title is measured in its own face at its own size.
+    """
+    metrics = _face_metrics(family) if family else None
+    return _text_width(title, size, metrics) <= (box_w_in - _FRAME_INSETS_IN) * 72
 
 
 def _full_bleed_picture(prs, slide):
@@ -1982,13 +2004,6 @@ def _photo_slide(slide, s: Slide, hero, pic: Path, items: list[Item], title: str
     if title_ph is not None:
         # The title paints last: over the photo and over the band that holds it.
         last.addnext(title_ph.element)
-    if len(title.split()) > PHOTO_TITLE_WORDS:
-        logger.warning(
-            "slide %d: a photo title of %d words; the band holds %d",
-            s.index,
-            len(title.split()),
-            PHOTO_TITLE_WORDS,
-        )
     # The image's own alt text is not a body: it is the picture's description.
     words = "\n".join(it.text for it in body_items(_IMAGE_RE.sub("", s.body)))
     if words:

@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A photo title warned by its word count, not its width.** The band over a
+  full-bleed photo holds one line, and `--smart-layout` warned past six words
+  by `split()`, so « ? », « « » or « ; » counted as words and a 39-character
+  title that sat on three quarters of the band was flagged. The title is now
+  measured in its own face at its printed size against the band's width; the
+  warning says it breaks onto a second line. `PHOTO_TITLE_WORDS` is gone.
+  `tests/test_pptx_assemble.py::TestPhotoTitleFits` holds both sides.
+
 ## [3.13.1] - 2026-11-05
 
 ### Fixed

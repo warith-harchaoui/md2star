@@ -612,3 +612,15 @@ class TestPlainParagraphIndent:
         )
         ppr = body.text_frame.paragraphs[0]._p.pPr  # noqa: SLF001
         assert ppr is None or (ppr.get("marL") is None and ppr.get("indent") is None)
+
+
+class TestPhotoTitleFits:
+    """A photo's title band holds one line: measured, not counted in words."""
+
+    def test_seven_short_words_fit(self) -> None:
+        # Seven words by split(), the « ? » among them, and well inside 12 in.
+        assert pa._photo_title_fits("Et si l'on prenait l'autre chemin ?", 40, 12.0, None)  # noqa: SLF001
+
+    def test_a_long_title_does_not(self) -> None:
+        title = "Ce titre est beaucoup trop long pour tenir sur une seule ligne du bandeau"
+        assert not pa._photo_title_fits(title, 40, 12.0, None)  # noqa: SLF001
