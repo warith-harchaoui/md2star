@@ -861,6 +861,11 @@ def add_text(
             ppr = p._p.get_or_add_pPr()  # noqa: SLF001
             if ppr.find(_qa("buNone")) is None:
                 ppr.append(ppr.makeelement(_qa("buNone"), {}))
+            # No bullet, no hanging indent: the layout's marL/indent are set
+            # for a bullet, and without one a wrapped line steps right of
+            # the first.
+            ppr.set("marL", "0")
+            ppr.set("indent", "0")
         if into is None or size is not None:
             p.space_after = Pt(6)
         if center:
