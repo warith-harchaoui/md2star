@@ -62,6 +62,7 @@ from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
@@ -954,11 +955,11 @@ def add_image(
 CREDIT_NAME = "md2star-credit"
 #: Credit sizes tried in turn, largest first: a long URL comes down to 9 pt,
 #: then breaks after a « / » onto a second line rather than being cut.
-CREDIT_SIZES = (11.0, 10.0, 9.0)
+CREDIT_SIZES = (10.0, 9.0)
 _CREDIT_MARGIN_IN = 0.1  # from the picture's edge
 _CREDIT_PAD_X_IN = 0.07
 _CREDIT_PAD_Y_IN = 0.03
-_CREDIT_ALPHA = 60000  # the dark plate's opacity, in 1/1000 %
+_CREDIT_ALPHA = 50000  # the dark plate's opacity, in 1/1000 %
 
 
 def _theme_body_font(slide) -> str | None:
@@ -1029,6 +1030,26 @@ def _obstacles(slide, picture) -> list[tuple[int, int, int, int]]:
     return out
 
 
+_URL_RE = re.compile(r"https?://\S+")
+
+
+def short_credit(text: str) -> tuple[str, str | None]:
+    """The words a credit prints, and the full address it links to.
+
+    ``Courtesy of https://www.nga.gov/artworks/195605-gallery-drouot`` prints
+    ``Courtesy of nga.gov``: the site, not the whole path, which says nothing a
+    reader can use from a screen. The full address is kept as the link, on the
+    credit and on the picture itself, so a click still lands on the source.
+    """
+    m = _URL_RE.search(text)
+    if not m:
+        return text, None
+    url = m.group(0).rstrip(".,;)")
+    host = urlparse(url).netloc.split("@")[-1].split(":")[0]
+    host = host[4:] if host.startswith("www.") else host
+    return (text[: m.start()] + host + text[m.start() + len(url) :]).strip(), url
+
+
 def add_credit(slide, picture, text: str, *, family: str | None = None):
     """Print *text* small in a corner of *picture*, on a dark translucent plate.
 
@@ -1040,10 +1061,15 @@ def add_credit(slide, picture, text: str, *, family: str | None = None):
     from the picture-over-text overlap, both of which are its very design.
     Returns the text box, or ``None`` when there is nothing to credit.
     """
-    text = " ".join((text or "").split())
+    text, url = short_credit(" ".join((text or "").split()))
     box = _box_emu(picture)
     if not text or box is None:
         return None
+    if url:
+        try:
+            picture.click_action.hyperlink.address = url
+        except Exception:  # noqa: BLE001 — a shape that takes no click action
+            pass
     try:
         prs = slide.part.package.presentation_part.presentation
         sw, sh = int(prs.slide_width), int(prs.slide_height)
@@ -1099,10 +1125,30 @@ def add_credit(slide, picture, text: str, *, family: str | None = None):
         run.text = line
         run.font.size = Pt(size)
         run.font.bold = False
-        run.font.italic = False
+        run.font.italic = True
         if family:
             run.font.name = family
         run.font.color.rgb = _WHITE
+        if url:
+            run.hyperlink.address = url
+            # A link takes the theme's hyperlink colour and underline: keep it
+            # a quiet white credit, not a blue underlined one.
+            run.font.underline = False
+            rpr = run._r.get_or_add_rPr()  # noqa: SLF001
+            hl = rpr.find(_qa("hlinkClick"))
+            if hl is not None:
+                ext = hl.makeelement(_qa("extLst"), {})
+                ext_el = ext.makeelement(
+                    _qa("ext"), {"uri": "{A12FA001-AC4F-418D-AE19-62706E023703}"}
+                )
+                ext_el.append(
+                    ext_el.makeelement(
+                        "{http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor}hlinkClr",
+                        {"val": "tx"},
+                    )
+                )
+                ext.append(ext_el)
+                hl.append(ext)
     return tb
 
 

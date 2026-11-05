@@ -21,6 +21,8 @@ from md2star import pptx_audit as au  # noqa: E402
 from md2star import pptx_layout as pl  # noqa: E402
 
 URL = "Courtesy of https://www.nga.gov/artworks/195605-gallery-drouot"
+SHOWN = "Courtesy of nga.gov"
+LINK = "https://www.nga.gov/artworks/195605-gallery-drouot"
 
 
 @pytest.fixture
@@ -112,8 +114,8 @@ class TestParsing:
 
 
 class TestLines:
-    def test_a_short_credit_is_one_line_at_eleven_points(self) -> None:
-        assert pa.credit_lines(URL, 1000, "Satoshi") == (11.0, [URL])
+    def test_a_short_credit_is_one_line_at_the_largest_size(self) -> None:
+        assert pa.credit_lines(URL, 1000, "Satoshi") == (pa.CREDIT_SIZES[0], [URL])
 
     def test_a_long_credit_shrinks_then_breaks_after_a_slash_never_cut(self) -> None:
         size, lines = pa.credit_lines(URL, 200, "Satoshi")
@@ -125,9 +127,10 @@ class TestLines:
         assert not lines[0].endswith("https:/") and not lines[0].endswith("https://")
 
     def test_a_medium_credit_shrinks_before_breaking(self) -> None:
-        w11 = pa._text_width(URL, 11.0, pa._face_metrics("Satoshi"))
-        size, lines = pa.credit_lines(URL, w11 * 0.95, "Satoshi")
-        assert size < 11.0 and lines == [URL]
+        big = pa.CREDIT_SIZES[0]
+        w = pa._text_width(URL, big, pa._face_metrics("Satoshi"))
+        size, lines = pa.credit_lines(URL, w * 0.95, "Satoshi")
+        assert size < big and lines == [URL]
 
 
 def _assemble(md: str, layout: str, template: Path, images: Path, tmp_path: Path, index=1):
@@ -148,12 +151,12 @@ class TestPlacement:
         slide = prs.slides[1]
         (pic,) = _pictures(slide)
         (credit,) = _credits(slide)
-        assert credit.text_frame.text == URL
+        assert credit.text_frame.text == SHOWN
         assert _inside(_box(credit), _box(pic))
         # bottom right: closer to the picture's right and bottom edges than its left / top
         assert credit.left + credit.width > pic.left + pic.width - Inches(0.2)
         assert credit.top + credit.height > pic.top + pic.height - Inches(0.2)
-        assert _sizes(credit) == {11.0}
+        assert _sizes(credit) == {pa.CREDIT_SIZES[0]}
         run = credit.text_frame.paragraphs[0].runs[0]
         assert run.font.color.rgb == pa._WHITE and run.font.bold is False
         # the plate is translucent black, drawn above the picture
@@ -198,7 +201,7 @@ class TestPlacement:
         (pic,) = _pictures(slide)
         (credit,) = _credits(slide)
         assert _inside(_box(credit), _box(pic))
-        assert "".join(credit.text_frame.text.split("\n")) == URL
+        assert credit.text_frame.text == SHOWN
         assert not [f for f in au.audit(out, min_pt=30) if f.shape == pa.CREDIT_NAME]
 
 
@@ -229,7 +232,7 @@ class TestPandocPath:
         assert pa.credit_pictures(out, f'## T\n\n![Un chien](pic.png "{URL}")\n') == 1
         slide = pptx.Presentation(str(out)).slides[0]
         (credit,) = _credits(slide)
-        assert credit.text_frame.text == URL
+        assert credit.text_frame.text == SHOWN
         (pic,) = _pictures(slide)
         assert pic._element._nvXxPr.cNvPr.get("descr") == "Un chien"
 
@@ -258,3 +261,25 @@ class TestPreprocessingKeepsTheTitle:
         assert split_image_target("my pic.png") == ("my pic.png", "")
         assert split_image_target(f'a.png "{URL}"') == ("a.png", f' "{URL}"')
         assert split_image_target("a.png 't'") == ("a.png", " 't'")
+
+
+class TestShortCreditAndLinks:
+    def test_the_credit_prints_the_site_and_keeps_the_full_address_as_link(self) -> None:
+        assert pa.short_credit(URL) == (SHOWN, LINK)
+        assert pa.short_credit("Photo maison") == ("Photo maison", None)
+
+    def test_the_picture_and_the_credit_both_link_to_the_source(self, tmp_path) -> None:
+        import pptx
+
+        from PIL import Image
+
+        img = tmp_path / "pic.png"
+        Image.new("RGB", (400, 300), "gray").save(img)
+        prs = pptx.Presentation()
+        slide = prs.slides.add_slide(prs.slide_layouts[6])
+        pic = slide.shapes.add_picture(str(img), 0, 0, prs.slide_width // 2, prs.slide_height // 2)
+        tb = pa.add_credit(slide, pic, URL)
+        assert pic.click_action.hyperlink.address == LINK
+        run = tb.text_frame.paragraphs[0].runs[0]
+        assert run.hyperlink.address == LINK
+        assert run.font.italic is True
