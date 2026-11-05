@@ -270,7 +270,6 @@ class TestShortCreditAndLinks:
 
     def test_the_picture_and_the_credit_both_link_to_the_source(self, tmp_path) -> None:
         import pptx
-
         from PIL import Image
 
         img = tmp_path / "pic.png"
