@@ -344,7 +344,7 @@ md2star corrige ce que Pandoc rate : listes, bibliographie, formules, diagramme
 
 <!--
 Légende (à dire) : Le même `.md` produit Word, PowerPoint et PDF, cohérents, ici le rendu Word brandé (template `deraison.ai`).
-Mode DOCX = algorithme d'ingénierie en 5 étapes de Musk. Mode PPTX = pitch 10/20/30 de Kawasaki. On peut montrer le mode sombre + PPTX depuis ~/md2star/assets/.
+Mode DOCX = algorithme d'ingénierie en 5 étapes de Musk. Mode PPTX = pitch 10/20/30 de Kawasaki. On peut montrer le mode sombre + PPTX depuis le dossier assets/ du dépôt md2star.
 -->
 ***
 
@@ -583,7 +583,7 @@ flowchart LR
 
 La plupart des tutos montrent une solution sur une base jouet à 2 tables. Ça n'apprend presque rien sur les vraies décisions.
 
-<!-- Le projet ~/sql est un ARTEFACT PÉDAGOGIQUE. On va montrer les compromis, pas juste « ça marche ». -->
+<!-- Le projet sql est un ARTEFACT PÉDAGOGIQUE. On va montrer les compromis, pas juste « ça marche ». -->
 
 ***
 
@@ -895,7 +895,7 @@ Le classement s'inverse. Échantillon n=24 : on lit la tendance, pas la 3e déc
 
 <!--
 Légende (à dire) : Les approches côte à côte, sur la même question, avec le SQL généré à chaque fois. On lit la différence.
-DÉMO LIVE possible : ~/sql ./start.sh → http://localhost:8000, poser une question, « Toutes ».
+DÉMO LIVE possible : dans le dépôt sql, ./start.sh → http://localhost:8000, poser une question, « Toutes ».
 -->
 ***
 
