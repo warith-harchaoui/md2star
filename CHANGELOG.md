@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.13.2] - 2026-11-05
+
 ### Fixed
 
 - **A photo title warned by its word count, not its width.** The band over a
