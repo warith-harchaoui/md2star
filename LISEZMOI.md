@@ -24,7 +24,7 @@ Markdown, sans jamais rouvrir Word pour rattraper la mise en page.
 
 md2star a fait ses preuves : disponible sur PyPI, intégration continue au
 vert à chaque envoi, versions taguées selon le versionnage sémantique
-(actuellement v3.10.0, l'un des plus longs historiques de versions de la suite
+(actuellement v3.12.0, l'un des plus longs historiques de versions de la suite
 [AI Helpers](https://github.com/warith-harchaoui/ai-helpers)). Il s'appuie
 sur deux paquets sœurs de cette même suite : `os-helper` (primitives
 partagées de système de fichiers et de journalisation) et
@@ -87,7 +87,7 @@ md2star ne cherche pas à surpasser Pandoc : il l'*appelle*, en y ajoutant le te
 
 L'argumentaire complet, les manques de style que laisse sur vos bras un
 `pandoc rapport.md -o rapport.docx` brut, le seul point où « utilise juste
-Pandoc » n'a pas de réponse (le chemin inverse et la garantie d'aller-retour),
+Pandoc » n'a pas de réponse (le chemin inverse et la garantie d'aller-retour)
 et les cas où Pandoc reste vraiment le bon outil, se trouve dans
 **[WHY_MD2STAR_OVER_PANDOC.md](https://github.com/warith-harchaoui/md2star/blob/main/WHY_MD2STAR_OVER_PANDOC.md)**.
 
@@ -242,8 +242,12 @@ md2star-api                    # FastAPI : /gui, /health, /doctor, /convert, /ex
 curl -F 'file=@rapport.md' 'http://localhost:8000/convert?fmt=docx' -o rapport.docx
 # ouvrez http://localhost:8000/gui pour un banc d'essai minimal dans le navigateur
 
-md2star-mcp                    # mêmes outils (doctor / convert) via MCP
+md2star-mcp                    # les mêmes routes en outils MCP (doctor, convert, extract, audit…)
 ```
+
+`md2star-api` et `md2star-mcp` écoutent sur `0.0.0.0:8000` pour que la même
+image tourne dans un conteneur ; `MD2STAR_HOST=127.0.0.1` les garde sur cette
+machine, `MD2STAR_PORT` déplace le port.
 
 > Le serveur `md2star-api` sert aussi un **banc d'essai minimal** dans le
 > navigateur, sur `GET /gui` : déposez un `.md`, choisissez un format,
@@ -370,9 +374,9 @@ principal : rien de plus à installer.
 - **Prêt pour la recherche** : intégration **BibTeX** native via le `citeproc` de Pandoc, pour les documents à bibliographie gérée.
 - **Notes de bas de page natives** : les footnotes Markdown (`texte[^1]` + `[^1]: …`) passent directement par l'extension `footnotes` de Pandoc et deviennent de vraies notes Word. Le DOCX obtient de vraies notes en bas de page, le PPTX les regroupe en notes par diapositive. Aucune syntaxe spéciale, aucun prétraitement. Voir [EXAMPLES.md §10](https://github.com/warith-harchaoui/md2star/blob/main/EXAMPLES.md#10-footnotes).
 - **Nettoyages automatiques** (petit confort discret) : téléchargement des images `http(s)://` pour l'intégration (opt-in), conversion des `<table>` HTML en pipe-tables Pandoc et isolation des images sur leur propre diapositive PPTX quand elles cohabitent avec un tableau (sinon Pandoc les supprime).
-- **Réversible par conception** : la sortie de md2star est un rendu *fidèle puis récupérable*, pas une impasse à sens unique.
+- **Réversible par conception** : la sortie de md2star est un rendu *fidèle et récupérable*, pas une impasse à sens unique.
 
-  Relisez le DOCX avec Pandoc : vos titres, votre emphase `**gras**`/`*italique*`/`` `code` ``, vos tableaux puis vos listes reviennent intacts. Rendez jusqu'au PDF, relisez-le avec [kreuzberg](https://github.com/Goldziher/kreuzberg) : l'aller-retour `md → docx → pdf → texte` est l'identité exacte `g(f(x)) = x`, pour la prose, les listes à puces, les documents multi-pages puis les notes de bas de page (vérifié en CI).
+  Relisez le DOCX avec Pandoc : vos titres, votre emphase `**gras**`/`*italique*`/`` `code` ``, vos tableaux et vos listes reviennent intacts. Rendez jusqu'au PDF, relisez-le avec [kreuzberg](https://github.com/Goldziher/kreuzberg) : l'aller-retour `md → docx → pdf → texte` est l'identité exacte `g(f(x)) = x`, pour la prose, les listes à puces, les documents multi-pages et les notes de bas de page (vérifié en CI avant chaque version).
 
   Les conversions répétées convergent vers un **point fixe stable** au lieu de dériver. Voir [Fidélité de l'aller-retour](#fidélité-de-laller-retour).
 - **Jumeau Markdown (sens inverse)** : `md2star twin <fichier>` relit **n'importe quel PDF ou tout ce que LibreOffice sait convertir en PDF,** en un `<nom>.md` *éditable* **plus un dossier `assets/`**. Les tableaux reviennent en pipe-tables GFM ; chaque image intégrée est extraite puis reliée à nouveau.
@@ -593,6 +597,17 @@ d'eux-mêmes. Un bloc de code va dans une seule boîte, une ligne source par
 paragraphe, en `MD2STAR_MONO_FONT` s'il est défini (sinon la chasse fixe du
 gabarit, sinon Consolas).
 
+Le titre d'une image devient un crédit photo. `![](photo.jpg "Avec l'aimable
+autorisation de https://…")` imprime ce titre en italique sur une petite plaque
+blanc sur sombre dans le cadre de l'image, en bas à droite, en haut à droite
+quand le bandeau de titre occupe le bas. Une adresse web se réduit à son site
+(`Avec l'aimable autorisation de nga.gov`) ; l'adresse complète devient le lien,
+sur le crédit comme sur l'image. Un crédit trop long pour une ligne passe sur
+deux, coupé après une barre oblique, au lieu d'être tronqué. C'est vrai sur le chemin
+`--smart-layout` (image seule, colonne, page Photo plein cadre, page clonée)
+comme sur le chemin Pandoc simple. La plaque s'appelle `md2star-credit` ;
+l'audit l'exempte des planchers de taille comme du contrôle de chevauchement.
+
 md2star choisit aussi où finit chaque ligne d'un titre, d'une légende ou d'une
 puce, avec les vraies chasses de la police : jamais de fin de ligne sur « de »
 ni sur « the », jamais « : » ni « % » en début de ligne, un nombre reste avec
@@ -605,7 +620,7 @@ Chaque exécution se termine par un **audit de disposition déterministe** du
 fichier qui vient d'être écrit :
 
 - des formes hors du cadre ;
-- du texte sur du texte, et une image qui couvre plus de 10 % d'une zone de
+- du texte sur du texte ; une image qui couvre plus de 10 % d'une zone de
   texte (un fond plein cadre, 80 % du canevas et plus, ne compte pas) ;
 - des emplacements non remplis ;
 - un corps sous 12 pt ;
@@ -822,14 +837,16 @@ md2docx rapport.md --offline           # rapport.md → rapport.docx
 pandoc rapport.docx -t gfm --wrap=none # rapport.docx → Markdown sur stdout
 ```
 
-**Le sens `pdf → md` est exact lui aussi et vérifié en CI.** Rendu jusqu'au
+**Le sens `pdf → md` est exact lui aussi et vérifié en CI avant chaque version.** Rendu jusqu'au
 PDF puis relu avec [kreuzberg](https://github.com/Goldziher/kreuzberg)
 (`extract_file_sync(path, config=ExtractionConfig(output_format=OutputFormat.PLAIN))`),
 l'aller-retour `md → docx → pdf → texte` est l'**identité** `g(f(x)) = x`,
 prouvée par égalité exacte du document entier sous une *forme normale*
 explicite dans
 [`tests/test_roundtrip_ocr.py`](https://github.com/warith-harchaoui/md2star/blob/main/tests/test_roundtrip_ocr.py), exécutée pour de
-vrai en CI sur la chaîne complète LibreOffice et kreuzberg. Elle tient pour :
+vrai sur la chaîne complète LibreOffice et kreuzberg par le job de CI que
+lance chaque tag de version, ainsi que par le hook pre-push partout où les deux
+outils sont installés. Elle tient pour :
 
 - les **paragraphes** de toute longueur (le retour à la ligne est refusionné) ;
 - les **listes à puces** ;
@@ -927,8 +944,8 @@ Pour les contributeurs et les utilisateurs avancés intéressés par les rouages
 | `md2docx: command not found` | Ajoutez `~/.local/bin` à votre PATH (`pipx ensurepath`) et redémarrez votre shell. |
 | `pandoc: command not found` | Installez [Pandoc](https://pandoc.org/installing.html). |
 | Erreurs `mmdc` ou blocs mermaid laissés tels quels | Installez Node.js ≥16, pour que `npx` puisse récupérer `@mermaid-js/mermaid-cli`. |
-| Vous voulez activer le linter LLM | Passez `--lint`. Il est désactivé par défaut ; avec `--lint`, le wrapper démarre le démon Ollama et télécharge le modèle à la demande. Nécessite `ollama` sur le `PATH` ; sinon, il ne fait rien silencieusement. |
-| `--lint` a affiché une erreur de téléchargement de modèle | Le premier lancement résout et télécharge le modèle local que `best-engine-ai-helper` choisit pour cette machine (voir « Quel modèle et comment il est choisi » ci-dessus ; il n'y a pas de tag fixe, le nom varie donc d'une machine à l'autre). Si le téléchargement a échoué (par exemple hors ligne), md2star retombe silencieusement sur le Markdown original ; réparez votre réseau et relancez. |
+| Vous voulez activer le linter LLM | Passez `--lint`. Il est désactivé par défaut. Avec `--lint`, `best-engine-ai-helper` résout un modèle local pour cette machine et son transport (Ollama local pour l'instant) le sert ; md2star ne lance jamais `ollama serve` ni `ollama pull` lui-même. Sans modèle résolu, la passe avertit sur stderr et la conversion continue avec le Markdown original. |
+| `--lint` a affiché une erreur de téléchargement de modèle | Le premier lancement résout et télécharge le modèle local que `best-engine-ai-helper` choisit pour cette machine (voir « Quel modèle et comment il est choisi » ci-dessus ; il n'y a pas de tag fixe, le nom varie donc d'une machine à l'autre). Si le téléchargement a échoué (par exemple hors ligne), md2star avertit sur stderr et retombe sur le Markdown original ; réparez votre réseau et relancez. |
 | `md2pdf: LibreOffice not found` | Installez LibreOffice (`brew install --cask libreoffice` / `apt-get install libreoffice` / winget). |
 | Avertissements de mise en page sur un template PPTX | Normal si un template n'a pas les noms de mise en page standards ; la sortie reste valide. |
 | Image distante non intégrée | Passez `--allow-remote-images` pour activer ce téléchargement (md2star est hors ligne par défaut). |
@@ -958,8 +975,9 @@ rend le refus explicite dans les scripts. Modèle de sécurité complet :
 ## Contribuer
 
 Voir **[CONTRIBUTING.md](https://github.com/warith-harchaoui/md2star/blob/main/CONTRIBUTING.md)** pour le démarrage rapide,
-l'organisation du projet et la checklist de PR. En résumé : `make dev`
-+ `python -m pytest tests/` + `ruff check md2star/ tests/`.
+l'organisation du projet, les portes de contrôle et la checklist de PR. En
+résumé : `make dev` + `python -m pytest tests/` +
+`ruff check md2star/ tests/ scripts/` + `ruff format --check .`.
 
 ## Variante Rust
 

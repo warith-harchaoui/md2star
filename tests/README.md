@@ -9,11 +9,11 @@ artifacts never escape the test directory.
 | File | What it covers |
 |------|----------------|
 | `conftest.py` | Cache-isolation fixture. |
-| `test_preprocessing.py` | The 11-phase Markdown preprocessor (~80 tests): list spacing, HTML→pipe-table conversion, mermaid rendering, math unwrap, image normalization, PPTX slide isolation, `--skip-phase`, language detection. |
+| `test_preprocessing.py` | The 13-phase Markdown preprocessor (~80 tests): list spacing, HTML→pipe-table conversion, mermaid rendering, math unwrap, image normalization, PPTX slide isolation, `--skip-phase`, language detection. |
 | `test_lua_filter.py` | The Pandoc Lua filter — drives `pandoc --lua-filter` against fixture Markdown. Skipped when pandoc is not on PATH. |
 | `test_postprocess.py` | `inject_table_styles` round-trips against a synthesised DOCX zip. |
 | `test_roundtrip.py` | `md → docx → md` fidelity: content survival + the fixed-point (`g(g(x)) == g(x)`) idempotence guarantee, read back with Pandoc's native DOCX reader. Skipped when pandoc is not on PATH. |
-| `test_roundtrip_ocr.py` | `md → docx → pdf → text` OCR round-trip **identity** `g(f(x)) == x`: exact whole-document equality under an explicit normal form, for prose (any length), bullet lists, multi-page docs, and footnotes (numeric `[^1]` and named `[^aa]`). Marked `slow` — needs LibreOffice + kreuzberg; the CI `ocr-roundtrip` job installs them and runs it for real. |
+| `test_roundtrip_ocr.py` | `md → docx → pdf → text` OCR round-trip **identity** `g(f(x)) == x`: exact whole-document equality under an explicit normal form, for prose (any length), bullet lists, multi-page docs, and footnotes (numeric `[^1]` and named `[^aa]`). Marked `slow` — needs LibreOffice + kreuzberg; the CI `ocr-roundtrip` job, started by every release tag, installs them and runs it for real. |
 | `examples/` | Multi-page demo `.md` sources (Markdown only — the corresponding `.docx` / `.pptx` outputs are regenerable via `run.sh` and not committed). |
 
 ## Running

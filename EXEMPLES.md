@@ -619,7 +619,7 @@ Tout ce qu'ils ont dessiné autour reste exactement où ils l'ont dessiné.
 Rien de ce qu'ils ont **écrit** ne suit. Chaque cadre de texte d'une page
 clonée est soit rempli avec votre contenu, soit retiré — et le retrait
 distingue le texte bouche-trou du dessin : l'ornement reste (le « 01 »
-d'une étape numérotée **est** le dessin), une simple zone de texte part,
+d'une étape numérotée **est** le dessin), une simple zone de texte part
 et une forme automatique est vidée mais conservée, parce qu'un chevron est
 un objet dessiné. Leur photo d'illustration est retirée du fichier
 lui-même et pas seulement de la diapositive ; leurs liens hypertextes ne

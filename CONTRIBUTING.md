@@ -25,6 +25,27 @@ python -m pytest -m "not slow" -q
 make test
 ```
 
+## The gates
+
+Three layers run the checks, from the most complete to the lightest:
+
+- **The pre-push hook**, `.githooks/pre-push`, wired once per clone with
+  `git config core.hooksPath .githooks`. It checks out the commit being
+  pushed in a scratch worktree and runs `ruff check .`,
+  `ruff format --check .`, the comment-density floor
+  (`python scripts/audit_comments.py md2star`), the whole pytest suite with
+  the marker filter cleared (`-m ""`, so the `slow` round-trips run where
+  LibreOffice and kreuzberg are installed) and the integration suite
+  `scripts/test.sh`.
+- **CI on every push**, one job on Python 3.12: ruff over `md2star/`,
+  `tests/` and `scripts/`, the comment-density floor, shellcheck on the
+  shell scripts, `pytest -m "not slow"` with the coverage floor, and a CLI
+  smoke test.
+- **The release chain**, started by a `v*` tag (or by hand): the OCR
+  round-trip identity, wheel and sdist build, a smoke test of the installed
+  wheel, `pip-audit`, and the integration suite (Linux at a tag; Linux,
+  macOS and Windows when dispatched by hand).
+
 `make dev` is the only setup step. `pyproject.toml` declares everything
 else (runtime deps, dev deps, console scripts, package data).
 
@@ -52,7 +73,7 @@ gives you the runtime set only (`-e .`).
     extra). Both wrap the same conversion pipeline.
   - `doctor.py`: `md2star doctor` environment diagnostic.
   - `preprocessing/`: the 13-phase Markdown preprocessor (the phase names
-    live in `pipeline.py`'s `PHASES`). The order
+    live in `preprocessing/pipeline.py`'s `PHASES`). The order
     is *load-bearing*; reordering needs a
     correctness argument.
   - `postprocess.py`: DOCX-only zip rewrite that re-injects the
@@ -73,8 +94,9 @@ gives you the runtime set only (`-e .`).
     *identity* `g(f(x)) = x`: exact whole-document equality under an explicit
     normal form, for prose (any length), bullet lists, multi-page docs, and
     footnotes (numeric `[^1]` and named `[^aa]`). Marked `slow` (needs
-    LibreOffice + kreuzberg); the CI `ocr-roundtrip` job installs the toolchain
-    and runs it for real (and fails if it skips).
+    LibreOffice + kreuzberg); the CI `ocr-roundtrip` job, started by every
+    release tag or by hand, installs the toolchain and runs it for real (and
+    fails if it skips).
 
   Other files cover the CLI surfaces (`test_cli_surface.py`,
   `test_api.py`, `test_mcp.py`), the agent skill (`test_skill.py`),
@@ -103,7 +125,9 @@ Before opening a PR:
 
 - [ ] `python -m pytest tests/ -v` is green (`pytest -m "not slow"` for a
       faster local loop that skips the LibreOffice/kreuzberg round-trip).
-- [ ] `ruff check md2star tests` is clean (no new warnings).
+- [ ] `ruff check md2star tests scripts` and `ruff format --check .` are
+      clean, and `python scripts/audit_comments.py md2star` holds the
+      comment-density floor.
 - [ ] If you touched the Lua filter, the integration suite still passes
       (`make test`); pytest alone does not cover end-to-end DOCX output.
 - [ ] If you added a new preprocessing phase, register its name in

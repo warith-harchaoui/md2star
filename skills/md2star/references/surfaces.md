@@ -16,7 +16,7 @@ argparse side went away and click became the only parser.
 
 ```bash
 pip install 'md2star[api]'
-md2star-api                                   # serves on :8000, docs at /docs
+md2star-api                                   # serves on 0.0.0.0:8000 (MD2STAR_HOST / MD2STAR_PORT), docs at /docs
 curl -F 'file=@report.md' 'http://localhost:8000/convert?fmt=docx' -o out.docx
 ```
 
@@ -36,7 +36,7 @@ md2star-mcp                                   # Model Context Protocol server
 ```
 
 Wraps the FastAPI app so an MCP-capable agent (Claude Desktop, etc.) can call
-`convert` / `doctor` as tools. Use when the agent host speaks MCP rather than
+its routes — `convert`, `doctor`, `extract`, `audit` among them — as tools. Use when the agent host speaks MCP rather than
 shelling out to the CLI.
 
 ## 4. Bundled GUI — `md2star gui`

@@ -21,7 +21,7 @@ diagrams, image embedding, table widths, PPTX slide isolation. You stay
 in Markdown and never open Word to fix layout.
 
 md2star is battle-tested: it ships on PyPI, its CI runs green on every push,
-and its tagged releases follow semantic versioning — currently v3.10.0, one of
+and its tagged releases follow semantic versioning — currently v3.12.0, one of
 the longest release histories in the [AI Helpers](https://github.com/warith-harchaoui/ai-helpers)
 suite. It builds on two sibling packages from that suite: `os-helper`
 (shared filesystem and logging primitives) and `best-engine-ai-helper` (the
@@ -234,8 +234,12 @@ md2star-api                    # FastAPI: /gui, /health, /doctor, /convert, /ext
 curl -F 'file=@report.md' 'http://localhost:8000/convert?fmt=docx' -o report.docx
 # open http://localhost:8000/gui for a minimal drop-a-file browser bench
 
-md2star-mcp                    # same tools (doctor / convert) over MCP
+md2star-mcp                    # the same routes as MCP tools (doctor, convert, extract, audit…)
 ```
+
+`md2star-api` and `md2star-mcp` listen on `0.0.0.0:8000` so the same image runs
+in a container; set `MD2STAR_HOST=127.0.0.1` to keep them on this machine, and
+`MD2STAR_PORT` to move the port.
 
 > The `md2star-api` server also serves a **minimal browser bench** at
 > `GET /gui`: drop a `.md`, pick a format, download the result. It is the
@@ -362,7 +366,7 @@ same wheel, not a separate download).
 - **Automatic Cleanups** (quiet quality-of-life): remote `http(s)://` images downloaded for embedding (opt-in), HTML `<table>` blocks converted to Pandoc pipe-tables, and standalone images split off PPTX slides that contain a table (Pandoc otherwise drops them).
 - **Reversible by Design**: md2star's output is a *faithful, recoverable* render, not a one-way dead end.
 
-  Read the DOCX back with Pandoc and your headings, your `**bold**`/`*italic*`/`` `code` `` emphasis, your tables and your lists come back intact. Render all the way to PDF and read that back with [kreuzberg](https://github.com/Goldziher/kreuzberg): the `md → docx → pdf → text` round trip is the exact identity `g(f(x)) = x` for prose, bullet lists, multi-page documents and footnotes — verified in CI.
+  Read the DOCX back with Pandoc and your headings, your `**bold**`/`*italic*`/`` `code` `` emphasis, your tables and your lists come back intact. Render all the way to PDF and read that back with [kreuzberg](https://github.com/Goldziher/kreuzberg): the `md → docx → pdf → text` round trip is the exact identity `g(f(x)) = x` for prose, bullet lists, multi-page documents and footnotes — verified in CI before every release.
 
   Repeated conversions converge on a **stable fixed point** instead of drifting. See [Round-trip fidelity](#round-trip-fidelity).
 - **Markdown twin (reverse direction)**: `md2star twin <file>` reads **any PDF, or anything LibreOffice can convert to one,** back into an *editable* `<stem>.md` **plus an `assets/` folder**. Tables return as GFM pipe tables, and every embedded image is scraped out then re-linked.
@@ -561,6 +565,16 @@ to the speaker notes. The models never pick that page on their own. A code
 block goes into a single box, one source line per paragraph, in
 `MD2STAR_MONO_FONT` when it is set (else the template's mono face, else
 Consolas).
+
+An image title becomes a photo credit. `![](photo.jpg "Courtesy of https://…")`
+prints the title in italics on a small white-on-dark plate inside the picture's
+frame, bottom right, or top right when the title band holds the bottom. A web
+address is shortened to its site (`Courtesy of nga.gov`) and the full address
+becomes the link, on the credit and on the picture. A credit too long for one
+line goes onto two, broken after a slash, rather than being cut. This holds on the `--smart-layout` path (a
+lone picture, a column, the full-bleed Photo page, a cloned page) and on the
+plain Pandoc path. The plate is named `md2star-credit`, and the audit exempts it
+from the type floors and the overlap check.
 
 md2star also chooses where each title, caption and bullet line ends, from the
 face's real advance widths: a line never ends on « de » or « the », never
@@ -784,13 +798,14 @@ md2docx report.md --offline            # report.md → report.docx
 pandoc report.docx -t gfm --wrap=none  # report.docx → Markdown on stdout
 ```
 
-**The `pdf → md` direction is exact too, and CI-enforced.** Rendered all the way
+**The `pdf → md` direction is exact too, and checked in CI before every release.** Rendered all the way
 to a PDF and read back with [kreuzberg](https://github.com/Goldziher/kreuzberg)
 (`extract_file_sync(path, config=ExtractionConfig(output_format=OutputFormat.PLAIN))`),
 the round-trip `md → docx → pdf → text` is the **identity** `g(f(x)) = x`, proven
 by exact, whole-document string equality under an explicit *normal form* in
-[`tests/test_roundtrip_ocr.py`](https://github.com/warith-harchaoui/md2star/blob/main/tests/test_roundtrip_ocr.py), run for real in CI on a
-full LibreOffice + kreuzberg toolchain. It holds for:
+[`tests/test_roundtrip_ocr.py`](https://github.com/warith-harchaoui/md2star/blob/main/tests/test_roundtrip_ocr.py), run for real on a full
+LibreOffice + kreuzberg toolchain by the CI job every release tag starts, and
+by the pre-push hook wherever both tools are installed. It holds for:
 
 - **paragraphs** of any length (line wrapping is reflowed back);
 - **bullet lists**;
@@ -871,8 +886,8 @@ For contributors and advanced users interested in the inner workings of our Pyth
 | `md2docx: command not found` | Add `~/.local/bin` to your PATH (`pipx ensurepath`) and restart your shell. |
 | `pandoc: command not found` | Install [Pandoc](https://pandoc.org/installing.html). |
 | `mmdc` errors / mermaid blocks left as code | Install Node.js ≥16 so `npx` can fetch `@mermaid-js/mermaid-cli`. |
-| Want the LLM linter to run | Pass `--lint`. It is off by default; with `--lint`, the wrapper starts the Ollama daemon and pulls the model on demand. Requires `ollama` on `PATH`; otherwise it silently no-ops. |
-| `--lint` printed a model-pull error | The first run resolves and pulls whatever local model `best-engine-ai-helper` picks for this machine (see "Which model, and how it's chosen" above; there is no fixed tag, so the name varies by machine). If the pull failed (e.g. offline), md2star falls back to the original Markdown silently; fix your network and re-run. |
+| Want the LLM linter to run | Pass `--lint`. It is off by default. With `--lint`, `best-engine-ai-helper` resolves a local model for this machine and its transport (local Ollama today) serves it; md2star never runs `ollama serve` or `ollama pull` itself. Without a resolvable model, the pass warns on stderr and the conversion goes on with the original Markdown. |
+| `--lint` printed a model-pull error | The first run resolves and pulls whatever local model `best-engine-ai-helper` picks for this machine (see "Which model, and how it's chosen" above; there is no fixed tag, so the name varies by machine). If the pull failed (e.g. offline), md2star warns on stderr and falls back to the original Markdown; fix your network and re-run. |
 | `md2pdf: LibreOffice not found` | Install LibreOffice (`brew install --cask libreoffice` / `apt-get install libreoffice` / winget). |
 | PPTX template layout warnings | Normal if a template lacks standard slide-layout names; output is still valid. |
 | Remote image not embedded | Pass `--allow-remote-images` to opt into the download (md2star is offline-by-default). |
@@ -901,8 +916,9 @@ makes the refusal explicit in scripts. Full security model:
 ## Contributing
 
 See **[CONTRIBUTING.md](https://github.com/warith-harchaoui/md2star/blob/main/CONTRIBUTING.md)** for the quickstart,
-project layout, and PR checklist. The TL;DR is `make dev` +
-`python -m pytest tests/` + `ruff check md2star/ tests/`.
+project layout, the gates and the PR checklist. The TL;DR is `make dev` +
+`python -m pytest tests/` + `ruff check md2star/ tests/ scripts/` +
+`ruff format --check .`.
 
 ## Rust spin-off
 

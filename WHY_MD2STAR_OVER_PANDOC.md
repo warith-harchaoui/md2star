@@ -93,7 +93,7 @@ And the forward and reverse paths are wired together into a **guarantee**, not
 a vibe: `md → docx → pdf → text` is the exact identity `g(f(x)) = x` for
 prose, bullet lists, multi-page docs, and footnotes, enforced by
 `tests/test_roundtrip_ocr.py` on a real LibreOffice + Kreuzberg toolchain in
-CI; and `md → docx → md` reaches an idempotent fixed point (`g(g(x)) = g(x)`).
+the CI job every release tag runs; and `md → docx → md` reaches an idempotent fixed point (`g(g(x)) = g(x)`).
 "Your content is trapped in a binary" is the standard, correct fear about
 Office formats. md2star is the answer to it, and that answer is *not* a
 Pandoc flag.
@@ -103,8 +103,9 @@ Pandoc flag.
 A raw-Pandoc workflow is a personal shell script: your flags, your template
 path, your image-render step, your PDF route, your reverse-extraction hack,
 undocumented and unversioned. md2star packages that decision set as an
-installable tool with a pinned template, tests, and CI across four Python
-versions and three OSes. "It works on my machine" becomes "it works from
+installable tool with a pinned template, tests, a CI gate on every push, and a
+release chain that installs the built wheel and runs the integration suite on
+Linux at each tag, on Linux, macOS and Windows on demand. "It works on my machine" becomes "it works from
 `pipx install md2star`." For a small async team or one person across several
 devices, that portability *is* the value.
 

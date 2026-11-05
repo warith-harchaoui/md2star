@@ -187,7 +187,7 @@ surfaces and behavioural invariants:
   eval of the opt-in `--lint` / alt-text passes against a real local
   Ollama daemon; it skips cleanly in CI where no daemon runs.
 - **Skill triggers**: `scripts/check_triggers.py` (driven by
-  `tests/test_skill.py`, also a standalone CI step) asserts that
+  `tests/test_skill.py`, so it runs wherever pytest runs) asserts that
   `skills/md2star/SKILL.md`'s `description` covers every required
   trigger bucket plus an explicit SKIP clause, so the skill neither
   under- nor over-fires.
@@ -202,7 +202,7 @@ md2star/
 │   ├── __init__.py                   # Re-exports preprocess_markdown, __version__
 │   ├── cli.py                        # the one command line (click): md2star / md2docx / md2pptx / md2pdf
 │   ├── pipeline.py                   # the conversion engine (ConvertOptions → pandoc → postprocess)
-│   ├── api.py                        # FastAPI HTTP surface (md2star-api; [api] extra): /gui, /health, /doctor, /convert
+│   ├── api.py                        # FastAPI HTTP surface (md2star-api; [api] extra): /gui, /health, /doctor, /convert, /extract, /audit
 │   ├── gui.py                        # Minimal single-page /gui bench served by api.py (self-contained HTML)
 │   ├── mcp.py                        # FastAPI-MCP server (md2star-mcp; [mcp] extra)
 │   ├── cache.py                      # $XDG_CACHE_HOME/md2star/ resolver
@@ -258,7 +258,7 @@ md2star/
 │   ├── brew.sh                        # Idempotent macOS Homebrew bootstrap (--with-pdf/--with-mermaid/--with-ai/--all)
 │   ├── check_triggers.py             # Enforces skill trigger coverage (CI + tests/test_skill.py)
 │   └── test.sh                       # Integration suite
-├── .github/workflows/ci.yml          # pytest matrix + integration + shellcheck
+├── .github/workflows/ci.yml          # push gate (ruff, pytest, shellcheck, CLI smoke) + release chain at tags
 ├── Makefile                          # `make install / dev / test / build / publish`
 ├── pyproject.toml                    # Package definition (replaces requirements.txt)
 ├── CHANGELOG.md
