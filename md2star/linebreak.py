@@ -13,7 +13,7 @@ keeps. The break points are chosen by dynamic programming over a cost model:
 
 * a line does not end on a function word (article, preposition, conjunction,
   pronoun, auxiliary — French and English) whenever any other break fits;
-* a line never starts with ``: ; ? ! » %`` and a number is never separated
+* a line never starts with ``: ; ? ! » %`` nor with a ``·`` separator, and a number is never separated
   from the number or the unit after it (500 000, 2 min, 30 %);
 * no single orphan word on the last line;
 * breaking after punctuation, or before a word that opens a clause (qui, que,
@@ -66,6 +66,9 @@ which that when because but so if then while where""".split()
 
 #: Characters a line must never start with.
 NO_LINE_START = frozenset(":;?!»%)…")
+
+#: Glyphs that separate two parts of a line, or open a bullet.
+SEPARATORS = frozenset("•·")
 
 #: Units that stay with the number before them.
 UNITS = frozenset(
@@ -204,14 +207,21 @@ def _is_number(word: str) -> bool:
     return core.isdigit()
 
 
-def cost_break(left: str, right: str) -> float:
-    """Cost of ending a line on word *left* and starting the next on *right*."""
+def cost_break(left: str, right: str, *, first: bool = False) -> float:
+    """Cost of ending a line on word *left* and starting the next on *right*.
+
+    *first* says *left* opens the paragraph: a « • » or « · » there is a
+    bullet and stays with its word; anywhere else it separates two parts
+    (« S06 · L'IA générative ») and closes its line like punctuation.
+    """
     lw = left.lower().strip('«“("')
     rw = right.lower().strip('»”)".,;:!?')
-    if right[:1] in NO_LINE_START or right in ("%", "€", "$"):
-        return 1e6  # « : » or « % » alone at the start of a line
-    if left[-1:] == "«" or left.endswith("“") or left in ("•", "·"):
-        return 1e6  # an opening quote or a bullet glyph stays with its word
+    if right[:1] in NO_LINE_START or right in ("%", "€", "$") or right in SEPARATORS:
+        return 1e6  # « : », « % » or a « · » separator alone at the start of a line
+    if left in SEPARATORS:
+        return 1e6 if first else -40.0  # a bullet stays with its word; a separator ends a line
+    if left[-1:] == "«" or left.endswith("“"):
+        return 1e6  # an opening quote stays with its word
     if _is_number(left) and (right[:1].isdigit() or rw in UNITS):
         return 1e6  # 500 000, 2 min: a number and its unit stay together
     if lw in GLUE_AFTER or lw.endswith("'") or lw.endswith("’"):
@@ -266,7 +276,7 @@ def wrap(text: str, size: float, max_w: float, metrics=None) -> list[str]:
                 last = j == n
                 cost = 0.0 if last else 100 * slack * slack  # balanced lines
                 if not last:
-                    cost += cost_break(words[j - 1], words[j])
+                    cost += cost_break(words[j - 1], words[j], first=j == 1)
                 if last and j - i == 1 and n > 2:
                     cost += 300.0  # one orphan word on the last line
                 cost += 30.0  # each extra line costs: stay compact

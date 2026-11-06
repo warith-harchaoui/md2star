@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A title broke before its middle dot.** « S06 · L'IA générative » came out as
+  « S06 » then « · L'IA générative »: the semantic line breaker kept a leading
+  bullet with its word but let a « · » separator open a line. A « • » or « · »
+  inside a line now ends its line like punctuation and never starts the next;
+  a bullet that opens the paragraph still stays with its word.
+
 ## [3.13.3] - 2026-11-05
 
 ### Fixed

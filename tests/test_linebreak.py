@@ -55,6 +55,21 @@ def test_breaking_after_punctuation_is_preferred() -> None:
     assert lines[0].endswith(":"), lines
 
 
+@pytest.mark.parametrize("width", [160, 200, 240, 280, 330])
+def test_a_middle_dot_separator_never_starts_a_line(width) -> None:
+    # A deck title such as « S06 · L'IA générative » broke as « S06 » then
+    # « · L'IA générative »: the separator belongs to the end of the line.
+    for text in ("S06 · L'IA générative", "T04 · Be an army of one", "Enterprise AI · Jour 2 · Décider"):
+        lines = lb.wrap(text, 40, width)
+        assert " ".join(lines) == text
+        assert not any(ln.startswith(("·", "•")) for ln in lines[1:]), lines
+
+
+def test_a_leading_bullet_stays_with_its_word() -> None:
+    lines = lb.wrap("•  un deux trois quatre cinq six sept huit", 30, 220)
+    assert lines[0].startswith("•  ") and len(lines[0].split()) > 1, lines
+
+
 def test_what_fits_is_left_alone_spaces_included() -> None:
     assert lb.wrap("•  court", 30, 400) == ["•  court"]
     assert lb.wrap("   •  un deux trois quatre cinq six sept", 30, 260)[0].startswith("   •  ")
