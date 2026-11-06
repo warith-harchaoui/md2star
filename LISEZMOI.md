@@ -24,7 +24,7 @@ Markdown, sans jamais rouvrir Word pour rattraper la mise en page.
 
 md2star a fait ses preuves : disponible sur PyPI, intégration continue au
 vert à chaque envoi, versions taguées selon le versionnage sémantique
-(actuellement v3.13.3, l'un des plus longs historiques de versions de la suite
+(actuellement v3.13.4, l'un des plus longs historiques de versions de la suite
 [AI Helpers](https://github.com/warith-harchaoui/ai-helpers)). Il s'appuie
 sur deux paquets sœurs de cette même suite : `os-helper` (primitives
 partagées de système de fichiers et de journalisation) et
