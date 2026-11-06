@@ -59,7 +59,11 @@ def test_breaking_after_punctuation_is_preferred() -> None:
 def test_a_middle_dot_separator_never_starts_a_line(width) -> None:
     # A deck title such as « S06 · L'IA générative » broke as « S06 » then
     # « · L'IA générative »: the separator belongs to the end of the line.
-    for text in ("S06 · L'IA générative", "T04 · Be an army of one", "Enterprise AI · Jour 2 · Décider"):
+    for text in (
+        "S06 · L'IA générative",
+        "T04 · Be an army of one",
+        "Enterprise AI · Jour 2 · Décider",
+    ):
         lines = lb.wrap(text, 40, width)
         assert " ".join(lines) == text
         assert not any(ln.startswith(("·", "•")) for ln in lines[1:]), lines
