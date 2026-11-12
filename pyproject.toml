@@ -12,7 +12,7 @@ description = "Markdown → DOCX/PPTX/PDF bridge built on Pandoc, with curated s
 readme = "README.md"
 license = "BSD-3-Clause"
 requires-python = ">=3.10"
-authors = [{ name = "Warith Harchaoui" }]
+authors = [{ name = "Warith HARCHAOUI", email = "warithmetics@deraison.ai" }]
 keywords = ["markdown", "pandoc", "docx", "pptx", "office", "mermaid", "bibliography"]
 classifiers = [
     "Development Status :: 4 - Beta",
