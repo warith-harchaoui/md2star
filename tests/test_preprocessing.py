@@ -346,8 +346,10 @@ def test_image_handling_scenario(tmp_path) -> None:
         assert resized.size == (1600, 800)
     assert str(cached[0]) in result
 
-    # Remote URL cannot be measured offline → generic {width=100%}, left as URL.
-    assert "https://example.invalid/cannot-fetch.png){width=100%}" in result
+    # A remote image that was not downloaded leaves as a plain link (pandoc
+    # would fetch an image itself), so it gets no width hint either.
+    assert "[remote](https://example.invalid/cannot-fetch.png)" in result
+    assert "![remote]" not in result
 
     # Refs that are already resolvable are NEVER re-rooted under base_dir: an
     # absolute path, an http URL, and a data-URI all survive verbatim with no

@@ -43,9 +43,11 @@ from .alt_text import fill_empty_alt_text
 from .images import (
     absolutize_image_paths,
     download_remote_images,
+    drop_remote_backgrounds,
     fix_image_widths,
     html_images_to_markdown,
     process_image_assets,
+    remote_images_to_links,
     resize_images_in_markdown_tables,
 )
 from .language import get_language_metadata
@@ -233,11 +235,16 @@ def preprocess_markdown(
         if allow_remote_images:
             content = download_remote_images(content, base_dir)
         else:
-            # Soft refusal: warn once and leave the http(s) refs in
-            # place so pandoc embeds them as URLs (which it can in
-            # HTML output; DOCX/PPTX will drop them, which is the
-            # honest result of "no network was allowed").
+            # Soft refusal: warn once; the refs become links below.
             _warn_remote_images_blocked(content)
+    # Whatever is still remote here (refused, offline, or a failed download)
+    # becomes a link: pandoc would otherwise fetch it on its own and, for
+    # PPTX, abort the whole conversion when the host does not answer.
+    content = remote_images_to_links(content)
+    # A slide's remote background has no link form; pandoc fetches it too, so
+    # it goes whenever the network was not granted.
+    if not allow_remote_images or "remote_images" in skip:
+        content = drop_remote_backgrounds(content)
     if "html_tables" not in skip:
         content = convert_html_tables(content, base_dir)
     if "html_images" not in skip:

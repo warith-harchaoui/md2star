@@ -716,3 +716,46 @@ def download_remote_images(content: str, out_dir: str) -> str:  # noqa: ARG001
         return f"{prefix}({local_path}{title}){attrs}"
 
     return _REMOTE_IMG_RE.sub(_download_and_replace, content)
+
+
+def remote_images_to_links(content: str) -> str:
+    """Turn every image still pointing at ``http(s)://`` into a plain link.
+
+    An image reference left remote is not inert: pandoc fetches it itself when
+    it writes DOCX or PPTX, whatever md2star decided. Measured 2026-11-12 with
+    an unreachable host: DOCX waits 30 s and swaps in the alt text, PPTX aborts
+    the whole conversion (pandoc exit 61). So a refused download (default deny,
+    ``--offline``) or a failed one must not leave an image behind. A link keeps
+    the reader one click from the picture and touches no network.
+
+    ``![alt](url "title"){attrs}`` becomes ``[alt](url "title")``; an empty alt
+    takes the URL as its text, so the link stays visible.
+    """
+
+    def _to_link(match: re.Match) -> str:
+        alt = match.group(1)[2:-1]  # strip ``![`` and ``]``
+        url, title = split_image_target(match.group(2))
+        return f"[{alt or url}]({url}{title})"
+
+    return _REMOTE_IMG_RE.sub(_to_link, content)
+
+
+# A ``background-image`` attribute whose value is an http(s) URL, quoted or not.
+_REMOTE_BACKGROUND = r"""background-image=(?:"https?://[^"]*"|'https?://[^']*'|https?://[^\s}]+)"""
+# The attribute as the only thing in its braces: the whole block goes.
+_REMOTE_BACKGROUND_ALONE_RE = re.compile(r"[ \t]*\{\s*" + _REMOTE_BACKGROUND + r"\s*\}")
+# The attribute beside others: it goes with the whitespace before it.
+_REMOTE_BACKGROUND_RE = re.compile(r"\s*" + _REMOTE_BACKGROUND)
+
+
+def drop_remote_backgrounds(content: str) -> str:
+    """Remove ``background-image`` attributes that point at ``http(s)://``.
+
+    pandoc fetches a slide's background itself when it writes PPTX, exactly as
+    it does an image (see :func:`remote_images_to_links`), and a background has
+    no link form to fall back on. Called when the network was not granted: the
+    slide keeps its title and loses only the remote picture behind it. A brace
+    block left empty is removed with it.
+    """
+    content = _REMOTE_BACKGROUND_ALONE_RE.sub("", content)
+    return _REMOTE_BACKGROUND_RE.sub("", content)

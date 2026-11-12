@@ -66,6 +66,57 @@ def test_remote_image_soft_refuse_warning_behaviour(caplog):
     assert "--allow-remote-images" not in caplog.text
 
 
+def test_no_remote_image_reaches_pandoc():
+    """A remote image md2star did not download leaves as a link, never as an image.
+
+    pandoc fetches any image it is handed when writing DOCX or PPTX, so a
+    refused download that stayed an image still hit the network, and an
+    unreachable host aborted PPTX outright (exit 61, 2026-11-12). Covers the
+    default deny, ``--offline`` and a download that failed.
+    """
+    remote = (
+        "![hero](https://example.invalid/banner.png){width=50%}\n\n"
+        '![](http://example.invalid/x.jpg "credit")\n'
+    )
+    failed = {"side_effect": lambda content, base_dir: content}
+    for kwargs in ({}, {"offline": True}, {"allow_remote_images": True}):
+        with patch("md2star.preprocessing.pipeline.download_remote_images", **failed):
+            result = preprocess_markdown(
+                remote, inject_metadata=False, lint_enabled=False, **kwargs
+            )
+        assert "![" not in result, (kwargs, result)
+        assert "[hero](https://example.invalid/banner.png)" in result, kwargs
+        assert '[http://example.invalid/x.jpg](http://example.invalid/x.jpg "credit")' in result, (
+            kwargs
+        )
+
+
+def test_remote_slide_background_dropped_unless_network_granted():
+    """pandoc fetches a remote ``background-image`` too; refused, it goes.
+
+    The slide keeps its title and any other attribute; a local background is
+    never touched; with ``--allow-remote-images`` the remote one stays.
+    """
+    md = (
+        '# One {background-image="https://example.invalid/bg.png"}\n\n'
+        '# Two {.dark background-image="https://example.invalid/bg.png"}\n\n'
+        '# Three {background-image="img/local.png"}\n'
+    )
+    for kwargs in ({}, {"offline": True}, {"allow_remote_images": True, "offline": True}):
+        result = preprocess_markdown(md, inject_metadata=False, lint_enabled=False, **kwargs)
+        assert "example.invalid" not in result, (kwargs, result)
+        assert "# Two {.dark}" in result, (kwargs, result)
+        assert '{background-image="img/local.png"}' in result, (kwargs, result)
+    with patch(
+        "md2star.preprocessing.pipeline.download_remote_images",
+        side_effect=lambda content, base_dir: content,
+    ):
+        result = preprocess_markdown(
+            md, inject_metadata=False, lint_enabled=False, allow_remote_images=True
+        )
+    assert 'background-image="https://example.invalid/bg.png"' in result
+
+
 def test_remote_image_download_gate_across_flag_combos():
     """``download_remote_images`` runs only when allowed AND not offline.
 

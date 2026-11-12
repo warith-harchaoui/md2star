@@ -6,6 +6,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [3.13.5] - 2026-11-12
+
+### Fixed
+
+- **A remote image md2star did not download no longer reaches pandoc as an
+  image.** Refused by default, refused by `--offline`, or failed to download,
+  it stayed `![alt](https://…)`, and pandoc fetched it itself while writing
+  DOCX or PPTX. With an unreachable host, DOCX waited 30 s and PPTX aborted the
+  whole conversion (pandoc exit 61); the integration job failed this way on
+  three systems when picsum.photos stopped answering. Such a reference now
+  becomes a plain link, `[alt](https://…)`, with the URL as its text when the
+  alt is empty: no network, and the reader is one click from the picture.
+- **A slide's remote `background-image` no longer reaches pandoc either.** It
+  has no link form, so when the network was not granted the attribute is
+  removed and the slide keeps its title and its other attributes. A local
+  background is untouched; with `--allow-remote-images` the remote one stays.
+
 ## [3.13.4] - 2026-11-06
 
 ### Fixed
